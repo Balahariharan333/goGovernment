@@ -14,7 +14,8 @@ class RemoveFromCartEvent extends CartEvent {
 class UpdateQuantityEvent extends CartEvent {
   final String productId;
   final int quantity;
-  UpdateQuantityEvent(this.productId, this.quantity);
+  final Map<String, dynamic>? details;
+  UpdateQuantityEvent(this.productId, this.quantity, {this.details});
 }
 
 class ClearCartEvent extends CartEvent {}

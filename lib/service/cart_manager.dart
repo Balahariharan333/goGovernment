@@ -7,25 +7,41 @@ class CartManager {
   CartManager._() {
     // Listen to CartBloc state changes and sync ValueNotifier
     CartBloc.instance.stream.listen((state) {
-      cartItems.value = state.cartItems;
       productDetails.clear();
       productDetails.addAll(state.productDetails);
+      cartItems.value = state.cartItems;
     });
   }
 
   final ValueNotifier<Map<String, int>> cartItems = ValueNotifier({});
   final Map<String, Map<String, dynamic>> productDetails = {};
 
-  void addToCart(Map<String, dynamic> product, {int qty = 1}) {
-    final id = product['id']?.toString() ?? '';
+  void addToCart(Map<String, dynamic> product, {int qty = 1, String? productId}) {
+    final id = productId ?? product['id']?.toString() ?? '';
     if (id.isEmpty) return;
-    CartBloc.instance.add(AddToCartEvent(id, product));
+    if (product.isNotEmpty) {
+      productDetails[id] = {...productDetails[id] ?? {}, ...product, 'id': id};
+    }
+    CartBloc.instance.add(AddToCartEvent(id, product.isNotEmpty ? product : {'id': id}));
   }
 
-  void updateQuantity(Map<String, dynamic> product, int qty) {
-    final id = product['id']?.toString() ?? '';
+  void updateQuantity(Map<String, dynamic> product, int qty, {String? productId}) {
+    final id = productId ?? product['id']?.toString() ?? '';
     if (id.isEmpty) return;
-    CartBloc.instance.add(UpdateQuantityEvent(id, qty));
+    if (product.isNotEmpty) {
+      productDetails[id] = {...productDetails[id] ?? {}, ...product, 'id': id};
+    }
+    CartBloc.instance.add(UpdateQuantityEvent(
+      id,
+      qty,
+      details: product.isNotEmpty ? product : productDetails[id],
+    ));
+  }
+
+  void updateQuantityById(String productId, int qty) {
+    if (productId.isEmpty) return;
+    final details = productDetails[productId] ?? {'id': productId};
+    CartBloc.instance.add(UpdateQuantityEvent(productId, qty, details: details));
   }
 
   void removeFromCart(String productId) {

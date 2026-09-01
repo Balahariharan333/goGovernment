@@ -11,7 +11,11 @@ class CartBloc extends Bloc<CartEvent, CartState> {
       final updatedDetails = Map<String, Map<String, dynamic>>.from(state.productDetails);
 
       updatedCart[event.productId] = (updatedCart[event.productId] ?? 0) + 1;
-      updatedDetails[event.productId] = event.details;
+      updatedDetails[event.productId] = {
+        ...updatedDetails[event.productId] ?? {},
+        ...event.details,
+        'id': event.productId,
+      };
 
       emit(state.copyWith(
         cartItems: updatedCart,
@@ -45,6 +49,15 @@ class CartBloc extends Bloc<CartEvent, CartState> {
 
       if (event.quantity > 0) {
         updatedCart[event.productId] = event.quantity;
+        if (event.details != null && event.details!.isNotEmpty) {
+          updatedDetails[event.productId] = {
+            ...updatedDetails[event.productId] ?? {},
+            ...event.details!,
+            'id': event.productId,
+          };
+        } else if (!updatedDetails.containsKey(event.productId)) {
+          updatedDetails[event.productId] = {'id': event.productId};
+        }
       } else {
         updatedCart.remove(event.productId);
         updatedDetails.remove(event.productId);

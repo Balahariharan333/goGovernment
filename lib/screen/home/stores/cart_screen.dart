@@ -195,10 +195,10 @@ class _CartScreenState extends State<CartScreen> {
                                     originalPrice: '₹${product['originalPrice'] ?? 106}',
                                     price: '₹${product['price'] ?? 83}',
                                     onDecrement: () {
-                                      CartManager.instance.updateQuantity(product, qty - 1);
+                                      CartManager.instance.updateQuantityById(id, qty - 1);
                                     },
                                     onIncrement: () {
-                                      CartManager.instance.updateQuantity(product, qty + 1);
+                                      CartManager.instance.updateQuantityById(id, qty + 1);
                                     },
                                   ),
                                   if (!isLast) ...[
@@ -578,26 +578,27 @@ class _CartScreenState extends State<CartScreen> {
                 borderRadius: BorderRadius.circular(Responsive.w(14)),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  GestureDetector(
-                    onTap: onDecrement,
-                    behavior: HitTestBehavior.opaque,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: Responsive.w(8)),
-                      child: const Icon(Icons.remove, color: Colors.white, size: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: onDecrement,
+                      behavior: HitTestBehavior.opaque,
+                      child: const Center(
+                        child: Icon(Icons.remove, color: Colors.white, size: 14),
+                      ),
                     ),
                   ),
                   Text(
                     qty.toString().padLeft(2, '0'),
                     style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
-                  GestureDetector(
-                    onTap: onIncrement,
-                    behavior: HitTestBehavior.opaque,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: Responsive.w(8)),
-                      child: const Icon(Icons.add, color: Colors.white, size: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: onIncrement,
+                      behavior: HitTestBehavior.opaque,
+                      child: const Center(
+                        child: Icon(Icons.add, color: Colors.white, size: 14),
+                      ),
                     ),
                   ),
                 ],
