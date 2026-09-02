@@ -1,3 +1,5 @@
+import '../../hive/hive_service.dart';
+
 class ProfileState {
   final String name;
   final String email;
@@ -10,10 +12,14 @@ class ProfileState {
   });
 
   factory ProfileState.initial() {
+    final storedName = HiveService.userName;
+    final storedEmail = HiveService.userEmail;
+    final storedPhone = HiveService.userPhone;
+
     return ProfileState(
-      name: 'SURIYAPRAKASH',
-      email: 'suryaprakash@gmail.com',
-      phone: '+91 12345 09876',
+      name: storedName.isNotEmpty ? storedName : 'SURIYAPRAKASH',
+      email: storedEmail.isNotEmpty ? storedEmail : 'suryaprakash@gmail.com',
+      phone: storedPhone.isNotEmpty ? storedPhone : '+91 12345 09876',
     );
   }
 

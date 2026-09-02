@@ -19,8 +19,12 @@ import 'bloc/order_tracking/order_tracking_bloc.dart';
 import 'bloc/rider_chat/rider_chat_bloc.dart';
 import 'bloc/address/address_bloc.dart';
 
+import 'hive/hive_service.dart';
+import 'screen/home/main_screen.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await HiveService.init();
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -70,7 +74,7 @@ class MainApp extends StatelessWidget {
             child: child!,
           );
         },
-        home: const LoginScreen(),
+        home: HiveService.isLoggedIn ? const MainScreen() : const LoginScreen(),
       ),
     );
   }

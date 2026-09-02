@@ -77,6 +77,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final int stock = CartManager.instance.getStock(widget.product);
+
     return Scaffold(
       backgroundColor: AppColors.screenColor,
       body: CommonBackground(
@@ -147,6 +149,40 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       // Add to Cart Button (white button with orange border or quantity dial)
                       _buildCartActionButton(),
                       SizedBox(height: Responsive.h(20)),
+
+                      // Stock alert if low
+                      if (stock <= 3) ...[
+                        Container(
+                          margin: EdgeInsets.only(bottom: Responsive.h(8)),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: Responsive.w(8),
+                            vertical: Responsive.h(4),
+                          ),
+                          decoration: BoxDecoration(
+                            color: stock <= 0
+                                ? const Color(0xFFFFEBEE)
+                                : const Color(0xFFFFF3E0),
+                            borderRadius: BorderRadius.circular(Responsive.w(6)),
+                            border: Border.all(
+                              color: stock <= 0
+                                  ? const Color(0xFFFFCDD2)
+                                  : Colors.orange.shade300,
+                            ),
+                          ),
+                          child: Text(
+                            stock <= 0
+                                ? 'Out of stock'
+                                : 'Hurry, only $stock left in stock!',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: stock <= 0
+                                  ? Colors.red.shade700
+                                  : Colors.orange.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
 
                       // Product Title
                       CustomText.header(
@@ -349,6 +385,33 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
   Widget _buildCartActionButton() {
     final int qty = _quantity;
+    final int stock = CartManager.instance.getStock(widget.product);
+    final bool isOutOfStock = stock <= 0;
+    final bool isMaxStock = qty >= stock;
+
+    if (isOutOfStock) {
+      return Container(
+        width: double.infinity,
+        height: Responsive.h(48),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(Responsive.w(24)),
+          border: Border.all(
+            color: Colors.grey.shade400,
+            width: Responsive.w(1.5),
+          ),
+        ),
+        child: Center(
+          child: CustomText.title(
+            'Out of Stock',
+            color: Colors.grey.shade600,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
+
     if (qty > 0) {
       return Container(
         height: Responsive.h(48),
@@ -363,7 +426,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             IconButton(
               icon: const Icon(Icons.remove, color: Colors.white),
               onPressed: () {
-                CartManager.instance.updateQuantity(widget.product, qty - 1);
+                CartManager.instance.updateQuantity(widget.product, qty - 1, context: context);
               },
             ),
             CustomText.title(
@@ -373,9 +436,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               fontWeight: FontWeight.bold,
             ),
             IconButton(
-              icon: const Icon(Icons.add, color: Colors.white),
+              icon: Icon(
+                Icons.add,
+                color: isMaxStock ? Colors.white.withValues(alpha: 0.4) : Colors.white,
+              ),
               onPressed: () {
-                CartManager.instance.updateQuantity(widget.product, qty + 1);
+                CartManager.instance.updateQuantity(widget.product, qty + 1, context: context);
               },
             ),
           ],
@@ -384,7 +450,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     } else {
       return GestureDetector(
         onTap: () {
-          CartManager.instance.updateQuantity(widget.product, 1);
+          CartManager.instance.addToCart(widget.product, qty: 1, context: context);
         },
         child: Container(
           width: double.infinity,

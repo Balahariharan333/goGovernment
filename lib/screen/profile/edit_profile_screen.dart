@@ -7,6 +7,7 @@ import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
 import '../../bloc/profile/profile_bloc.dart';
 import '../../bloc/profile/profile_event.dart';
+import '../../hive/hive_service.dart';
 import '../home/main_screen.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -42,22 +43,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   void _checkModification() {
-    final bool modified = _nameController.text.trim() != widget.initialName ||
-        _emailController.text.trim() != widget.initialEmail;
-    if (modified != _isModified) {
-      setState(() {
-        _isModified = modified;
-      });
-    }
+    setState(() {
+      _isModified = _nameController.text.trim() != widget.initialName ||
+          _emailController.text.trim() != widget.initialEmail;
+    });
+  }
+
+  static final RegExp _emailRegExp =
+      RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+
+  bool get _isValidEmail {
+    final email = _emailController.text.trim();
+    return _emailRegExp.hasMatch(email);
   }
 
   bool get _canSubmit {
     final name = _nameController.text.trim();
-    final email = _emailController.text.trim();
     if (widget.isRegistration) {
-      return name.isNotEmpty && email.isNotEmpty;
+      return name.length >= 2 && _isValidEmail;
     }
-    return _isModified && name.isNotEmpty && email.isNotEmpty;
+    return _isModified && name.length >= 2 && _isValidEmail;
   }
 
   @override
@@ -67,12 +72,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  void _submit() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     if (!_canSubmit) return;
 
     if (widget.isRegistration) {
+      await HiveService.setLoggedIn(true);
+      if (!mounted) return;
       context.read<ProfileBloc>().add(UpdateProfileEvent(name, email));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -260,32 +267,50 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         SizedBox(height: Responsive.h(16)),
 
                         // Email input container
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.white,
-                            borderRadius: BorderRadius.circular(Responsive.w(16)),
-                            border: Border.all(
-                              color: AppColors.outliner.withValues(alpha: 0.5),
-                              width: Responsive.w(1.2),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                color: AppColors.white,
+                                borderRadius: BorderRadius.circular(Responsive.w(16)),
+                                border: Border.all(
+                                  color: (_emailController.text.isNotEmpty && !_isValidEmail)
+                                      ? AppColors.error
+                                      : AppColors.outliner.withValues(alpha: 0.5),
+                                  width: Responsive.w(1.2),
+                                ),
+                              ),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: Responsive.w(16),
+                                vertical: Responsive.h(4),
+                              ),
+                              child: TextField(
+                                controller: _emailController,
+                                keyboardType: TextInputType.emailAddress,
+                                style: TextStyle(
+                                  fontSize: Responsive.sp(15),
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.black,
+                                ),
+                                decoration: const InputDecoration(
+                                  border: InputBorder.none,
+                                  hintText: 'Enter Email',
+                                ),
+                              ),
                             ),
-                          ),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: Responsive.w(16),
-                            vertical: Responsive.h(4),
-                          ),
-                          child: TextField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            style: TextStyle(
-                              fontSize: Responsive.sp(15),
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.black,
-                            ),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              hintText: 'Enter Email',
-                            ),
-                          ),
+                            if (_emailController.text.isNotEmpty && !_isValidEmail) ...[
+                              SizedBox(height: Responsive.h(4)),
+                              Padding(
+                                padding: EdgeInsets.only(left: Responsive.w(8)),
+                                child: CustomText.subtitle(
+                                  'Please enter a valid email (e.g. name@example.com)',
+                                  fontSize: 11,
+                                  color: AppColors.error,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ),
@@ -295,22 +320,28 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 // Submit Button
                 GestureDetector(
                   onTap: _submit,
-                  child: Container(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
                     width: double.infinity,
                     height: Responsive.h(50),
                     margin: EdgeInsets.only(bottom: Responsive.h(20)),
                     decoration: BoxDecoration(
-                      color: _canSubmit ? AppColors.white : const Color(0xFFF4EDE8),
+                      color: _canSubmit ? AppColors.primary : const Color(0xFFF4EDE8),
                       borderRadius: BorderRadius.circular(Responsive.w(25)),
-                      border: Border.all(
-                        color: _canSubmit ? AppColors.primary : Colors.transparent,
-                        width: Responsive.w(1.5),
-                      ),
+                      boxShadow: _canSubmit
+                          ? [
+                              BoxShadow(
+                                color: AppColors.primary.withValues(alpha: 0.3),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              )
+                            ]
+                          : null,
                     ),
                     child: Center(
                       child: CustomText.title(
                         widget.isRegistration ? 'Complete Registration' : 'Submit',
-                        color: _canSubmit ? AppColors.primary : const Color(0xFFC0B3AC),
+                        color: _canSubmit ? Colors.white : const Color(0xFFC0B3AC),
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),

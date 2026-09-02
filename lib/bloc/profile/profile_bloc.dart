@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../hive/hive_service.dart';
 import 'profile_event.dart';
 import 'profile_state.dart';
 
@@ -7,6 +8,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
   ProfileBloc._() : super(ProfileState.initial()) {
     on<UpdateProfileEvent>((event, emit) {
+      HiveService.saveProfile(name: event.name, email: event.email);
       emit(state.copyWith(
         name: event.name,
         email: event.email,
@@ -14,6 +16,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     });
 
     on<UpdatePhoneEvent>((event, emit) {
+      HiveService.setUserPhone(event.phone);
       emit(state.copyWith(
         phone: event.phone,
       ));

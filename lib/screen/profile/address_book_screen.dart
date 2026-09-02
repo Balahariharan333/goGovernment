@@ -8,18 +8,8 @@ import 'select_delivery_location_screen.dart';
 import '../../bloc/address/address_bloc.dart';
 import '../../bloc/address/address_event.dart';
 import '../../bloc/address/address_state.dart';
-
-class AddressModel {
-  String type;
-  String description;
-  String phone;
-
-  AddressModel({
-    required this.type,
-    required this.description,
-    required this.phone,
-  });
-}
+import '../../model/address_model.dart';
+export '../../model/address_model.dart';
 
 class AddressBookScreen extends StatefulWidget {
   final bool isSelectionMode;

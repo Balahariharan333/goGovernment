@@ -1,11 +1,13 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../hive/hive_service.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  AuthBloc() : super(AuthInitial()) {
+  AuthBloc() : super(HiveService.isLoggedIn ? AuthSuccess() : AuthInitial()) {
     on<SendOtpEvent>((event, emit) async {
       emit(AuthLoading());
+      await HiveService.setUserPhone(event.phone);
       // Simulate API call for sending OTP
       await Future.delayed(const Duration(milliseconds: 800));
       emit(OtpSent(event.phone));
@@ -24,6 +26,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     on<LogoutEvent>((event, emit) async {
       emit(AuthLoading());
+      await HiveService.clearAuth();
       await Future.delayed(const Duration(milliseconds: 500));
       emit(AuthInitial());
     });

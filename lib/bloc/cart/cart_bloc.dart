@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../hive/hive_service.dart';
 import 'cart_event.dart';
 import 'cart_state.dart';
 
@@ -16,6 +17,9 @@ class CartBloc extends Bloc<CartEvent, CartState> {
         ...event.details,
         'id': event.productId,
       };
+
+      HiveService.saveCartItems(updatedCart);
+      HiveService.saveProductDetails(updatedDetails);
 
       emit(state.copyWith(
         cartItems: updatedCart,
@@ -36,6 +40,9 @@ class CartBloc extends Bloc<CartEvent, CartState> {
           updatedDetails.remove(event.productId);
         }
       }
+
+      HiveService.saveCartItems(updatedCart);
+      HiveService.saveProductDetails(updatedDetails);
 
       emit(state.copyWith(
         cartItems: updatedCart,
@@ -63,6 +70,9 @@ class CartBloc extends Bloc<CartEvent, CartState> {
         updatedDetails.remove(event.productId);
       }
 
+      HiveService.saveCartItems(updatedCart);
+      HiveService.saveProductDetails(updatedDetails);
+
       emit(state.copyWith(
         cartItems: updatedCart,
         productDetails: updatedDetails,
@@ -70,6 +80,7 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     });
 
     on<ClearCartEvent>((event, emit) {
+      HiveService.clearCart();
       emit(state.copyWith(
         cartItems: {},
         productDetails: {},
@@ -86,6 +97,9 @@ class CartBloc extends Bloc<CartEvent, CartState> {
         updatedFavorites.add(event.productId);
         updatedDetails[event.productId] = event.details;
       }
+
+      HiveService.saveFavoriteIds(updatedFavorites);
+      HiveService.saveProductDetails(updatedDetails);
 
       emit(state.copyWith(
         favoriteIds: updatedFavorites,

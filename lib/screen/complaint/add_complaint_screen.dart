@@ -9,6 +9,10 @@ import '../../widget/custom_text.dart';
 import '../../bloc/complaint/complaint_bloc.dart';
 import '../../bloc/complaint/complaint_event.dart';
 import '../../bloc/complaint/complaint_state.dart';
+import '../../bloc/report/report_bloc.dart';
+import '../../bloc/report/report_event.dart';
+import '../../bloc/transaction/transaction_bloc.dart';
+import '../../bloc/transaction/transaction_event.dart';
 
 class AddComplaintScreen extends StatefulWidget {
   final String? category;
@@ -144,9 +148,30 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
       body: BlocConsumer<ComplaintBloc, ComplaintState>(
         listener: (context, state) {
           if (state.isSubmitted) {
+            context.read<ReportBloc>().add(LoadReportsEvent());
+
+            // Reward citizen coins for reporting complaint
+            final rewardTx = {
+              'id': 'REW-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}',
+              'title': 'Complaint coins',
+              'subtitle': 'Earned through reporting · ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
+              'amount': '+200',
+              'isPositive': true,
+              'status': 'Credited',
+              'date': 'Today',
+              'items': [],
+              'address': 'Grievance Redressal Reward',
+              'listingPrice': '₹0.00',
+              'sellingPrice': '₹200.00',
+              'grandTotal': '₹200.00',
+              'paid': '₹200.00',
+            };
+            context.read<TransactionBloc>().add(AddCoinsEvent(200));
+            context.read<TransactionBloc>().add(AddTransactionEvent(rewardTx));
+
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Complaint Submitted Successfully!'),
+                content: Text('Complaint Submitted & 200 Coins Earned!'),
                 backgroundColor: AppColors.success,
               ),
             );
@@ -435,7 +460,17 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                       GestureDetector(
                         onTap: isFormValid
                             ? () {
-                                context.read<ComplaintBloc>().add(SubmitComplaintEvent(_descriptionController.text.trim()));
+                                final categoryToSubmit = selectedCategory.isNotEmpty
+                                    ? selectedCategory
+                                    : (widget.category ?? 'Roads & Transportation');
+                                context.read<ComplaintBloc>().add(
+                                      SubmitComplaintEvent(
+                                        description: _descriptionController.text.trim(),
+                                        category: categoryToSubmit,
+                                        location: '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102',
+                                        imagePath: imageFile?.path,
+                                      ),
+                                    );
                               }
                             : null,
                         child: AnimatedContainer(

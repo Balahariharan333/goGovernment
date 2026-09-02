@@ -9,6 +9,8 @@ import 'address_book_screen.dart';
 import 'wishlist_screen.dart';
 import 'language_screen.dart';
 import '../auth/login_screen.dart';
+import '../../bloc/auth/auth_bloc.dart';
+import '../../bloc/auth/auth_event.dart';
 import '../../bloc/profile/profile_bloc.dart';
 import '../../bloc/profile/profile_event.dart';
 import '../../bloc/profile/profile_state.dart';
@@ -73,6 +75,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Expanded(
                       child: GestureDetector(
                         onTap: () {
+                          context.read<AuthBloc>().add(LogoutEvent());
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(

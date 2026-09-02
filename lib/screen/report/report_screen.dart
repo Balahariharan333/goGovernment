@@ -8,6 +8,7 @@ import '../home/notification/notification_screen.dart';
 import '../../bloc/report/report_bloc.dart';
 import '../../bloc/report/report_event.dart';
 import '../../bloc/report/report_state.dart';
+import '../../hive/hive_service.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -17,69 +18,34 @@ class ReportScreen extends StatefulWidget {
 }
 
 class _ReportScreenState extends State<ReportScreen> {
-  // Mock list of reports
-  final List<Map<String, dynamic>> _myActivityReports = [
-    {
-      'userName': 'Ramesh',
-      'userAddress': '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102',
-      'id': 'ertyuiohgf',
-      'category': 'Road Damage',
-      'description': 'The road is completely damaged and it is difficult for us to ride our vehicles safely. Kindly repair the road and resolve this issue as soon as possible.',
-      'status': 'Under Review',
-      'statusColor': const Color(0xFFFF5252),
-    },
-    {
-      'userName': 'Ramesh',
-      'userAddress': '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102',
-      'id': 'ertyuiohgf',
-      'category': 'Road Damage',
-      'description': 'The road is completely damaged and it is difficult for us to ride our vehicles safely. Kindly repair the road and resolve this issue as soon as possible.',
-      'status': 'In Progress',
-      'statusColor': const Color(0xFFFF9100),
-    },
-    {
-      'userName': 'Ramesh',
-      'userAddress': '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102',
-      'id': 'ertyuiohgf',
-      'category': 'Road Damage',
-      'description': 'The road is completely damaged and it is difficult for us to ride our vehicles safely. Kindly repair the road and resolve this issue as soon as possible.',
-      'status': 'Resolved',
-      'statusColor': const Color(0xFF4CAF50),
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    context.read<ReportBloc>().add(LoadReportsEvent());
+  }
 
-  final List<Map<String, dynamic>> _otherActivityReports = [
-    {
-      'userName': 'Suresh Kumar',
-      'userAddress': '124, 5th Cross Rd, 1st Sector, HSR Layout, Bengaluru, Karnataka 560102',
-      'id': 'lkjhgfdsa1',
-      'category': 'Streetlight Outage',
-      'description': 'The streetlights in this area are not working properly, making it difficult for residents to walk safely at night. Kindly inspect and resolve the issue.',
-      'status': 'Under Review',
-      'statusColor': const Color(0xFFFF5252),
-    },
-    {
-      'userName': 'Mahesh Hegde',
-      'userAddress': '78, 19th Main Rd, 3rd Sector, HSR Layout, Bengaluru, Karnataka 560102',
-      'id': 'poiuytrew2',
-      'category': 'Garbage & Waste',
-      'description': 'Garbage has not been cleared for the last three days. It smells terrible and is attracting stray dogs. Please resolve this immediately.',
-      'status': 'In Progress',
-      'statusColor': const Color(0xFFFF9100),
-    },
-    {
-      'userName': 'Ganesh Prasad',
-      'userAddress': '411, 24th Cross Rd, HSR Layout, Bengaluru, Karnataka 560102',
-      'id': 'mnbvcxzlk3',
-      'category': 'Drainage Overflow',
-      'description': 'Sewer water is leaking onto the main road near the school boundary. Please send clean-up crews and fix the blockage.',
-      'status': 'Resolved',
-      'statusColor': const Color(0xFF4CAF50),
-    },
-  ];
+  Color _getStatusColor(dynamic rawColor, String? status) {
+    if (rawColor is Color) return rawColor;
+    if (rawColor is int) return Color(rawColor);
+    switch (status) {
+      case 'Under Review':
+        return const Color(0xFFFF5252);
+      case 'In Progress':
+        return const Color(0xFFFF9100);
+      case 'Resolved':
+        return const Color(0xFF4CAF50);
+      default:
+        return AppColors.primary;
+    }
+  }
 
-  List<Map<String, dynamic>> _filteredReports(bool isMyActivity, String selectedFilter) {
-    final baseList = isMyActivity ? _myActivityReports : _otherActivityReports;
+  List<Map<String, dynamic>> _filteredReports(
+    bool isMyActivity,
+    String selectedFilter,
+    List<Map<String, dynamic>> myReports,
+    List<Map<String, dynamic>> otherReports,
+  ) {
+    final baseList = isMyActivity ? myReports : otherReports;
     if (selectedFilter == 'All') {
       return baseList;
     }
@@ -92,7 +58,12 @@ class _ReportScreenState extends State<ReportScreen> {
       builder: (context, state) {
         final bool isMyActivity = state.isMyActivity;
         final String selectedFilter = state.selectedFilter;
-        final filteredList = _filteredReports(isMyActivity, selectedFilter);
+        final filteredList = _filteredReports(
+          isMyActivity,
+          selectedFilter,
+          state.myReports,
+          state.otherReports,
+        );
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -292,16 +263,207 @@ class _ReportScreenState extends State<ReportScreen> {
     );
   }
 
+  void _showCommentsBottomSheet(BuildContext context, Map<String, dynamic> report) {
+    final TextEditingController commentController = TextEditingController();
+    final String reportId = report['id']?.toString() ?? '';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (bottomSheetContext) {
+        return BlocBuilder<ReportBloc, ReportState>(
+          builder: (ctx, state) {
+            final allReports = [...state.myReports, ...state.otherReports];
+            final liveReport = allReports.firstWhere(
+              (r) => r['id'] == reportId,
+              orElse: () => report,
+            );
+            final List<dynamic> comments = List.from(liveReport['comments'] ?? []);
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: Container(
+                height: Responsive.h(480),
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(Responsive.w(24)),
+                  ),
+                ),
+                padding: EdgeInsets.all(Responsive.w(20)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: Responsive.w(40),
+                        height: Responsive.h(4),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: Responsive.h(16)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        CustomText.header(
+                          'Comments (${comments.length})',
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(bottomSheetContext),
+                        ),
+                      ],
+                    ),
+                    const Divider(),
+                    Expanded(
+                      child: comments.isEmpty
+                          ? Center(
+                              child: CustomText.subtitle(
+                                'No comments yet. Be the first to comment!',
+                                color: AppColors.grayFont,
+                                fontSize: 13,
+                              ),
+                            )
+                          : ListView.separated(
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: comments.length,
+                              separatorBuilder: (context, index) => SizedBox(height: Responsive.h(12)),
+                              itemBuilder: (context, index) {
+                                final c = comments[index] is Map ? comments[index] as Map : {};
+                                return Container(
+                                  padding: EdgeInsets.all(Responsive.w(12)),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF9F6F4),
+                                    borderRadius: BorderRadius.circular(Responsive.w(12)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          CustomText.title(
+                                            c['userName']?.toString() ?? 'Citizen',
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          CustomText.subtitle(
+                                            c['date']?.toString() ?? 'Just now',
+                                            fontSize: 10,
+                                            color: AppColors.grayFont,
+                                          ),
+                                        ],
+                                      ),
+                                      SizedBox(height: Responsive.h(4)),
+                                      CustomText.body(
+                                        c['comment']?.toString() ?? '',
+                                        fontSize: 12,
+                                        color: AppColors.black,
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                    SizedBox(height: Responsive.h(12)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF5F5F5),
+                              borderRadius: BorderRadius.circular(Responsive.w(20)),
+                              border: Border.all(
+                                color: AppColors.outliner,
+                                width: 1,
+                              ),
+                            ),
+                            padding: EdgeInsets.symmetric(horizontal: Responsive.w(16)),
+                            child: TextField(
+                              controller: commentController,
+                              style: TextStyle(fontSize: Responsive.sp(14)),
+                              decoration: const InputDecoration(
+                                hintText: 'Write a comment...',
+                                border: InputBorder.none,
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: Responsive.w(8)),
+                        GestureDetector(
+                          onTap: () {
+                            final text = commentController.text.trim();
+                            if (text.isNotEmpty) {
+                              final profileName = HiveService.userName.isNotEmpty
+                                  ? HiveService.userName
+                                  : 'You';
+                              context.read<ReportBloc>().add(
+                                    AddCommentToReportEvent(
+                                      reportId,
+                                      text,
+                                      userName: profileName,
+                                    ),
+                                  );
+                              commentController.clear();
+                            }
+                          },
+                          child: Container(
+                            width: Responsive.w(44),
+                            height: Responsive.w(44),
+                            decoration: const BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.send,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildReportCard(BuildContext context, Map<String, dynamic> report) {
+    final String reportId = report['id']?.toString() ?? '';
+    final bool isLiked = report['isLiked'] == true;
+    final int likesCount = (report['likesCount'] as num?)?.toInt() ?? 0;
+    final List<dynamic> comments = List.from(report['comments'] ?? []);
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => ComplaintDetailsScreen(
-              userName: report['userName'],
-              status: report['status'],
-              statusColor: report['statusColor'],
+              report: report,
+              userName: report['userName'] ?? 'User',
+              status: report['status'] ?? 'Under Review',
+              statusColor: _getStatusColor(report['statusColor'], report['status']),
+              category: report['category'] ?? 'Road Damage',
+              description: report['description'] ?? '',
+              id: reportId,
+              imagePath: report['imagePath'],
+              userAddress: report['userAddress'],
+              date: report['date'],
             ),
           ),
         );
@@ -339,13 +501,13 @@ class _ReportScreenState extends State<ReportScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       CustomText.title(
-                        report['userName'],
+                        report['userName'] ?? 'User',
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
                       ),
                       SizedBox(height: Responsive.h(2)),
                       CustomText.subtitle(
-                        report['userAddress'],
+                        report['userAddress'] ?? 'HSR Layout, Bengaluru',
                         fontSize: 10,
                         color: AppColors.grayFont,
                         maxLines: 1,
@@ -359,7 +521,7 @@ class _ReportScreenState extends State<ReportScreen> {
 
             // ID
             CustomText.subtitle(
-              'ID: ${report['id']}',
+              'ID: ${report['id'] ?? 'N/A'}',
               fontSize: 11,
               color: AppColors.grayFont,
             ),
@@ -367,7 +529,7 @@ class _ReportScreenState extends State<ReportScreen> {
 
             // Category
             CustomText.title(
-              report['category'],
+              report['category'] ?? 'Road Damage',
               fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
@@ -375,7 +537,7 @@ class _ReportScreenState extends State<ReportScreen> {
 
             // Description
             CustomText.body(
-              report['description'],
+              report['description'] ?? '',
               fontSize: 12,
               color: Colors.grey.shade600,
               maxLines: 2,
@@ -393,9 +555,9 @@ class _ReportScreenState extends State<ReportScreen> {
                 ),
                 children: [
                   TextSpan(
-                    text: report['status'],
+                    text: report['status'] ?? 'Under Review',
                     style: TextStyle(
-                      color: report['statusColor'],
+                      color: _getStatusColor(report['statusColor'], report['status']),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -411,15 +573,47 @@ class _ReportScreenState extends State<ReportScreen> {
             // Like + Comment row
             Row(
               children: [
-                Icon(Icons.thumb_up_outlined,
-                    size: Responsive.w(16), color: AppColors.grayFont),
-                SizedBox(width: Responsive.w(4)),
-                CustomText.subtitle('0', fontSize: 12, color: AppColors.grayFont),
+                GestureDetector(
+                  onTap: () {
+                    if (reportId.isNotEmpty) {
+                      context.read<ReportBloc>().add(ToggleLikeReportEvent(reportId));
+                    }
+                  },
+                  child: Row(
+                    children: [
+                      Icon(
+                        isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                        size: Responsive.w(16),
+                        color: isLiked ? AppColors.primary : AppColors.grayFont,
+                      ),
+                      SizedBox(width: Responsive.w(4)),
+                      CustomText.subtitle(
+                        '$likesCount',
+                        fontSize: 12,
+                        color: isLiked ? AppColors.primary : AppColors.grayFont,
+                      ),
+                    ],
+                  ),
+                ),
                 SizedBox(width: Responsive.w(20)),
-                Icon(Icons.chat_bubble_outline,
-                    size: Responsive.w(16), color: AppColors.grayFont),
-                SizedBox(width: Responsive.w(4)),
-                CustomText.subtitle('0', fontSize: 12, color: AppColors.grayFont),
+                GestureDetector(
+                  onTap: () => _showCommentsBottomSheet(context, report),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.chat_bubble_outline,
+                        size: Responsive.w(16),
+                        color: AppColors.grayFont,
+                      ),
+                      SizedBox(width: Responsive.w(4)),
+                      CustomText.subtitle(
+                        '${comments.length}',
+                        fontSize: 12,
+                        color: AppColors.grayFont,
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ],

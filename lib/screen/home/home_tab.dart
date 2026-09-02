@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/custom_text.dart';
+import '../../bloc/profile/profile_bloc.dart';
 import 'notification/notification_screen.dart';
 import 'feedback/feedback_survey_screen.dart';
 import 'toilet/near_toilet_screen.dart';
@@ -13,6 +15,10 @@ class HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final profileState = context.watch<ProfileBloc>().state;
+    final String name = profileState.name.trim();
+    final String displayName = name.isNotEmpty ? name : 'User';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -25,7 +31,7 @@ class HomeTab extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   CustomText.header(
-                    'Good Morning, Ramesha..',
+                    'Good Morning, $displayName..',
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),

@@ -1,3 +1,5 @@
+import '../../hive/hive_service.dart';
+
 class CartState {
   final Map<String, int> cartItems;
   final Map<String, Map<String, dynamic>> productDetails;
@@ -11,9 +13,9 @@ class CartState {
 
   factory CartState.initial() {
     return CartState(
-      cartItems: {},
-      productDetails: {},
-      favoriteIds: {},
+      cartItems: HiveService.getCartItems(),
+      productDetails: HiveService.getProductDetails(),
+      favoriteIds: HiveService.getFavoriteIds(),
     );
   }
 

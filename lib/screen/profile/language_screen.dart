@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../hive/hive_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
@@ -13,6 +14,17 @@ class LanguageScreen extends StatefulWidget {
 
 class _LanguageScreenState extends State<LanguageScreen> {
   String _selectedLanguageCode = 'en';
+
+  @override
+  void initState() {
+    super.initState();
+    final savedLang = HiveService.getLanguage();
+    final match = _languages.firstWhere(
+      (l) => l['name']?.toLowerCase() == savedLang.toLowerCase(),
+      orElse: () => _languages.first,
+    );
+    _selectedLanguageCode = match['code'] ?? 'en';
+  }
 
   final List<Map<String, String>> _languages = [
     {'code': 'en', 'name': 'English', 'nativeName': 'English', 'icon': 'A'},
@@ -195,6 +207,7 @@ class _LanguageScreenState extends State<LanguageScreen> {
                       child: GestureDetector(
                         onTap: () {
                           final selectedLang = _languages.firstWhere((l) => l['code'] == _selectedLanguageCode);
+                          HiveService.setLanguage(selectedLang['name'] ?? 'English');
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Language changed to ${selectedLang['name']} successfully!'),

@@ -14,7 +14,16 @@ class PickComplaintImageEvent extends ComplaintEvent {
 
 class SubmitComplaintEvent extends ComplaintEvent {
   final String description;
-  SubmitComplaintEvent(this.description);
+  final String category;
+  final String? location;
+  final String? imagePath;
+
+  SubmitComplaintEvent({
+    required this.description,
+    required this.category,
+    this.location,
+    this.imagePath,
+  });
 }
 
 class ClearComplaintEvent extends ComplaintEvent {}

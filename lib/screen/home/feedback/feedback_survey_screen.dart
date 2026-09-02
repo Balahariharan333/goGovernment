@@ -7,6 +7,8 @@ import '../../../widget/custom_text.dart';
 import '../../../bloc/feedback/feedback_bloc.dart';
 import '../../../bloc/feedback/feedback_event.dart';
 import '../../../bloc/feedback/feedback_state.dart';
+import '../../../bloc/transaction/transaction_bloc.dart';
+import '../../../bloc/transaction/transaction_event.dart';
 
 class FeedbackSurveyScreen extends StatefulWidget {
   const FeedbackSurveyScreen({super.key});
@@ -214,9 +216,28 @@ class _FeedbackSurveyScreenState extends State<FeedbackSurveyScreen> {
             );
             return;
           }
+          // Reward citizen feedback bonus
+          final rewardTx = {
+            'id': 'REW-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}',
+            'title': 'Feedback Survey Reward',
+            'subtitle': 'Earned through survey · ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
+            'amount': '+50',
+            'isPositive': true,
+            'status': 'Credited',
+            'date': 'Today',
+            'items': [],
+            'address': 'Citizen Participation Survey',
+            'listingPrice': '₹0.00',
+            'sellingPrice': '₹50.00',
+            'grandTotal': '₹50.00',
+            'paid': '₹50.00',
+          };
+          context.read<TransactionBloc>().add(AddCoinsEvent(50));
+          context.read<TransactionBloc>().add(AddTransactionEvent(rewardTx));
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Feedback submitted successfully!'),
+              content: const Text('Feedback submitted & 50 Coins Earned!'),
               backgroundColor: AppColors.success,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(

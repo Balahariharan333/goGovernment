@@ -13,6 +13,8 @@ import 'coupons_screen.dart';
 import '../../profile/address_book_screen.dart';
 import 'order_status_screen.dart';
 import '../../../widget/common_success_screen.dart';
+import '../../../bloc/transaction/transaction_bloc.dart';
+import '../../../bloc/transaction/transaction_event.dart';
 import '../../../service/cart_manager.dart';
 import 'all_products_screen.dart';
 import '../../../widget/common_wishlist_button.dart';
@@ -34,6 +36,7 @@ class _CartScreenState extends State<CartScreen> {
   String _deliveryAddress = '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102';
   String? _receiverName;
   String? _receiverPhone;
+  bool _useComplaintCoins = false;
 
   // Cross-sell items list
   late final List<Map<String, dynamic>> _crossSellProducts;
@@ -93,13 +96,25 @@ class _CartScreenState extends State<CartScreen> {
     final cartItemsMap = CartManager.instance.cartItems.value;
     int itemOriginalTotal = 0;
     int itemDiscountedTotal = 0;
+    int parsePrice(dynamic val, int fallback) {
+      if (val == null) return fallback;
+      if (val is int) return val;
+      if (val is double) return val.toInt();
+      if (val is num) return val.toInt();
+      if (val is String) {
+        final clean = val.replaceAll('₹', '').replaceAll(',', '').trim();
+        final parsed = double.tryParse(clean);
+        if (parsed != null) return parsed.toInt();
+      }
+      return fallback;
+    }
 
     for (var entry in cartItemsMap.entries) {
       final String id = entry.key;
       final int qty = entry.value;
       final product = CartManager.instance.productDetails[id] ?? {};
-      final int originalPrice = product['originalPrice'] ?? 106;
-      final int price = product['price'] ?? 83;
+      final int originalPrice = parsePrice(product['originalPrice'], 106);
+      final int price = parsePrice(product['price'], 83);
       itemOriginalTotal += originalPrice * qty;
       itemDiscountedTotal += price * qty;
     }
@@ -109,8 +124,17 @@ class _CartScreenState extends State<CartScreen> {
     final bool isCouponApplied = couponState is CouponValid;
     final int deliveryCharge = isCouponApplied ? 25 : 0;
     final int handlingCharge = 2;
-    final int grandTotal = (itemDiscountedTotal - couponDiscount) + deliveryCharge + handlingCharge;
-    final int totalSavings = (itemOriginalTotal - itemDiscountedTotal) + couponDiscount;
+
+    final txState = context.watch<TransactionBloc>().state;
+    final int availableCoins = txState.coinsBalance;
+    final double walletBalance = txState.walletBalance;
+    final int coinsDiscount = (_useComplaintCoins && availableCoins >= 100)
+        ? (availableCoins / 100).floor().clamp(0, 50)
+        : 0;
+    final int coinsDeducted = coinsDiscount * 100;
+
+    final int grandTotal = ((itemDiscountedTotal - couponDiscount - coinsDiscount).clamp(0, 999999)) + deliveryCharge + handlingCharge;
+    final int totalSavings = (itemOriginalTotal - itemDiscountedTotal) + couponDiscount + coinsDiscount;
 
     return Scaffold(
       backgroundColor: AppColors.screenColor,
@@ -184,6 +208,7 @@ class _CartScreenState extends State<CartScreen> {
                               final String id = entry.key;
                               final int qty = entry.value;
                               final product = CartManager.instance.productDetails[id] ?? {};
+                              final int stock = CartManager.instance.getStockById(id);
                               final isLast = id == cartItemsMap.keys.last;
                               return Column(
                                 children: [
@@ -192,13 +217,14 @@ class _CartScreenState extends State<CartScreen> {
                                     subtitle: '1 units',
                                     image: product['image'] ?? 'assets/images/product1.png',
                                     qty: qty,
-                                    originalPrice: '₹${product['originalPrice'] ?? 106}',
-                                    price: '₹${product['price'] ?? 83}',
+                                    stock: stock,
+                                    originalPrice: '₹${parsePrice(product['originalPrice'], 106)}',
+                                    price: '₹${parsePrice(product['price'], 83)}',
                                     onDecrement: () {
                                       CartManager.instance.updateQuantityById(id, qty - 1);
                                     },
                                     onIncrement: () {
-                                      CartManager.instance.updateQuantityById(id, qty + 1);
+                                      CartManager.instance.updateQuantityById(id, qty + 1, context: context);
                                     },
                                   ),
                                   if (!isLast) ...[
@@ -220,13 +246,73 @@ class _CartScreenState extends State<CartScreen> {
 
                       // Coupons Apply Banner Card
                       _buildCouponsBannerCard(isCouponApplied),
-                      SizedBox(height: Responsive.h(20)),
+                      SizedBox(height: Responsive.h(16)),
+
+                      // Complaint Coins Discount Banner Card
+                      if (availableCoins >= 100) ...[
+                        Container(
+                          margin: EdgeInsets.only(bottom: Responsive.h(16)),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: Responsive.w(16),
+                            vertical: Responsive.h(12),
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.white,
+                            borderRadius: BorderRadius.circular(Responsive.w(20)),
+                            border: Border.all(
+                              color: _useComplaintCoins ? const Color(0xFFE65100) : AppColors.outliner,
+                              width: _useComplaintCoins ? 1.5 : 1.2,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.monetization_on,
+                                    color: const Color(0xFFFFB300),
+                                    size: Responsive.w(22),
+                                  ),
+                                  SizedBox(width: Responsive.w(10)),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      CustomText.title(
+                                        'Use $availableCoins Complaint Coins',
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      CustomText.subtitle(
+                                        'Save ₹${(availableCoins / 100).floor().clamp(0, 50)} on this order',
+                                        fontSize: 11,
+                                        color: AppColors.grayFont,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              Switch(
+                                value: _useComplaintCoins,
+                                activeThumbColor: AppColors.primary,
+                                onChanged: (val) {
+                                  setState(() {
+                                    _useComplaintCoins = val;
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
 
                       // Bill Details breakdown card
                       _buildBillDetailsCard(
                         itemOriginalTotal: itemOriginalTotal,
                         itemDiscountedTotal: itemDiscountedTotal,
                         couponDiscount: couponDiscount,
+                        coinsDiscount: coinsDiscount,
+                        coinsDeducted: coinsDeducted,
                         deliveryCharge: deliveryCharge,
                         handlingCharge: handlingCharge,
                         grandTotal: grandTotal,
@@ -335,7 +421,7 @@ class _CartScreenState extends State<CartScreen> {
                             children: [
                               Expanded(
                                 child: CustomText.title(
-                                  _deliveryAddress,
+                                  context.watch<AddressBloc>().state.selectedAddress?.description ?? _deliveryAddress,
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold,
                                   overflow: TextOverflow.ellipsis,
@@ -377,8 +463,8 @@ class _CartScreenState extends State<CartScreen> {
                           Row(
                             children: [
                               Icon(
-                                Icons.payment,
-                                color: Colors.deepPurple,
+                                Icons.account_balance_wallet_outlined,
+                                color: const Color(0xFFF4511E),
                                 size: Responsive.w(14),
                               ),
                               SizedBox(width: Responsive.w(6)),
@@ -390,7 +476,7 @@ class _CartScreenState extends State<CartScreen> {
                           ),
                           SizedBox(height: Responsive.h(4)),
                           CustomText.title(
-                            'PhonePe UPI',
+                            'Wallet (₹${walletBalance.toStringAsFixed(0)})',
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
                           ),
@@ -430,6 +516,58 @@ class _CartScreenState extends State<CartScreen> {
                                 TextButton(
                                   onPressed: () {
                                     Navigator.pop(context); // Close dialog
+
+                                    // Build order & transaction data
+                                    final orderItems = cartItemsMap.entries.map((e) {
+                                      final prod = CartManager.instance.productDetails[e.key] ?? {};
+                                      return {
+                                        'id': e.key,
+                                        'title': prod['title'] ?? 'Product',
+                                        'price': '₹${prod['price'] ?? 83}',
+                                        'qty': e.value,
+                                        'image': prod['image'] ?? 'assets/images/product1.png',
+                                      };
+                                    }).toList();
+
+                                    final String orderId = 'ORD-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
+                                    final String storeTitle = widget.storeType == 'medical'
+                                        ? 'Apothecary Pharmacy'
+                                        : 'Bangalore Horticulture';
+                                    final now = DateTime.now();
+                                    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                    final String dateFormatted = '${now.day} ${months[now.month - 1]} ${now.year}, ${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'pm' : 'am'}';
+                                    final String shortDate = '${months[now.month - 1]} ${now.day} - ${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'pm' : 'am'}';
+
+                                    final selectedAddr = context.read<AddressBloc>().state.selectedAddress;
+                                    final String deliveryAddr = selectedAddr?.description ?? '552, 2nd Floor 16th Main, 15th Cross Rd, HSR Layout, Bengaluru';
+
+                                    final newTx = {
+                                      'id': orderId,
+                                      'title': storeTitle,
+                                      'subtitle': 'Sent by you · $shortDate',
+                                      'amount': '-$grandTotal',
+                                      'isPositive': false,
+                                      'status': 'Processing',
+                                      'date': dateFormatted,
+                                      'items': orderItems,
+                                      'address': deliveryAddr,
+                                      'listingPrice': '₹$itemOriginalTotal',
+                                      'sellingPrice': '₹$itemDiscountedTotal',
+                                      'grandTotal': '₹$grandTotal',
+                                      'paid': '₹$grandTotal',
+                                    };
+
+                                    // Deduct coins if used
+                                    if (coinsDeducted > 0) {
+                                      context.read<TransactionBloc>().add(SpendCoinsEvent(coinsDeducted));
+                                    }
+
+                                    // Deduct wallet balance
+                                    context.read<TransactionBloc>().add(DeductWalletMoneyEvent(grandTotal.toDouble()));
+
+                                    // Save to Hive via TransactionBloc
+                                    context.read<TransactionBloc>().add(AddTransactionEvent(newTx));
+
                                     // Proceed to success screen
                                     Navigator.pushReplacement(
                                       context,
@@ -437,10 +575,8 @@ class _CartScreenState extends State<CartScreen> {
                                         builder: (context) => CommonSuccessScreen(
                                           amount: grandTotal.toDouble(),
                                           subtitle: 'Paid to',
-                                          title: widget.storeType == 'medical'
-                                              ? 'Apothecary Pharmacy'
-                                              : 'Bangalore Horticulture',
-                                          dateString: '18 August 2026, 5:41pm',
+                                          title: storeTitle,
+                                          dateString: dateFormatted,
                                           buttonText: 'Track Order',
                                           onDone: () {
                                             CartManager.instance.clear();
@@ -525,9 +661,12 @@ class _CartScreenState extends State<CartScreen> {
     required int qty,
     required String originalPrice,
     required String price,
+    required int stock,
     required VoidCallback onDecrement,
     required VoidCallback onIncrement,
   }) {
+    final bool isMaxStock = qty >= stock;
+
     return Row(
       children: [
         // Product Thumbnail
@@ -549,17 +688,39 @@ class _CartScreenState extends State<CartScreen> {
             children: [
               CustomText.title(title, fontSize: 13, fontWeight: FontWeight.bold),
               SizedBox(height: Responsive.h(4)),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(Responsive.w(6)),
-                ),
-                padding: EdgeInsets.symmetric(horizontal: Responsive.w(8), vertical: Responsive.h(3)),
-                child: CustomText.subtitle(
-                  subtitle,
-                  fontSize: 10,
-                  color: Colors.grey.shade700,
-                ),
+              Row(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(Responsive.w(6)),
+                    ),
+                    padding: EdgeInsets.symmetric(horizontal: Responsive.w(8), vertical: Responsive.h(3)),
+                    child: CustomText.subtitle(
+                      subtitle,
+                      fontSize: 10,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  if (stock <= 3) ...[
+                    SizedBox(width: Responsive.w(6)),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF3E0),
+                        borderRadius: BorderRadius.circular(Responsive.w(6)),
+                      ),
+                      padding: EdgeInsets.symmetric(horizontal: Responsive.w(6), vertical: Responsive.h(2)),
+                      child: Text(
+                        'Only $stock left',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
@@ -571,11 +732,18 @@ class _CartScreenState extends State<CartScreen> {
           children: [
             // Incrementer/Decrementer dials
             Container(
-              height: Responsive.h(28),
-              width: Responsive.w(80),
+              height: Responsive.h(36),
+              width: Responsive.w(96),
               decoration: BoxDecoration(
                 color: AppColors.primary,
-                borderRadius: BorderRadius.circular(Responsive.w(14)),
+                borderRadius: BorderRadius.circular(Responsive.w(18)),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.25),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: Row(
                 children: [
@@ -584,20 +752,28 @@ class _CartScreenState extends State<CartScreen> {
                       onTap: onDecrement,
                       behavior: HitTestBehavior.opaque,
                       child: const Center(
-                        child: Icon(Icons.remove, color: Colors.white, size: 14),
+                        child: Icon(Icons.remove, color: Colors.white, size: 16),
                       ),
                     ),
                   ),
                   Text(
                     qty.toString().padLeft(2, '0'),
-                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: Responsive.sp(13),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   Expanded(
                     child: GestureDetector(
                       onTap: onIncrement,
                       behavior: HitTestBehavior.opaque,
-                      child: const Center(
-                        child: Icon(Icons.add, color: Colors.white, size: 14),
+                      child: Center(
+                        child: Icon(
+                          Icons.add,
+                          color: isMaxStock ? Colors.white.withValues(alpha: 0.4) : Colors.white,
+                          size: 16,
+                        ),
                       ),
                     ),
                   ),
@@ -942,6 +1118,8 @@ class _CartScreenState extends State<CartScreen> {
     required int itemOriginalTotal,
     required int itemDiscountedTotal,
     required int couponDiscount,
+    int coinsDiscount = 0,
+    int coinsDeducted = 0,
     required int deliveryCharge,
     required int handlingCharge,
     required int grandTotal,
@@ -1073,6 +1251,27 @@ class _CartScreenState extends State<CartScreen> {
               ],
             ),
           ),
+          if (coinsDiscount > 0) ...[
+            SizedBox(height: Responsive.h(12)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.monetization_on, color: const Color(0xFFFFB300), size: Responsive.w(14)),
+                    SizedBox(width: Responsive.w(6)),
+                    CustomText.title('Complaint Coins ($coinsDeducted)', fontSize: 12),
+                  ],
+                ),
+                CustomText.title(
+                  '-₹$coinsDiscount',
+                  color: Colors.green,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ],
+            ),
+          ],
           SizedBox(height: Responsive.h(12)),
           const Divider(height: 1),
           SizedBox(height: Responsive.h(12)),

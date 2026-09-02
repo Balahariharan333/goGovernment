@@ -359,6 +359,9 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
   Widget _buildProductCard(Map<String, dynamic> product) {
     final String id = product['id'];
     final int qty = CartManager.instance.getQuantity(id);
+    final int stock = CartManager.instance.getStock(product);
+    final bool isOutOfStock = stock <= 0;
+    final bool isMaxStock = qty >= stock;
 
     return Container(
       decoration: BoxDecoration(
@@ -480,7 +483,26 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
               SizedBox(height: Responsive.h(8)),
 
               // Cart Quantity Increment/Decrement or Plus (+) button
-              if (qty > 0)
+              if (isOutOfStock)
+                Container(
+                  height: Responsive.h(28),
+                  padding: EdgeInsets.symmetric(horizontal: Responsive.w(8)),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(Responsive.w(14)),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'Out of Stock',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                )
+              else if (qty > 0)
                 Container(
                   height: Responsive.h(32),
                   width: double.infinity,
@@ -493,7 +515,7 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
                     children: [
                       GestureDetector(
                         onTap: () {
-                          CartManager.instance.updateQuantity(product, qty - 1);
+                          CartManager.instance.updateQuantity(product, qty - 1, context: context);
                         },
                         behavior: HitTestBehavior.opaque,
                         child: Padding(
@@ -509,12 +531,16 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
                       ),
                       GestureDetector(
                         onTap: () {
-                          CartManager.instance.updateQuantity(product, qty + 1);
+                          CartManager.instance.updateQuantity(product, qty + 1, context: context);
                         },
                         behavior: HitTestBehavior.opaque,
                         child: Padding(
                           padding: EdgeInsets.symmetric(horizontal: Responsive.w(8)),
-                          child: const Icon(Icons.add, color: Colors.white, size: 14),
+                          child: Icon(
+                            Icons.add,
+                            color: isMaxStock ? Colors.white.withValues(alpha: 0.4) : Colors.white,
+                            size: 14,
+                          ),
                         ),
                       ),
                     ],
@@ -525,7 +551,7 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
                   alignment: Alignment.centerRight,
                   child: GestureDetector(
                     onTap: () {
-                      CartManager.instance.updateQuantity(product, 1);
+                      CartManager.instance.addToCart(product, qty: 1, context: context);
                     },
                     child: Container(
                       width: Responsive.w(28),

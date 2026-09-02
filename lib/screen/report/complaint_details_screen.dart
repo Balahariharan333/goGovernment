@@ -1,25 +1,94 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
 import '../complaint/add_complaint_screen.dart'; // To reuse the MapPainter!
 import '../../widget/common_directions_button.dart';
+import '../../bloc/report/report_bloc.dart';
+import '../../bloc/report/report_event.dart';
+import '../../bloc/report/report_state.dart';
+import '../../hive/hive_service.dart';
 
-class ComplaintDetailsScreen extends StatelessWidget {
+class ComplaintDetailsScreen extends StatefulWidget {
+  final Map<String, dynamic>? report;
   final String userName;
   final String status;
   final Color statusColor;
+  final String category;
+  final String description;
+  final String id;
+  final String? imagePath;
+  final String? userAddress;
+  final String? date;
 
   const ComplaintDetailsScreen({
     super.key,
+    this.report,
     required this.userName,
     required this.status,
     required this.statusColor,
+    this.category = 'Road Damage',
+    this.description = '',
+    this.id = '',
+    this.imagePath,
+    this.userAddress,
+    this.date,
   });
 
   @override
+  State<ComplaintDetailsScreen> createState() => _ComplaintDetailsScreenState();
+}
+
+class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
+  final TextEditingController _commentController = TextEditingController();
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
+
+  void _addComment(String reportId) {
+    final text = _commentController.text.trim();
+    if (text.isEmpty) return;
+
+    final name = HiveService.userName.isNotEmpty ? HiveService.userName : 'You';
+    context.read<ReportBloc>().add(
+          AddCommentToReportEvent(
+            reportId,
+            text,
+            userName: name,
+          ),
+        );
+    _commentController.clear();
+    FocusScope.of(context).unfocus();
+  }
+
+  Widget _buildHeaderImage(String? imagePath) {
+    if (imagePath != null && imagePath.isNotEmpty) {
+      if (imagePath.startsWith('assets/')) {
+        return Image.asset(imagePath, fit: BoxFit.cover);
+      }
+      final file = File(imagePath);
+      if (file.existsSync()) {
+        return Image.file(file, fit: BoxFit.cover);
+      }
+    }
+    return Image.asset(
+      'assets/images/report1.png',
+      fit: BoxFit.cover,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final effectiveId = widget.id.isNotEmpty
+        ? widget.id
+        : (widget.report?['id']?.toString() ?? '');
+
     return Scaffold(
       backgroundColor: AppColors.screenColor,
       appBar: AppBar(
@@ -58,365 +127,486 @@ class ComplaintDetailsScreen extends StatelessWidget {
         ),
         centerTitle: false,
       ),
-      body: CommonBackground(
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: Responsive.w(20),
-                vertical: Responsive.h(16),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. Image Header Section (Rounded on all sides, text inside gradient overlay)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(Responsive.w(28)),
-                    child: Container(
-                      height: Responsive.h(280),
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: AppColors.outliner,
-                          width: Responsive.w(1.5),
-                        ),
-                      ),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Image.asset(
-                            'assets/images/report1.png',
-                            fit: BoxFit.cover,
-                          ),
-                          // Dark gradient overlay at the bottom
-                          Positioned.fill(
-                            child: Align(
-                              alignment: Alignment.bottomCenter,
-                              child: Container(
-                                height: Responsive.h(90),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      Colors.transparent,
-                                      Colors.black.withValues(alpha: 0.85),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          // Citizen avatar + details row inside image
-                          Positioned(
-                            bottom: Responsive.h(16),
-                            left: Responsive.w(16),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: Responsive.w(44),
-                                  height: Responsive.w(44),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.white,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Center(
-                                    child: Icon(
-                                      Icons.person,
-                                      color: AppColors.primary,
-                                      size: Responsive.w(24),
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(width: Responsive.w(12)),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    CustomText.title(
-                                      userName,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                    CustomText.subtitle(
-                                      '5 days ago',
-                                      fontSize: 11,
-                                      color: Colors.white70,
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+      body: BlocBuilder<ReportBloc, ReportState>(
+        builder: (context, state) {
+          final allReports = [...state.myReports, ...state.otherReports];
+          final liveReport = allReports.firstWhere(
+            (r) => r['id'] == effectiveId,
+            orElse: () => widget.report ?? {},
+          );
+
+          final String userName = liveReport['userName']?.toString() ?? widget.userName;
+          final String status = liveReport['status']?.toString() ?? widget.status;
+          final String category = liveReport['category']?.toString() ?? widget.category;
+          final String description = liveReport['description']?.toString() ?? widget.description;
+          final String id = liveReport['id']?.toString() ?? widget.id;
+          final String? imagePath = liveReport['imagePath']?.toString() ?? widget.imagePath;
+          final String userAddress = liveReport['userAddress']?.toString() ??
+              widget.userAddress ??
+              'HSR Layout, Bengaluru, Karnataka';
+          final String date = liveReport['date']?.toString() ?? widget.date ?? 'Today';
+          final bool isLiked = liveReport['isLiked'] == true;
+          final int likesCount = (liveReport['likesCount'] as num?)?.toInt() ?? 0;
+          final List<dynamic> comments = List.from(liveReport['comments'] ?? []);
+
+          return CommonBackground(
+            child: SafeArea(
+              bottom: false,
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: Responsive.w(20),
+                    vertical: Responsive.h(16),
                   ),
-                  SizedBox(height: Responsive.h(20)),
-
-                  // 2. Complaint details card (Holds details, map, directions, divider, and reactions)
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.all(Responsive.w(16)),
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      borderRadius: BorderRadius.circular(Responsive.w(24)),
-                      border: Border.all(
-                        color: AppColors.outliner,
-                        width: Responsive.w(1.5),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Status
-                        Row(
-                          children: [
-                            CustomText.title(
-                              'Status: ',
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            CustomText.title(
-                              status,
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: statusColor,
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: Responsive.h(12)),
-
-                        // Title
-                        CustomText.header(
-                          'Road Damage',
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        SizedBox(height: Responsive.h(8)),
-
-                        // Description
-                        CustomText.body(
-                          'The road is completely damaged and it is difficult for us to ride our vehicles safely. Kindly repair the road and resolve this issue as soon as possible.',
-                          color: const Color(0xFF4A4A4A),
-                          fontSize: 10,
-                          height: 1.4,
-                        ),
-                        SizedBox(height: Responsive.h(16)),
-
-                        // Metadata rows with spaces around colons matching screenshot
-                        Row(
-                          children: [
-                            CustomText.title(
-                              'ID: ',
-                              fontSize: 13,
-                              color: AppColors.grayFont,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            CustomText.body(
-                              'ertyuiuhgf',
-                              fontSize: 13,
-                              color: AppColors.black,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: Responsive.h(8)),
-                        Row(
-                          children: [
-                            CustomText.title(
-                              'Engineer\'s Name : ',
-                              fontSize: 13,
-                              color: AppColors.grayFont,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            Expanded(
-                              child: CustomText.body(
-                                'HSR Layout 174',
-                                fontSize: 13,
-                                color: AppColors.black,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: Responsive.h(8)),
-                        Row(
-                          children: [
-                            CustomText.title(
-                              'Engineer\'s Content : ',
-                              fontSize: 13,
-                              color: AppColors.grayFont,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            Expanded(
-                              child: CustomText.body(
-                                '+91 12345 54321',
-                                fontSize: 13,
-                                color: AppColors.black,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: Responsive.h(16)),
-
-                        // Miniature Map outline
-                        Container(
-                          height: Responsive.h(90),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 1. Image Header Section
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(Responsive.w(28)),
+                        child: Container(
+                          height: Responsive.h(280),
                           width: double.infinity,
                           decoration: BoxDecoration(
-                            color: AppColors.white,
-                            borderRadius: BorderRadius.circular(Responsive.w(20)),
                             border: Border.all(
                               color: AppColors.outliner,
                               width: Responsive.w(1.5),
                             ),
                           ),
-                          clipBehavior: Clip.antiAlias,
-                          child: CustomPaint(
-                            painter: MapPainter(),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              _buildHeaderImage(imagePath),
+                              // Dark gradient overlay
+                              Positioned.fill(
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: Container(
+                                    height: Responsive.h(90),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.black.withValues(alpha: 0.85),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // Citizen avatar + details row inside image
+                              Positioned(
+                                bottom: Responsive.h(16),
+                                left: Responsive.w(16),
+                                right: Responsive.w(16),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: Responsive.w(44),
+                                      height: Responsive.w(44),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Center(
+                                        child: Icon(
+                                          Icons.person,
+                                          color: AppColors.primary,
+                                          size: Responsive.w(24),
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: Responsive.w(12)),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          CustomText.title(
+                                            userName,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                            maxLines: 1,
+                                          ),
+                                          CustomText.subtitle(
+                                            date,
+                                            fontSize: 11,
+                                            color: Colors.white70,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        SizedBox(height: Responsive.h(16)),
+                      ),
+                      SizedBox(height: Responsive.h(20)),
 
-                        // Directions button
-                        CommonDirectionsButton(
-                          title: 'Road Damage Location',
-                          address: 'HSR Layout, Bengaluru, Karnataka',
-                          style: DirectionsButtonStyle.wide,
+                      // 2. Complaint details card
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.all(Responsive.w(16)),
+                        decoration: BoxDecoration(
+                          color: AppColors.white,
+                          borderRadius: BorderRadius.circular(Responsive.w(24)),
+                          border: Border.all(
+                            color: AppColors.outliner,
+                            width: Responsive.w(1.5),
+                          ),
                         ),
-                        SizedBox(height: Responsive.h(16)),
-
-                        // Divider
-                        Divider(
-                          color: AppColors.outliner,
-                          height: 1,
-                          thickness: Responsive.w(1.2),
-                        ),
-                        SizedBox(height: Responsive.h(12)),
-
-                        // Bottom toolbar reactions (left and right ends)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Status
                             Row(
                               children: [
-                                Icon(
-                                  Icons.thumb_up_alt_outlined,
-                                  color: AppColors.black,
-                                  size: Responsive.w(20),
-                                ),
-                                SizedBox(width: Responsive.w(6)),
                                 CustomText.title(
-                                  '0',
+                                  'Status: ',
                                   fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                CustomText.title(
+                                  status,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: widget.statusColor,
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: Responsive.h(12)),
+
+                            // Category Title
+                            CustomText.header(
+                              category,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            SizedBox(height: Responsive.h(8)),
+
+                            // Description
+                            CustomText.body(
+                              description.isNotEmpty
+                                  ? description
+                                  : 'No additional details provided.',
+                              color: const Color(0xFF4A4A4A),
+                              fontSize: 13,
+                              height: 1.4,
+                            ),
+                            SizedBox(height: Responsive.h(16)),
+
+                            // Metadata rows
+                            Row(
+                              children: [
+                                CustomText.title(
+                                  'ID: ',
+                                  fontSize: 13,
+                                  color: AppColors.grayFont,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                CustomText.body(
+                                  id.isNotEmpty ? id : 'N/A',
+                                  fontSize: 13,
+                                  color: AppColors.black,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ],
                             ),
+                            SizedBox(height: Responsive.h(8)),
                             Row(
                               children: [
-                                Icon(
-                                  Icons.chat_bubble_outline_outlined,
-                                  color: AppColors.black,
-                                  size: Responsive.w(20),
-                                ),
-                                SizedBox(width: Responsive.w(6)),
                                 CustomText.title(
-                                  '1',
-                                  fontSize: 14,
+                                  'Engineer\'s Name : ',
+                                  fontSize: 13,
+                                  color: AppColors.grayFont,
                                   fontWeight: FontWeight.bold,
+                                ),
+                                Expanded(
+                                  child: CustomText.body(
+                                    'HSR Layout BBMP Zone',
+                                    fontSize: 13,
+                                    color: AppColors.black,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: Responsive.h(8)),
+                            Row(
+                              children: [
+                                CustomText.title(
+                                  'Engineer\'s Contact : ',
+                                  fontSize: 13,
+                                  color: AppColors.grayFont,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                Expanded(
+                                  child: CustomText.body(
+                                    '+91 12345 54321',
+                                    fontSize: 13,
+                                    color: AppColors.black,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: Responsive.h(16)),
+
+                            // Miniature Map outline
+                            Container(
+                              height: Responsive.h(90),
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: AppColors.white,
+                                borderRadius: BorderRadius.circular(Responsive.w(20)),
+                                border: Border.all(
+                                  color: AppColors.outliner,
+                                  width: Responsive.w(1.5),
+                                ),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: CustomPaint(
+                                painter: MapPainter(),
+                              ),
+                            ),
+                            SizedBox(height: Responsive.h(16)),
+
+                            // Directions button
+                            CommonDirectionsButton(
+                              title: '$category Location',
+                              address: userAddress,
+                              style: DirectionsButtonStyle.wide,
+                            ),
+                            SizedBox(height: Responsive.h(16)),
+
+                            // Divider
+                            Divider(
+                              color: AppColors.outliner,
+                              height: 1,
+                              thickness: Responsive.w(1.2),
+                            ),
+                            SizedBox(height: Responsive.h(12)),
+
+                            // Bottom toolbar reactions
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                GestureDetector(
+                                  onTap: () {
+                                    if (effectiveId.isNotEmpty) {
+                                      context.read<ReportBloc>().add(
+                                            ToggleLikeReportEvent(effectiveId),
+                                          );
+                                    }
+                                  },
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        isLiked
+                                            ? Icons.thumb_up
+                                            : Icons.thumb_up_alt_outlined,
+                                        color: isLiked
+                                            ? AppColors.primary
+                                            : AppColors.black,
+                                        size: Responsive.w(20),
+                                      ),
+                                      SizedBox(width: Responsive.w(6)),
+                                      CustomText.title(
+                                        '$likesCount',
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: isLiked
+                                            ? AppColors.primary
+                                            : AppColors.black,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.chat_bubble_outline_outlined,
+                                      color: AppColors.black,
+                                      size: Responsive.w(20),
+                                    ),
+                                    SizedBox(width: Responsive.w(6)),
+                                    CustomText.title(
+                                      '${comments.length}',
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: Responsive.h(20)),
-
-                  // 3. Comments heading
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: Responsive.w(4)),
-                    child: CustomText.header(
-                      'Comments',
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: Responsive.h(12)),
-
-                  // 4. BBMP Comment card
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.all(Responsive.w(16)),
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      borderRadius: BorderRadius.circular(Responsive.w(24)),
-                      border: Border.all(
-                        color: AppColors.outliner,
-                        width: Responsive.w(1.5),
                       ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: Responsive.w(42),
-                              height: Responsive.w(42),
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFF5F5F5),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Center(
-                                child: Icon(
-                                  Icons.person,
-                                  color: AppColors.grayFont,
-                                  size: Responsive.w(24),
-                                ),
+                      SizedBox(height: Responsive.h(20)),
+
+                      // 3. Comments heading
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: Responsive.w(4)),
+                        child: CustomText.header(
+                          'Comments (${comments.length})',
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: Responsive.h(12)),
+
+                      // 4. Comments list & Add Comment
+                      if (comments.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: EdgeInsets.all(Responsive.w(16)),
+                          decoration: BoxDecoration(
+                            color: AppColors.white,
+                            borderRadius: BorderRadius.circular(Responsive.w(20)),
+                            border: Border.all(
+                              color: AppColors.outliner,
+                              width: Responsive.w(1.2),
+                            ),
+                          ),
+                          child: Center(
+                            child: CustomText.subtitle(
+                              'No comments yet. Leave a note below.',
+                              color: AppColors.grayFont,
+                              fontSize: 12,
+                            ),
+                          ),
+                        )
+                      else
+                        ...comments.map((c) {
+                          final item = c is Map ? c : {};
+                          final String author = item['userName']?.toString() ?? 'Official';
+                          final String time = item['date']?.toString() ?? 'Recent';
+                          final String text = item['comment']?.toString() ?? '';
+
+                          return Container(
+                            width: double.infinity,
+                            margin: EdgeInsets.only(bottom: Responsive.h(12)),
+                            padding: EdgeInsets.all(Responsive.w(16)),
+                            decoration: BoxDecoration(
+                              color: AppColors.white,
+                              borderRadius: BorderRadius.circular(Responsive.w(20)),
+                              border: Border.all(
+                                color: AppColors.outliner,
+                                width: Responsive.w(1.2),
                               ),
                             ),
-                            SizedBox(width: Responsive.w(12)),
-                            Column(
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                CustomText.title(
-                                  'BBMP( M Corp)',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: Responsive.w(36),
+                                      height: Responsive.w(36),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFF5F5F5),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Center(
+                                        child: Icon(
+                                          Icons.person,
+                                          color: AppColors.primary,
+                                          size: Responsive.w(20),
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: Responsive.w(10)),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        CustomText.title(
+                                          author,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        CustomText.subtitle(
+                                          time,
+                                          fontSize: 10,
+                                          color: AppColors.grayFont,
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                                CustomText.subtitle(
-                                  '5 days ago',
-                                  fontSize: 11,
-                                  color: AppColors.grayFont,
+                                SizedBox(height: Responsive.h(8)),
+                                CustomText.body(
+                                  text,
+                                  color: const Color(0xFF333333),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ],
                             ),
+                          );
+                        }),
+
+                      SizedBox(height: Responsive.h(12)),
+
+                      // 5. Add Comment Input Row
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: Responsive.w(16),
+                          vertical: Responsive.h(6),
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.white,
+                          borderRadius: BorderRadius.circular(Responsive.w(24)),
+                          border: Border.all(
+                            color: AppColors.outliner,
+                            width: Responsive.w(1.2),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _commentController,
+                                style: TextStyle(fontSize: Responsive.sp(14)),
+                                decoration: const InputDecoration(
+                                  hintText: 'Write a comment or update...',
+                                  border: InputBorder.none,
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: Responsive.w(8)),
+                            GestureDetector(
+                              onTap: () => _addComment(effectiveId),
+                              child: Container(
+                                width: Responsive.w(40),
+                                height: Responsive.w(40),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.primary,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.send,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
-                        SizedBox(height: Responsive.h(12)),
-                        CustomText.body(
-                          'We are start the work...',
-                          color: const Color(0xFF333333),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ],
-                    ),
+                      ),
+                      SizedBox(height: Responsive.h(30)),
+                    ],
                   ),
-                  SizedBox(height: Responsive.h(20)),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
