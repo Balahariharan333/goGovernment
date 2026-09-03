@@ -3,8 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/custom_text.dart';
-import 'complaint_details_screen.dart';
-import '../home/notification/notification_screen.dart';
+import '../../constants/route_constants.dart';
 import '../../bloc/report/report_bloc.dart';
 import '../../bloc/report/report_event.dart';
 import '../../bloc/report/report_state.dart';
@@ -88,7 +87,34 @@ class _ReportScreenState extends State<ReportScreen> {
                     ),
                   ],
                 ),
-                _buildNotificationBell(),
+                Row(
+                  children: [
+                    // if (isMyActivity && state.myReports.isNotEmpty) ...[
+                    //   GestureDetector(
+                    //     onTap: () => _showClearComplaintsDialog(context),
+                    //     child: Container(
+                    //       padding: EdgeInsets.all(Responsive.w(10)),
+                    //       decoration: BoxDecoration(
+                    //         color: AppColors.white,
+                    //         borderRadius:
+                    //             BorderRadius.circular(Responsive.w(14)),
+                    //         border: Border.all(
+                    //           color: AppColors.error.withValues(alpha: 0.3),
+                    //           width: Responsive.w(1.2),
+                    //         ),
+                    //       ),
+                    //       child: Icon(
+                    //         Icons.delete_sweep_outlined,
+                    //         color: AppColors.error,
+                    //         size: Responsive.w(22),
+                    //       ),
+                    //     ),
+                    //   ),
+                    //   SizedBox(width: Responsive.w(8)),
+                    // ],
+                    _buildNotificationBell(),
+                  ],
+                ),
               ],
             ),
             SizedBox(height: Responsive.h(20)),
@@ -208,12 +234,7 @@ class _ReportScreenState extends State<ReportScreen> {
   Widget _buildNotificationBell() {
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const NotificationScreen(),
-          ),
-        );
+        Navigator.of(context).pushNamed(RouteConstants.notification);
       },
       child: Container(
         padding: EdgeInsets.all(Responsive.w(10)),
@@ -450,22 +471,20 @@ class _ReportScreenState extends State<ReportScreen> {
 
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ComplaintDetailsScreen(
-              report: report,
-              userName: report['userName'] ?? 'User',
-              status: report['status'] ?? 'Under Review',
-              statusColor: _getStatusColor(report['statusColor'], report['status']),
-              category: report['category'] ?? 'Road Damage',
-              description: report['description'] ?? '',
-              id: reportId,
-              imagePath: report['imagePath'],
-              userAddress: report['userAddress'],
-              date: report['date'],
-            ),
-          ),
+        Navigator.of(context).pushNamed(
+          RouteConstants.complaintDetails,
+          arguments: {
+            'report': report,
+            'userName': report['userName'] ?? 'User',
+            'status': report['status'] ?? 'Under Review',
+            'statusColor': _getStatusColor(report['statusColor'], report['status']),
+            'category': report['category'] ?? 'Road Damage',
+            'description': report['description'] ?? '',
+            'id': reportId,
+            'imagePath': report['imagePath'],
+            'userAddress': report['userAddress'],
+            'date': report['date'],
+          },
         );
       },
       child: Container(

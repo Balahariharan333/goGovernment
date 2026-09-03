@@ -4,8 +4,7 @@ import '../../../utils/responsive_helper.dart';
 import '../../../widget/common_background.dart';
 import '../../../widget/custom_text.dart';
 import '../../../widget/common_cart_badge.dart';
-import 'product_details_screen.dart';
-import 'cart_screen.dart';
+import '../../../constants/route_constants.dart';
 import '../../../service/cart_manager.dart';
 import '../../../widget/common_wishlist_button.dart';
 
@@ -194,12 +193,9 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
                 child: CommonCartBadge(
                   itemCount: totalCartCount,
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            CartScreen(storeType: widget.storeType),
-                      ),
+                    Navigator.of(context).pushNamed(
+                      RouteConstants.cart,
+                      arguments: widget.storeType,
                     );
                   },
                 ),
@@ -266,14 +262,12 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
             children: [
               GestureDetector(
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ProductDetailsScreen(
-                        product: product,
-                        storeType: widget.storeType,
-                      ),
-                    ),
+                  Navigator.of(context).pushNamed(
+                    RouteConstants.productDetails,
+                    arguments: {
+                      'product': product,
+                      'storeType': widget.storeType,
+                    },
                   );
                 },
                 child: Column(

@@ -15,43 +15,7 @@ class ReportState {
 
   factory ReportState.initial() {
     final stored = HiveService.getMyComplaints();
-    List<Map<String, dynamic>> initialMyReports = List.from(stored);
-
-    if (initialMyReports.isEmpty) {
-      initialMyReports = [
-        {
-          'userName': HiveService.userName.isNotEmpty ? HiveService.userName : 'SURIYAPRAKASH',
-          'userAddress': '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102',
-          'id': 'CMP987651',
-          'category': 'Road Damage',
-          'description': 'The road is completely damaged and it is difficult for us to ride our vehicles safely. Kindly repair the road and resolve this issue as soon as possible.',
-          'status': 'Under Review',
-          'statusColor': 0xFFFF5252,
-          'date': 'Yesterday',
-        },
-        {
-          'userName': HiveService.userName.isNotEmpty ? HiveService.userName : 'SURIYAPRAKASH',
-          'userAddress': '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102',
-          'id': 'CMP987652',
-          'category': 'Water Supply',
-          'description': 'Low water pressure issue in our locality since last 2 days. Please inspect the main pipeline.',
-          'status': 'In Progress',
-          'statusColor': 0xFFFF9100,
-          'date': '3 days ago',
-        },
-        {
-          'userName': HiveService.userName.isNotEmpty ? HiveService.userName : 'SURIYAPRAKASH',
-          'userAddress': '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102',
-          'id': 'CMP987653',
-          'category': 'Streetlight Outage',
-          'description': 'Street light pole #14 is repaired and functioning well. Thank you BBMP team.',
-          'status': 'Resolved',
-          'statusColor': 0xFF4CAF50,
-          'date': '1 week ago',
-        },
-      ];
-      HiveService.saveAllComplaints(initialMyReports);
-    }
+    final List<Map<String, dynamic>> initialMyReports = List.from(stored);
 
     final otherReports = [
       {

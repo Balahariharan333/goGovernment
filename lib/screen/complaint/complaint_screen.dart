@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/custom_text.dart';
-import 'add_complaint_screen.dart';
+import '../../constants/route_constants.dart';
 
 class ComplaintScreen extends StatelessWidget {
   const ComplaintScreen({super.key});
@@ -85,12 +85,7 @@ class ComplaintScreen extends StatelessWidget {
           ),
           child: InkWell(
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const AddComplaintScreen(),
-                ),
-              );
+              Navigator.of(context).pushNamed(RouteConstants.addComplaint);
             },
             borderRadius: BorderRadius.circular(Responsive.w(26)),
             child: Row(
@@ -120,11 +115,9 @@ class ComplaintScreen extends StatelessWidget {
     final cleanCategory = label.replaceAll('\n', ' ');
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => AddComplaintScreen(category: cleanCategory),
-          ),
+        Navigator.of(context).pushNamed(
+          RouteConstants.addComplaint,
+          arguments: cleanCategory,
         );
       },
       child: Container(

@@ -6,7 +6,7 @@ import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
 import '../../bloc/transaction/transaction_bloc.dart';
 import '../../bloc/transaction/transaction_state.dart';
-import 'transaction_details_screen.dart';
+import '../../constants/route_constants.dart';
 
 class AllTransactionsScreen extends StatelessWidget {
   const AllTransactionsScreen({super.key});
@@ -83,14 +83,12 @@ class AllTransactionsScreen extends StatelessWidget {
     final bool isPositive = tx['isPositive'] as bool? ?? false;
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => TransactionDetailsScreen(
-              title: tx['title']?.toString() ?? 'Order Details',
-              transaction: tx,
-            ),
-          ),
+        Navigator.of(context).pushNamed(
+          RouteConstants.transactionDetails,
+          arguments: {
+            'title': tx['title']?.toString() ?? 'Order Details',
+            'transaction': tx,
+          },
         );
       },
       child: Container(

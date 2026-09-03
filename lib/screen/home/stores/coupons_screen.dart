@@ -178,106 +178,115 @@ class _CouponsScreenState extends State<CouponsScreen> {
                       // App coupons list container card
                       Container(
                         decoration: BoxDecoration(
-                          color: AppColors.white,
                           borderRadius: BorderRadius.circular(Responsive.w(20)),
                           border: Border.all(
                             color: AppColors.outliner,
                             width: Responsive.w(1.2),
                           ),
                         ),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _coupons.length,
-                          separatorBuilder: (context, index) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final coupon = _coupons[index];
-                            final bool isThisSelected = _selectedCouponCode == coupon['code'];
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(Responsive.w(20)),
+                          child: Material(
+                            color: AppColors.white,
+                            child: ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _coupons.length,
+                              separatorBuilder: (context, index) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final coupon = _coupons[index];
+                                final bool isThisSelected = _selectedCouponCode == coupon['code'];
 
-                            return ListTile(
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: Responsive.w(16),
-                                vertical: Responsive.h(8),
-                              ),
-                              leading: Container(
-                                width: Responsive.w(36),
-                                height: Responsive.w(36),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFE8F5E9),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.percent,
-                                  color: Colors.green,
-                                  size: 16,
-                                ),
-                              ),
-                              title: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  CustomText.title(
-                                    coupon['title'],
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
+                                return ListTile(
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: Responsive.w(16),
+                                    vertical: Responsive.h(8),
                                   ),
-                                  SizedBox(height: Responsive.h(2)),
-                                  CustomText.subtitle(
-                                    coupon['desc'],
-                                    fontSize: 11,
-                                    color: Colors.green,
-                                  ),
-                                  SizedBox(height: Responsive.h(6)),
-                                  Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: Responsive.w(8),
-                                      vertical: Responsive.h(4),
+                                  leading: Container(
+                                    width: Responsive.w(36),
+                                    height: Responsive.w(36),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFE8F5E9),
+                                      shape: BoxShape.circle,
                                     ),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
-                                      borderRadius: BorderRadius.circular(Responsive.w(6)),
-                                      color: Colors.grey.shade50,
-                                    ),
-                                    child: CustomText.title(
-                                      coupon['code'],
-                                      fontSize: 9,
-                                      color: Colors.grey.shade700,
-                                      fontWeight: FontWeight.bold,
+                                    child: const Icon(
+                                      Icons.percent,
+                                      color: Colors.green,
+                                      size: 16,
                                     ),
                                   ),
-                                ],
-                              ),
-                              trailing: Container(
-                                width: Responsive.w(20),
-                                height: Responsive.w(20),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: isThisSelected ? AppColors.primary : Colors.grey.shade400,
-                                    width: 1.5,
-                                  ),
-                                ),
-                                child: isThisSelected
-                                    ? Center(
-                                        child: Container(
-                                          width: Responsive.w(10),
-                                          height: Responsive.w(10),
-                                          decoration: const BoxDecoration(
-                                            color: AppColors.primary,
-                                            shape: BoxShape.circle,
-                                          ),
+                                  title: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      CustomText.title(
+                                        coupon['title'],
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      SizedBox(height: Responsive.h(2)),
+                                      CustomText.subtitle(
+                                        coupon['desc'],
+                                        fontSize: 11,
+                                        color: Colors.green,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      SizedBox(height: Responsive.h(6)),
+                                      Container(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: Responsive.w(8),
+                                          vertical: Responsive.h(4),
                                         ),
-                                      )
-                                    : null,
-                              ),
-                              onTap: () {
-                                setState(() {
-                                  _selectedCouponCode = coupon['code'];
-                                  _couponController.text = coupon['code'];
-                                  _inputText = coupon['code'];
-                                });
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
+                                          borderRadius: BorderRadius.circular(Responsive.w(6)),
+                                          color: Colors.grey.shade50,
+                                        ),
+                                        child: CustomText.title(
+                                          coupon['code'],
+                                          fontSize: 9,
+                                          color: Colors.grey.shade700,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  trailing: Container(
+                                    width: Responsive.w(20),
+                                    height: Responsive.w(20),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isThisSelected ? AppColors.primary : Colors.grey.shade400,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    child: isThisSelected
+                                        ? Center(
+                                            child: Container(
+                                              width: Responsive.w(10),
+                                              height: Responsive.w(10),
+                                              decoration: const BoxDecoration(
+                                                color: AppColors.primary,
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedCouponCode = coupon['code'];
+                                      _couponController.text = coupon['code'];
+                                      _inputText = coupon['code'];
+                                    });
+                                  },
+                                );
                               },
-                            );
-                          },
+                            ),
+                          ),
                         ),
                       ),
                       SizedBox(height: Responsive.h(100)),

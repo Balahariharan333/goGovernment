@@ -7,9 +7,12 @@ class ReportBloc extends Bloc<ReportEvent, ReportState> {
   ReportBloc() : super(ReportState.initial()) {
     on<LoadReportsEvent>((event, emit) {
       final stored = HiveService.getMyComplaints();
-      if (stored.isNotEmpty) {
-        emit(state.copyWith(myReports: stored));
-      }
+      emit(state.copyWith(myReports: stored));
+    });
+
+    on<ClearAllComplaintsEvent>((event, emit) async {
+      await HiveService.clearComplaints();
+      emit(state.copyWith(myReports: []));
     });
 
     on<ToggleActivityTypeEvent>((event, emit) {

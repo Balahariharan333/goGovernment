@@ -4,7 +4,7 @@ import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
-import 'select_delivery_location_screen.dart';
+import '../../constants/route_constants.dart';
 import '../../bloc/address/address_bloc.dart';
 import '../../bloc/address/address_event.dart';
 import '../../bloc/address/address_state.dart';
@@ -198,11 +198,8 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.primary,
         onPressed: () async {
-          final newAddr = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const SelectDeliveryLocationScreen(),
-            ),
+          final newAddr = await Navigator.of(context).pushNamed(
+            RouteConstants.selectDeliveryLocation,
           );
           if (newAddr != null && newAddr is AddressModel) {
             if (context.mounted) {
@@ -310,13 +307,9 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
               padding: EdgeInsets.zero,
               onSelected: (value) async {
                 if (value == 'edit') {
-                  final editedAddr = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => SelectDeliveryLocationScreen(
-                        editAddress: address,
-                      ),
-                    ),
+                  final editedAddr = await Navigator.of(context).pushNamed(
+                    RouteConstants.selectDeliveryLocation,
+                    arguments: address,
                   );
                   if (editedAddr != null && editedAddr is AddressModel) {
                     if (context.mounted) {

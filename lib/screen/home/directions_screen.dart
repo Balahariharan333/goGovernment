@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_government/utils/responsive_helper.dart';
@@ -37,6 +38,84 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
   }
   bool _isNavigating = false;
   bool _isWalkMode = false;
+  Timer? _navTimer;
+  int _remainingSeconds = 360;
+  String _currentInstruction = 'Head north on 16th Main Rd (200m)';
+  IconData _currentManeuverIcon = Icons.arrow_upward;
+
+  void _startNavigation() {
+    setState(() {
+      _isNavigating = true;
+      _remainingSeconds = _isWalkMode ? 720 : 360;
+      _currentInstruction = 'Head north on 16th Main Rd (200m)';
+      _currentManeuverIcon = Icons.arrow_upward;
+    });
+
+    _navTimer?.cancel();
+    _navTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        if (_remainingSeconds > 30) {
+          _remainingSeconds -= 30;
+          if (_remainingSeconds <= 90) {
+            _currentInstruction = 'Destination is on your left (50m)';
+            _currentManeuverIcon = Icons.turn_left;
+          } else if (_remainingSeconds <= 200) {
+            _currentInstruction = 'Turn right onto 15th Cross Rd (300m)';
+            _currentManeuverIcon = Icons.turn_right;
+          } else {
+            _currentInstruction = 'Continue straight toward Sector 4 (600m)';
+            _currentManeuverIcon = Icons.straight;
+          }
+        } else {
+          timer.cancel();
+          _isNavigating = false;
+          _showArrivalDialog();
+        }
+      });
+    });
+  }
+
+  void _stopNavigation() {
+    _navTimer?.cancel();
+    setState(() {
+      _isNavigating = false;
+    });
+  }
+
+  void _showArrivalDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Color(0xFF4CAF50)),
+            SizedBox(width: 8),
+            Text('You have arrived!'),
+          ],
+        ),
+        content: Text('You have reached ${widget.title}.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done',
+                style: TextStyle(
+                    color: AppColors.primary, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _navTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +136,71 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
                   isWalkMode: _isWalkMode,
                 ),
               ),
+
+              // 1b. Navigation HUD Turn Banner
+              if (_isNavigating)
+                Positioned(
+                  top: Responsive.h(64),
+                  left: Responsive.w(20),
+                  right: Responsive.w(20),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: Responsive.w(16),
+                      vertical: Responsive.h(12),
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(Responsive.w(16)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: Responsive.w(38),
+                          height: Responsive.w(38),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF4CAF50),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            _currentManeuverIcon,
+                            color: Colors.white,
+                            size: Responsive.w(22),
+                          ),
+                        ),
+                        SizedBox(width: Responsive.w(12)),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CustomText.title(
+                                _currentInstruction,
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              SizedBox(height: Responsive.h(2)),
+                              Text(
+                                '${_remainingSeconds ~/ 60}m remaining · GPS active',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
               // 2. Custom Back Button & Header overlay
               Positioned(
@@ -223,11 +367,7 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
                 ],
               ),
               GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _isNavigating = true;
-                  });
-                },
+                onTap: _startNavigation,
                 child: Container(
                   padding: EdgeInsets.symmetric(
                     horizontal: Responsive.w(20),
@@ -263,11 +403,7 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
       children: [
         // Cancel button
         GestureDetector(
-          onTap: () {
-            setState(() {
-              _isNavigating = false;
-            });
-          },
+          onTap: _stopNavigation,
           child: Container(
             width: Responsive.w(48),
             height: Responsive.w(48),
@@ -324,7 +460,7 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
                   ],
                 ),
                 CustomText.title(
-                  _isWalkMode ? '12 mins left' : '6 mins left',
+                  '${_remainingSeconds ~/ 60}m left',
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                   color: const Color(0xFF4CAF50),

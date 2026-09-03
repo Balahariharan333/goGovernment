@@ -3,12 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/custom_text.dart';
-import 'edit_profile_screen.dart';
-import 'edit_phone_screen.dart';
-import 'address_book_screen.dart';
-import 'wishlist_screen.dart';
-import 'language_screen.dart';
-import '../auth/login_screen.dart';
+import '../../constants/route_constants.dart';
 import '../../bloc/auth/auth_bloc.dart';
 import '../../bloc/auth/auth_event.dart';
 import '../../bloc/profile/profile_bloc.dart';
@@ -23,6 +18,180 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  void _showRatingDialog(BuildContext context) {
+    int selectedRating = 5;
+    final feedbackController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              backgroundColor: AppColors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(Responsive.w(24)),
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(Responsive.w(24)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: Responsive.w(54),
+                      height: Responsive.w(54),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFFF2EC),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.star_rounded,
+                        color: AppColors.primary,
+                        size: Responsive.w(32),
+                      ),
+                    ),
+                    SizedBox(height: Responsive.h(12)),
+                    CustomText.header(
+                      'Rate GoGovernment',
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: Responsive.h(6)),
+                    CustomText.subtitle(
+                      'How has your experience been so far?',
+                      fontSize: 13,
+                      color: AppColors.grayFont,
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: Responsive.h(16)),
+                    // 5 Stars
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        final starIndex = index + 1;
+                        final isFilled = starIndex <= selectedRating;
+                        return GestureDetector(
+                          onTap: () {
+                            setDialogState(() {
+                              selectedRating = starIndex;
+                            });
+                          },
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: Responsive.w(4)),
+                            child: Icon(
+                              isFilled
+                                  ? Icons.star_rounded
+                                  : Icons.star_border_rounded,
+                              color: isFilled
+                                  ? const Color(0xFFFFB300)
+                                  : Colors.grey.shade400,
+                              size: Responsive.w(32),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                    SizedBox(height: Responsive.h(16)),
+                    // Optional feedback box
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius:
+                            BorderRadius.circular(Responsive.w(12)),
+                        border: Border.all(
+                            color: AppColors.outliner, width: 1.2),
+                      ),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: Responsive.w(12)),
+                      child: TextField(
+                        controller: feedbackController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          hintText: 'Share your thoughts (Optional)',
+                          hintStyle:
+                              TextStyle(color: Colors.grey, fontSize: 12),
+                          border: InputBorder.none,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: Responsive.h(20)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              height: Responsive.h(44),
+                              decoration: BoxDecoration(
+                                color: AppColors.white,
+                                borderRadius:
+                                    BorderRadius.circular(Responsive.w(22)),
+                                border: Border.all(
+                                  color: AppColors.grayFont
+                                      .withValues(alpha: 0.5),
+                                  width: Responsive.w(1.2),
+                                ),
+                              ),
+                              child: Center(
+                                child: CustomText.title(
+                                  'Not Now',
+                                  color: AppColors.grayFont,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: Responsive.w(12)),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                      'Thank you for rating us $selectedRating stars!'),
+                                  backgroundColor: AppColors.success,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        Responsive.w(12)),
+                                  ),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              height: Responsive.h(44),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius:
+                                    BorderRadius.circular(Responsive.w(22)),
+                              ),
+                              child: Center(
+                                child: CustomText.title(
+                                  'Submit',
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
   void _showLogoutDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -87,11 +256,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                           );
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const LoginScreen(),
-                            ),
+                          Navigator.of(context).pushNamedAndRemoveUntil(
+                            RouteConstants.login,
                             (route) => false,
                           );
                         },
@@ -189,11 +355,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                           );
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const LoginScreen(),
-                            ),
+                          Navigator.of(context).pushNamedAndRemoveUntil(
+                            RouteConstants.login,
                             (route) => false,
                           );
                         },
@@ -286,14 +449,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             // Rounded Edit Profile button
                             GestureDetector(
                               onTap: () async {
-                                final res = await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => EditProfileScreen(
-                                      initialName: name,
-                                      initialEmail: email,
-                                    ),
-                                  ),
+                                final res = await Navigator.of(context).pushNamed(
+                                  RouteConstants.editProfile,
+                                  arguments: {
+                                    'initialName': name,
+                                    'initialEmail': email,
+                                  },
                                 );
                                  if (res != null && res is Map<String, String>) {
                                   if (!context.mounted) return;
@@ -369,13 +530,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       icon: Icons.phone_outlined,
                       title: phone,
                       onTap: () async {
-                        final res = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => EditPhoneScreen(
-                              initialPhone: phone,
-                            ),
-                          ),
+                        final res = await Navigator.of(context).pushNamed(
+                          RouteConstants.editPhone,
+                          arguments: phone,
                         );
                         if (res != null && res is String) {
                           if (!context.mounted) return;
@@ -388,12 +545,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       icon: Icons.map_outlined,
                       title: 'Address Book',
                       onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const AddressBookScreen(),
-                          ),
-                        );
+                        await Navigator.of(context).pushNamed(RouteConstants.addressBook);
                       },
                     ),
                     SizedBox(height: Responsive.h(6)),
@@ -401,12 +553,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       icon: Icons.favorite_outline,
                       title: 'Wishlist',
                       onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const WishlistScreen(),
-                          ),
-                        );
+                        Navigator.of(context).pushNamed(RouteConstants.wishlist);
                       },
                     ),
                     SizedBox(height: Responsive.h(6)),
@@ -414,19 +561,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       icon: Icons.translate_outlined,
                       title: 'Language',
                       onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const LanguageScreen(),
-                          ),
-                        );
+                        Navigator.of(context).pushNamed(RouteConstants.selectLanguage);
                       },
                     ),
                     SizedBox(height: Responsive.h(6)),
                     _buildProfileOption(
                       icon: Icons.star_outline,
                       title: 'Rate Us',
-                      onTap: () {},
+                      onTap: () => _showRatingDialog(context),
                     ),
                     SizedBox(height: Responsive.h(6)),
                     _buildProfileOption(

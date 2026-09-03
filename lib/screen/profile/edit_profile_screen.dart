@@ -8,7 +8,7 @@ import '../../widget/custom_text.dart';
 import '../../bloc/profile/profile_bloc.dart';
 import '../../bloc/profile/profile_event.dart';
 import '../../hive/hive_service.dart';
-import '../home/main_screen.dart';
+import '../../constants/route_constants.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final String initialName;
@@ -91,9 +91,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
         ),
       );
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const MainScreen()),
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        RouteConstants.main,
         (route) => false,
       );
     } else {

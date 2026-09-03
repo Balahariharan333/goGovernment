@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
@@ -27,6 +29,8 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
   String _addressText = '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102';
   String _selectedType = 'Home'; // 'Home', 'Office', 'Others'
   bool _isKeyboardVisible = false;
+  XFile? _landmarkImage;
+  String? _existingImagePath;
 
   @override
   void initState() {
@@ -36,7 +40,55 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
       _selectedType = addr.type;
       _addressText = addr.description;
       _phoneController.text = addr.phone;
+      _landmarkController.text = addr.landmark ?? '';
+      _existingImagePath = addr.imagePath;
     }
+  }
+
+  Future<void> _pickLandmarkImage(BuildContext context) async {
+    final ImagePicker picker = ImagePicker();
+    showModalBottomSheet(
+      context: context,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Responsive.w(20))),
+      ),
+      builder: (BuildContext bc) {
+        return SafeArea(
+          child: Wrap(
+            children: <Widget>[
+              ListTile(
+                leading: Icon(Icons.photo_library, color: AppColors.primary, size: Responsive.w(24)),
+                title: const Text('Choose from Gallery'),
+                onTap: () async {
+                  Navigator.of(bc).pop();
+                  final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+                  if (image != null) {
+                    setState(() {
+                      _landmarkImage = image;
+                      _existingImagePath = null;
+                    });
+                  }
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.photo_camera, color: AppColors.primary, size: Responsive.w(24)),
+                title: const Text('Take a Photo'),
+                onTap: () async {
+                  Navigator.of(bc).pop();
+                  final XFile? image = await picker.pickImage(source: ImageSource.camera);
+                  if (image != null) {
+                    setState(() {
+                      _landmarkImage = image;
+                      _existingImagePath = null;
+                    });
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -270,50 +322,118 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
                             ),
                             SizedBox(height: Responsive.h(16)),
 
-                            // Add an image (dashed container)
-                            GestureDetector(
-                              onTap: () {},
-                              child: Container(
+                            // Add an image / Preview container
+                            if (_landmarkImage != null || (_existingImagePath != null && _existingImagePath!.isNotEmpty))
+                              Container(
                                 width: double.infinity,
-                                height: Responsive.h(50),
+                                padding: EdgeInsets.all(Responsive.w(10)),
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade50,
                                   borderRadius: BorderRadius.circular(Responsive.w(12)),
                                   border: Border.all(
-                                    color: AppColors.primary.withValues(alpha: 0.5),
-                                    style: BorderStyle.solid,
-                                    width: 1.0,
+                                    color: AppColors.primary,
+                                    width: 1.2,
                                   ),
                                 ),
                                 child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(
-                                      Icons.add_a_photo_outlined,
-                                      color: AppColors.primary,
-                                      size: Responsive.w(16),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(Responsive.w(8)),
+                                      child: _landmarkImage != null
+                                          ? Image.file(
+                                              File(_landmarkImage!.path),
+                                              width: Responsive.w(44),
+                                              height: Responsive.h(44),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : (_existingImagePath!.startsWith('assets/')
+                                              ? Image.asset(
+                                                  _existingImagePath!,
+                                                  width: Responsive.w(44),
+                                                  height: Responsive.h(44),
+                                                  fit: BoxFit.cover,
+                                                )
+                                              : Image.file(
+                                                  File(_existingImagePath!),
+                                                  width: Responsive.w(44),
+                                                  height: Responsive.h(44),
+                                                  fit: BoxFit.cover,
+                                                )),
                                     ),
-                                    SizedBox(width: Responsive.w(8)),
-                                    Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        CustomText.title(
-                                          'Add an image',
-                                          color: AppColors.primary,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        const Text(
-                                          'This helps our experts find your exact location faster',
-                                          style: TextStyle(color: Colors.grey, fontSize: 8),
-                                        ),
-                                      ],
+                                    SizedBox(width: Responsive.w(12)),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          CustomText.title(
+                                            'Landmark Photo Attached',
+                                            color: AppColors.primary,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          const Text(
+                                            'Tap delete to remove or choose another',
+                                            style: TextStyle(color: Colors.grey, fontSize: 8),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.close, color: AppColors.error, size: 20),
+                                      onPressed: () {
+                                        setState(() {
+                                          _landmarkImage = null;
+                                          _existingImagePath = null;
+                                        });
+                                      },
                                     ),
                                   ],
                                 ),
+                              )
+                            else
+                              GestureDetector(
+                                onTap: () => _pickLandmarkImage(context),
+                                child: Container(
+                                  width: double.infinity,
+                                  height: Responsive.h(50),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(Responsive.w(12)),
+                                    border: Border.all(
+                                      color: AppColors.primary.withValues(alpha: 0.5),
+                                      style: BorderStyle.solid,
+                                      width: 1.0,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.add_a_photo_outlined,
+                                        color: AppColors.primary,
+                                        size: Responsive.w(16),
+                                      ),
+                                      SizedBox(width: Responsive.w(8)),
+                                      Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          CustomText.title(
+                                            'Add an image',
+                                            color: AppColors.primary,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          const Text(
+                                            'This helps our experts find your exact location faster',
+                                            style: TextStyle(color: Colors.grey, fontSize: 8),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
                             SizedBox(height: Responsive.h(100)),
                           ],
                         ),
@@ -342,6 +462,8 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
                         ? '${_houseController.text.trim()}, $_addressText'
                         : _addressText,
                     phone: _phoneController.text.trim(),
+                    landmark: _landmarkController.text.trim(),
+                    imagePath: _landmarkImage?.path ?? _existingImagePath,
                   );
                   Navigator.pop(context, newAddr);
                 }

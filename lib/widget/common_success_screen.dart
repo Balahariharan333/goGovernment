@@ -10,7 +10,9 @@ class CommonSuccessScreen extends StatefulWidget {
   final String subtitle;
   final String dateString;
   final String buttonText;
-  final VoidCallback onDone;
+  final VoidCallback? onDone;
+  final String? nextRoute;
+  final dynamic nextRouteArgs;
 
   const CommonSuccessScreen({
     super.key,
@@ -19,7 +21,9 @@ class CommonSuccessScreen extends StatefulWidget {
     required this.subtitle,
     required this.dateString,
     this.buttonText = 'Done',
-    required this.onDone,
+    this.onDone,
+    this.nextRoute,
+    this.nextRouteArgs,
   });
 
   @override
@@ -30,12 +34,22 @@ class _CommonSuccessScreenState extends State<CommonSuccessScreen> {
   bool _allowPop = false;
 
   void _handleDone() {
+    if (widget.nextRoute != null) {
+      Navigator.pushReplacementNamed(
+        context,
+        widget.nextRoute!,
+        arguments: widget.nextRouteArgs,
+      );
+      return;
+    }
+    if (widget.onDone != null) {
+      widget.onDone!();
+      return;
+    }
     setState(() {
       _allowPop = true;
     });
-    Future.microtask(() {
-      widget.onDone();
-    });
+    Navigator.pop(context);
   }
 
   @override

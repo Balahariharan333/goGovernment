@@ -3,7 +3,7 @@ import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
-import 'otp_screen.dart';
+import '../../constants/route_constants.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../bloc/auth/auth_bloc.dart';
 import '../../bloc/auth/auth_event.dart';
@@ -45,13 +45,9 @@ class _LoginScreenState extends State<LoginScreen> {
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is OtpSent) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => OtpScreen(
-                  phoneNumber: state.phone,
-                ),
-              ),
+            Navigator.of(context).pushNamed(
+              RouteConstants.otp,
+              arguments: state.phone,
             );
           }
         },

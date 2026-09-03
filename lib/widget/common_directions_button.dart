@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../utils/app_colors.dart';
 import '../utils/responsive_helper.dart';
 import '../widget/custom_text.dart';
-import '../screen/home/directions_screen.dart';
+import '../constants/route_constants.dart';
 
 enum DirectionsButtonStyle { circle, wide, card }
 
@@ -22,14 +22,12 @@ class CommonDirectionsButton extends StatelessWidget {
   Widget build(BuildContext context) {
     void onTap() {
       debugPrint("Directions button tapped for: $title - $address");
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => DirectionsScreen(
-            title: title,
-            address: address,
-          ),
-        ),
+      Navigator.of(context).pushNamed(
+        RouteConstants.directions,
+        arguments: {
+          'title': title,
+          'address': address,
+        },
       );
     }
 

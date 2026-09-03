@@ -1,6 +1,7 @@
 abstract class ReportEvent {}
 
 class LoadReportsEvent extends ReportEvent {}
+class ClearAllComplaintsEvent extends ReportEvent {}
 
 class ToggleActivityTypeEvent extends ReportEvent {
   final bool isMyActivity;

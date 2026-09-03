@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../home/stores/near_stores_screen.dart';
+import '../../constants/route_constants.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
-import '../home/stores/product_details_screen.dart';
 import '../../widget/common_wishlist_button.dart';
 import '../../widget/common_cart_badge.dart';
-import '../home/stores/cart_screen.dart';
 import '../../bloc/cart/cart_bloc.dart';
 import '../../bloc/cart/cart_event.dart';
 import '../../bloc/cart/cart_state.dart';
@@ -132,13 +130,9 @@ class _WishlistScreenState extends State<WishlistScreen> {
                             storeType = 'medical';
                           }
                         }
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => CartScreen(
-                              storeType: storeType,
-                            ),
-                          ),
+                        Navigator.of(context).pushNamed(
+                          RouteConstants.cart,
+                          arguments: storeType,
                         );
                       },
                     ),
@@ -190,12 +184,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
           SizedBox(height: Responsive.h(24)),
           GestureDetector(
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const NearStoresScreen(),
-                ),
-              );
+              Navigator.of(context).pushNamed(RouteConstants.nearStores);
             },
             child: Container(
               padding: EdgeInsets.symmetric(
@@ -274,14 +263,12 @@ class _WishlistScreenState extends State<WishlistScreen> {
             children: [
               GestureDetector(
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ProductDetailsScreen(
-                        product: product,
-                        storeType: id.startsWith('m') ? 'medical' : 'vegstore',
-                      ),
-                    ),
+                  Navigator.of(context).pushNamed(
+                    RouteConstants.productDetails,
+                    arguments: {
+                      'product': product,
+                      'storeType': id.startsWith('m') ? 'medical' : 'vegstore',
+                    },
                   );
                 },
                 child: Column(

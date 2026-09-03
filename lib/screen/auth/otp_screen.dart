@@ -8,7 +8,7 @@ import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
-import '../profile/edit_profile_screen.dart';
+import '../../constants/route_constants.dart';
 
 
 class OtpScreen extends StatefulWidget {
@@ -83,14 +83,10 @@ class _OtpScreenState extends State<OtpScreen> {
                 behavior: SnackBarBehavior.floating,
               ),
             );
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const EditProfileScreen(
-                  isRegistration: true,
-                ),
-              ),
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              RouteConstants.editProfile,
               (route) => false,
+              arguments: {'isRegistration': true},
             );
           } else if (state is AuthFailure) {
             ScaffoldMessenger.of(context).showSnackBar(

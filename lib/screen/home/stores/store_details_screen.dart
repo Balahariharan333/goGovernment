@@ -5,14 +5,12 @@ import '../../../utils/responsive_helper.dart';
 import '../../../widget/common_background.dart';
 import '../../../widget/custom_text.dart';
 import '../../../widget/common_cart_badge.dart';
-import 'product_details_screen.dart';
 import 'package:go_government/bloc/product/product_bloc.dart';
 import 'package:go_government/bloc/product/product_event.dart';
 import 'package:go_government/bloc/product/product_state.dart';
 import 'package:go_government/bloc/direction/direction_bloc.dart';
 import 'package:go_government/bloc/direction/direction_event.dart';
-import 'all_products_screen.dart';
-import 'cart_screen.dart';
+import '../../../constants/route_constants.dart';
 import '../../../service/cart_manager.dart';
 import '../../../widget/common_wishlist_button.dart';
 import '../../../widget/common_directions_button.dart';
@@ -228,15 +226,13 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
                           ),
                           GestureDetector(
                             onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => AllProductsScreen(
-                                    title: 'All Items',
-                                    products: allProducts,
-                                    storeType: widget.storeType,
-                                  ),
-                                ),
+                              Navigator.of(context).pushNamed(
+                                RouteConstants.allProducts,
+                                arguments: {
+                                  'title': 'All Items',
+                                  'products': allProducts,
+                                  'storeType': widget.storeType,
+                                },
                               );
                             },
                             child: CustomText.title(
@@ -338,13 +334,9 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
                child: CommonCartBadge(
                   itemCount: totalCartCount,
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => CartScreen(
-                          storeType: widget.storeType,
-                        ),
-                      ),
+                    Navigator.of(context).pushNamed(
+                      RouteConstants.cart,
+                      arguments: widget.storeType,
                     );
                   },
                 ),
@@ -417,14 +409,12 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
             children: [
               GestureDetector(
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ProductDetailsScreen(
-                        product: product,
-                        storeType: widget.storeType,
-                      ),
-                    ),
+                  Navigator.of(context).pushNamed(
+                    RouteConstants.productDetails,
+                    arguments: {
+                      'product': product,
+                      'storeType': widget.storeType,
+                    },
                   );
                 },
                 child: Column(

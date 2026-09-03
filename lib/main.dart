@@ -5,7 +5,6 @@ import 'package:go_government/bloc/coupon/coupon_bloc.dart';
 import 'package:go_government/bloc/direction/direction_bloc.dart';
 import 'package:go_government/bloc/product/product_bloc.dart';
 import 'utils/app_theme.dart';
-import 'screen/auth/login_screen.dart';
 import 'bloc/auth/auth_bloc.dart';
 import 'bloc/cart/cart_bloc.dart';
 import 'bloc/toilet/toilet_bloc.dart';
@@ -20,7 +19,8 @@ import 'bloc/rider_chat/rider_chat_bloc.dart';
 import 'bloc/address/address_bloc.dart';
 
 import 'hive/hive_service.dart';
-import 'screen/home/main_screen.dart';
+import 'constants/route_constants.dart';
+import 'routes/app_router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -74,7 +74,8 @@ class MainApp extends StatelessWidget {
             child: child!,
           );
         },
-        home: HiveService.isLoggedIn ? const MainScreen() : const LoginScreen(),
+        initialRoute: HiveService.isLoggedIn ? RouteConstants.main : RouteConstants.login,
+        onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
   }

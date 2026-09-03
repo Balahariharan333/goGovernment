@@ -4,8 +4,7 @@ import '../../../utils/responsive_helper.dart';
 import '../../../widget/common_background.dart';
 import '../../../widget/custom_text.dart';
 import '../../../widget/common_cart_badge.dart';
-import 'all_products_screen.dart';
-import 'cart_screen.dart';
+import '../../../constants/route_constants.dart';
 import '../../../service/cart_manager.dart';
 import '../../../widget/common_wishlist_button.dart';
 
@@ -26,6 +25,7 @@ class ProductDetailsScreen extends StatefulWidget {
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   bool _isHighlightsExpanded = false; // Start collapsed
   bool _isAllDetailsExpanded = false; // Start collapsed
+  bool _isSpecsMoreExpanded = false; // Sub-section specs toggle
   String _selectedTab = 'Specs'; // 'Specs' or 'Mfg'
 
   late final VoidCallback _cartListener;
@@ -262,13 +262,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           CommonCartBadge(
                             itemCount: _cartCount,
                             onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => CartScreen(
-                                    storeType: widget.storeType,
-                                  ),
-                                ),
+                              Navigator.of(context).pushNamed(
+                                RouteConstants.cart,
+                                arguments: widget.storeType,
                               );
                             },
                           ),
@@ -673,6 +669,20 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             CustomText.subtitle('Country of origin', fontSize: 10, color: Colors.grey),
                             SizedBox(height: Responsive.h(2)),
                             CustomText.title('India', fontSize: 12, fontWeight: FontWeight.bold),
+                            if (_isSpecsMoreExpanded) ...[
+                              const Divider(),
+                              CustomText.subtitle('Net Quantity', fontSize: 10, color: Colors.grey),
+                              SizedBox(height: Responsive.h(2)),
+                              CustomText.title('1 Unit / Standard Pack', fontSize: 12, fontWeight: FontWeight.bold),
+                              const Divider(),
+                              CustomText.subtitle('Storage Instructions', fontSize: 10, color: Colors.grey),
+                              SizedBox(height: Responsive.h(2)),
+                              CustomText.title('Store in a cool, ventilated place away from direct sunlight', fontSize: 11, fontWeight: FontWeight.bold),
+                              const Divider(),
+                              CustomText.subtitle('Customer Care', fontSize: 10, color: Colors.grey),
+                              SizedBox(height: Responsive.h(2)),
+                              CustomText.title('support@gogovernment.in | 1800-425-0000', fontSize: 11, fontWeight: FontWeight.bold),
+                            ],
                           ],
                         )
                       : Column(
@@ -693,6 +703,16 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                             ),
+                            if (_isSpecsMoreExpanded) ...[
+                              const Divider(),
+                              CustomText.subtitle('Marketed By', fontSize: 10, color: Colors.grey),
+                              SizedBox(height: Responsive.h(2)),
+                              CustomText.title('Karnataka State Agro & Civic Supplies Ltd.', fontSize: 11, fontWeight: FontWeight.bold),
+                              const Divider(),
+                              CustomText.subtitle('License & Compliance', fontSize: 10, color: Colors.grey),
+                              SizedBox(height: Responsive.h(2)),
+                              CustomText.title('Govt Certified Quality Assured · FSSAI / Drug Lic. #9823412', fontSize: 11, fontWeight: FontWeight.bold),
+                            ],
                           ],
                         ),
                 ),
@@ -700,7 +720,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
                 // See more button
                 GestureDetector(
-                  onTap: () {},
+                  onTap: () {
+                    setState(() {
+                      _isSpecsMoreExpanded = !_isSpecsMoreExpanded;
+                    });
+                  },
                   child: Container(
                     padding: EdgeInsets.symmetric(horizontal: Responsive.w(16), vertical: Responsive.h(8)),
                     decoration: BoxDecoration(
@@ -710,8 +734,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CustomText.title('See more', fontSize: 12, color: Colors.grey.shade700),
-                        Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.grey.shade700),
+                        CustomText.title(_isSpecsMoreExpanded ? 'See less' : 'See more', fontSize: 12, color: Colors.grey.shade700),
+                        Icon(
+                          _isSpecsMoreExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                          size: 16,
+                          color: Colors.grey.shade700,
+                        ),
                       ],
                     ),
                   ),
@@ -733,15 +761,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             CustomText.header(heading, fontSize: 15, fontWeight: FontWeight.bold),
             GestureDetector(
               onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AllProductsScreen(
-                      title: heading,
-                      products: _similarProducts,
-                      storeType: widget.storeType,
-                    ),
-                  ),
+                Navigator.of(context).pushNamed(
+                  RouteConstants.allProducts,
+                  arguments: {
+                    'title': heading,
+                    'products': _similarProducts,
+                    'storeType': widget.storeType,
+                  },
                 );
               },
               child: CustomText.title('View All', color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.bold),

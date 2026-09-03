@@ -186,6 +186,10 @@ class HiveService {
     await _complaintBox.put(HiveKeys.myComplaints, complaints);
   }
 
+  static Future<void> clearComplaints() async {
+    await _complaintBox.delete(HiveKeys.myComplaints);
+  }
+
   // ----------------------------------------------------
   // Transactions & Orders
   // ----------------------------------------------------

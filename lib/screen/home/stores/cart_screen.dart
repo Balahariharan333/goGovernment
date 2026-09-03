@@ -9,14 +9,11 @@ import 'package:go_government/bloc/coupon/coupon_state.dart';
 import '../../../utils/responsive_helper.dart';
 import '../../../widget/common_background.dart';
 import '../../../widget/custom_text.dart';
-import 'coupons_screen.dart';
-import '../../profile/address_book_screen.dart';
-import 'order_status_screen.dart';
-import '../../../widget/common_success_screen.dart';
+import '../../../constants/route_constants.dart';
+import '../../../model/address_model.dart';
 import '../../../bloc/transaction/transaction_bloc.dart';
 import '../../../bloc/transaction/transaction_event.dart';
 import '../../../service/cart_manager.dart';
-import 'all_products_screen.dart';
 import '../../../widget/common_wishlist_button.dart';
 
 class CartScreen extends StatefulWidget {
@@ -37,6 +34,7 @@ class _CartScreenState extends State<CartScreen> {
   String? _receiverName;
   String? _receiverPhone;
   bool _useComplaintCoins = false;
+  bool _isCheckingOut = false;
 
   // Cross-sell items list
   late final List<Map<String, dynamic>> _crossSellProducts;
@@ -85,9 +83,9 @@ class _CartScreenState extends State<CartScreen> {
   @override
   Widget build(BuildContext context) {
     final int totalCount = CartManager.instance.totalCartCount;
-    if (totalCount == 0) {
+    if (totalCount == 0 && !_isCheckingOut) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (Navigator.canPop(context)) {
+        if (mounted && !_isCheckingOut && Navigator.canPop(context)) {
           Navigator.pop(context);
         }
       });
@@ -122,19 +120,24 @@ class _CartScreenState extends State<CartScreen> {
     final couponState = context.watch<CouponBloc>().state;
     final int couponDiscount = couponState is CouponValid ? couponState.discount : 0;
     final bool isCouponApplied = couponState is CouponValid;
-    final int deliveryCharge = isCouponApplied ? 25 : 0;
+    final bool isFreeDelivery = itemDiscountedTotal >= 99 || (couponState is CouponValid && couponState.code == 'FREE_DELIVERY');
+    final int deliveryCharge = isFreeDelivery ? 0 : 24;
     final int handlingCharge = 2;
 
     final txState = context.watch<TransactionBloc>().state;
     final int availableCoins = txState.coinsBalance;
     final double walletBalance = txState.walletBalance;
+    final int effectiveCouponDiscount = couponDiscount.clamp(0, itemDiscountedTotal);
+    final int remainingPayable = (itemDiscountedTotal - effectiveCouponDiscount).clamp(0, itemDiscountedTotal);
+    final int maxCoinsPossible = (availableCoins / 100).floor();
     final int coinsDiscount = (_useComplaintCoins && availableCoins >= 100)
-        ? (availableCoins / 100).floor().clamp(0, 50)
+        ? maxCoinsPossible.clamp(0, remainingPayable)
         : 0;
     final int coinsDeducted = coinsDiscount * 100;
 
-    final int grandTotal = ((itemDiscountedTotal - couponDiscount - coinsDiscount).clamp(0, 999999)) + deliveryCharge + handlingCharge;
-    final int totalSavings = (itemOriginalTotal - itemDiscountedTotal) + couponDiscount + coinsDiscount;
+    final int grandTotal = (remainingPayable - coinsDiscount).clamp(0, 999999) + deliveryCharge + handlingCharge;
+    final int itemSavings = (itemOriginalTotal - itemDiscountedTotal).clamp(0, 999999);
+    final int totalSavings = itemSavings + effectiveCouponDiscount + coinsDiscount;
 
     return Scaffold(
       backgroundColor: AppColors.screenColor,
@@ -267,31 +270,45 @@ class _CartScreenState extends State<CartScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.monetization_on,
-                                    color: const Color(0xFFFFB300),
-                                    size: Responsive.w(22),
-                                  ),
-                                  SizedBox(width: Responsive.w(10)),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      CustomText.title(
-                                        'Use $availableCoins Complaint Coins',
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.monetization_on,
+                                      color: const Color(0xFFFFB300),
+                                      size: Responsive.w(22),
+                                    ),
+                                    SizedBox(width: Responsive.w(10)),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          CustomText.title(
+                                            _useComplaintCoins
+                                                ? 'Using $coinsDeducted Complaint Coins'
+                                                : 'Use Complaint Coins ($availableCoins)',
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          CustomText.subtitle(
+                                            _useComplaintCoins
+                                                ? 'Saving ₹$coinsDiscount on this order'
+                                                : 'Save ₹${maxCoinsPossible.clamp(0, remainingPayable)} (100 coins = ₹1)',
+                                            fontSize: 11,
+                                            color: _useComplaintCoins ? Colors.green : AppColors.grayFont,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
                                       ),
-                                      CustomText.subtitle(
-                                        'Save ₹${(availableCoins / 100).floor().clamp(0, 50)} on this order',
-                                        fontSize: 11,
-                                        color: AppColors.grayFont,
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                    ),
+                                  ],
+                                ),
                               ),
+                              SizedBox(width: Responsive.w(8)),
                               Switch(
                                 value: _useComplaintCoins,
                                 activeThumbColor: AppColors.primary,
@@ -310,14 +327,15 @@ class _CartScreenState extends State<CartScreen> {
                       _buildBillDetailsCard(
                         itemOriginalTotal: itemOriginalTotal,
                         itemDiscountedTotal: itemDiscountedTotal,
-                        couponDiscount: couponDiscount,
+                        couponDiscount: effectiveCouponDiscount,
+                        couponCode: couponState is CouponValid ? couponState.code : null,
                         coinsDiscount: coinsDiscount,
                         coinsDeducted: coinsDeducted,
                         deliveryCharge: deliveryCharge,
                         handlingCharge: handlingCharge,
                         grandTotal: grandTotal,
                         totalSavings: totalSavings,
-                        isCouponApplied: isCouponApplied,
+                        isFreeDelivery: isFreeDelivery,
                       ),
                       SizedBox(height: Responsive.h(16)),
 
@@ -400,13 +418,9 @@ class _CartScreenState extends State<CartScreen> {
                       Expanded(
                         child: GestureDetector(
                           onTap: () async {
-                            final selected = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AddressBookScreen(
-                                  isSelectionMode: true,
-                                ),
-                              ),
+                            final selected = await Navigator.of(context).pushNamed(
+                              RouteConstants.addressBook,
+                              arguments: true,
                             );
                             if (selected != null && selected is AddressModel) {
                               if (context.mounted) {
@@ -488,7 +502,7 @@ class _CartScreenState extends State<CartScreen> {
                         onTap: () {
                           showDialog(
                             context: context,
-                            builder: (context) => AlertDialog(
+                            builder: (dialogContext) => AlertDialog(
                               backgroundColor: AppColors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(Responsive.w(16)),
@@ -498,7 +512,7 @@ class _CartScreenState extends State<CartScreen> {
                               actions: [
                                 TextButton(
                                   onPressed: () {
-                                    Navigator.pop(context); // Close dialog
+                                    Navigator.pop(dialogContext); // Close dialog
                                     // Show failure SnackBar
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
@@ -515,7 +529,7 @@ class _CartScreenState extends State<CartScreen> {
                                 ),
                                 TextButton(
                                   onPressed: () {
-                                    Navigator.pop(context); // Close dialog
+                                    Navigator.pop(dialogContext); // Close dialog
 
                                     // Build order & transaction data
                                     final orderItems = cartItemsMap.entries.map((e) {
@@ -568,29 +582,25 @@ class _CartScreenState extends State<CartScreen> {
                                     // Save to Hive via TransactionBloc
                                     context.read<TransactionBloc>().add(AddTransactionEvent(newTx));
 
+                                    // Set checking out flag so empty cart doesn't trigger auto-pop
+                                    _isCheckingOut = true;
+
+                                    // Clear cart
+                                    CartManager.instance.clear();
+
                                     // Proceed to success screen
-                                    Navigator.pushReplacement(
+                                    Navigator.pushReplacementNamed(
                                       context,
-                                      MaterialPageRoute(
-                                        builder: (context) => CommonSuccessScreen(
-                                          amount: grandTotal.toDouble(),
-                                          subtitle: 'Paid to',
-                                          title: storeTitle,
-                                          dateString: dateFormatted,
-                                          buttonText: 'Track Order',
-                                          onDone: () {
-                                            CartManager.instance.clear();
-                                            Navigator.pushReplacement(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => OrderStatusScreen(
-                                                  storeType: widget.storeType,
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ),
+                                      RouteConstants.orderSuccess,
+                                      arguments: {
+                                        'amount': grandTotal.toDouble(),
+                                        'subtitle': 'Paid to',
+                                        'title': storeTitle,
+                                        'dateString': dateFormatted,
+                                        'buttonText': 'Track Order',
+                                        'nextRoute': RouteConstants.orderStatus,
+                                        'nextRouteArgs': widget.storeType,
+                                      },
                                     );
                                   },
                                   child: CustomText.title('Succeed', color: AppColors.success, fontSize: 14, fontWeight: FontWeight.bold),
@@ -819,15 +829,13 @@ class _CartScreenState extends State<CartScreen> {
                 final String heading = widget.storeType == 'medical'
                     ? 'Recommended Products'
                     : 'You May Also Like';
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AllProductsScreen(
-                      title: heading,
-                      products: _crossSellProducts,
-                      storeType: widget.storeType,
-                    ),
-                  ),
+                Navigator.of(context).pushNamed(
+                  RouteConstants.allProducts,
+                  arguments: {
+                    'title': heading,
+                    'products': _crossSellProducts,
+                    'storeType': widget.storeType,
+                  },
                 );
               },
               child: CustomText.title(
@@ -1018,53 +1026,56 @@ class _CartScreenState extends State<CartScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.verified,
-                          color: Colors.blue.shade800,
-                          size: Responsive.w(16),
-                        ),
-                        SizedBox(width: Responsive.w(6)),
-                        CustomText.title(
-                          couponState is CouponValid
-                              ? 'Save ₹${couponState.discount} with "${couponState.code}"'
-                              : 'Save ₹120 with "GETOFF120ON649"',
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: Responsive.h(4)),
-                    GestureDetector(
-                      onTap: () async {
-                        final res = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const CouponsScreen(
-                              currentCouponCode: 'GETOFF120ON649',
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.verified,
+                            color: Colors.blue.shade800,
+                            size: Responsive.w(16),
+                          ),
+                          SizedBox(width: Responsive.w(6)),
+                          Expanded(
+                            child: CustomText.title(
+                              couponState is CouponValid
+                                  ? 'Save ₹${couponState.discount} with "${couponState.code}"'
+                                  : 'Save ₹120 with "GETOFF120ON649"',
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                        );
-                        if (res != null && res is Map<String, dynamic> && mounted) {
-                          final code = res['code'] as String?;
-                          if (code != null) {
-                            context.read<CouponBloc>().add(ApplyCoupon(code));
-                          }
-                        }
-                      },
-                      child: CustomText.title(
-                        'View all coupons >',
-                        color: AppColors.primary,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                        ],
                       ),
-                    ),
-                  ],
+                      SizedBox(height: Responsive.h(4)),
+                      GestureDetector(
+                        onTap: () async {
+                          final res = await Navigator.of(context).pushNamed(
+                            RouteConstants.coupons,
+                            arguments: 'GETOFF120ON649',
+                          );
+                          if (res != null && res is Map<String, dynamic> && mounted) {
+                            final code = res['code'] as String?;
+                            if (code != null) {
+                              context.read<CouponBloc>().add(ApplyCoupon(code));
+                            }
+                          }
+                        },
+                        child: CustomText.title(
+                          'View all coupons >',
+                          color: AppColors.primary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                SizedBox(width: Responsive.w(12)),
 
                 // Apply/Remove CTA button
                 GestureDetector(
@@ -1072,13 +1083,9 @@ class _CartScreenState extends State<CartScreen> {
                     if (isCouponApplied) {
                       context.read<CouponBloc>().add(RemoveCoupon());
                     } else {
-                      final res = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const CouponsScreen(
-                            currentCouponCode: 'GETOFF120ON649',
-                          ),
-                        ),
+                      final res = await Navigator.of(context).pushNamed(
+                        RouteConstants.coupons,
+                        arguments: 'GETOFF120ON649',
                       );
                       if (res != null && res is Map<String, dynamic> && mounted) {
                         final code = res['code'] as String?;
@@ -1118,14 +1125,16 @@ class _CartScreenState extends State<CartScreen> {
     required int itemOriginalTotal,
     required int itemDiscountedTotal,
     required int couponDiscount,
+    String? couponCode,
     int coinsDiscount = 0,
     int coinsDeducted = 0,
     required int deliveryCharge,
     required int handlingCharge,
     required int grandTotal,
     required int totalSavings,
-    required bool isCouponApplied,
+    required bool isFreeDelivery,
   }) {
+    final int itemSavings = (itemOriginalTotal - itemDiscountedTotal).clamp(0, 999999);
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
@@ -1154,19 +1163,20 @@ class _CartScreenState extends State<CartScreen> {
                   SizedBox(width: Responsive.w(8)),
 
                   // You Saved pill label
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: Responsive.w(8), vertical: Responsive.h(3)),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8EAF6),
-                      borderRadius: BorderRadius.circular(Responsive.w(6)),
+                  if (itemSavings > 0)
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: Responsive.w(8), vertical: Responsive.h(3)),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE8EAF6),
+                        borderRadius: BorderRadius.circular(Responsive.w(6)),
+                      ),
+                      child: CustomText.title(
+                        'you saved ₹$itemSavings',
+                        color: Colors.blue.shade800,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    child: CustomText.title(
-                      isCouponApplied ? 'you saved ₹43' : 'you saved ₹43',
-                      color: Colors.blue.shade800,
-                      fontSize: 8,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
                 ],
               ),
               Row(
@@ -1207,10 +1217,10 @@ class _CartScreenState extends State<CartScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         CustomText.title('Delivery Charge', fontSize: 12),
-                        if (isCouponApplied)
-                          const Text(
-                            'Shop for ₹22 more to get FREE delivery',
-                            style: TextStyle(color: Colors.red, fontSize: 8),
+                        if (!isFreeDelivery)
+                          Text(
+                            'Shop for ₹${99 - itemDiscountedTotal} more to get FREE delivery',
+                            style: const TextStyle(color: Colors.red, fontSize: 8),
                           ),
                       ],
                     ),
@@ -1251,6 +1261,33 @@ class _CartScreenState extends State<CartScreen> {
               ],
             ),
           ),
+
+          // Coupon Discount Row
+          if (couponDiscount > 0) ...[
+            SizedBox(height: Responsive.h(12)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.confirmation_num_outlined, color: Colors.green, size: 14),
+                    SizedBox(width: Responsive.w(6)),
+                    CustomText.title(
+                      couponCode != null ? 'Coupon Discount ($couponCode)' : 'Coupon Discount',
+                      fontSize: 12,
+                      color: Colors.green,
+                    ),
+                  ],
+                ),
+                CustomText.title(
+                  '-₹$couponDiscount',
+                  color: Colors.green,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ],
+            ),
+          ],
           if (coinsDiscount > 0) ...[
             SizedBox(height: Responsive.h(12)),
             Row(
@@ -1258,9 +1295,9 @@ class _CartScreenState extends State<CartScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.monetization_on, color: const Color(0xFFFFB300), size: Responsive.w(14)),
+                    const Icon(Icons.monetization_on, color: Color(0xFFFFB300), size: 14),
                     SizedBox(width: Responsive.w(6)),
-                    CustomText.title('Complaint Coins ($coinsDeducted)', fontSize: 12),
+                    CustomText.title('Complaint Coins ($coinsDeducted coins)', fontSize: 12),
                   ],
                 ),
                 CustomText.title(
@@ -1483,13 +1520,9 @@ class _CartScreenState extends State<CartScreen> {
                         ),
                         GestureDetector(
                           onTap: () async {
-                            final selected = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AddressBookScreen(
-                                  isSelectionMode: true,
-                                ),
-                              ),
+                            final selected = await Navigator.of(context).pushNamed(
+                              RouteConstants.addressBook,
+                              arguments: true,
                             );
                             if (selected != null && selected is AddressModel) {
                               if (context.mounted) {

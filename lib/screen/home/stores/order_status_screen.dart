@@ -7,8 +7,8 @@ import '../../../utils/responsive_helper.dart';
 import '../../../widget/common_background.dart';
 import '../../../widget/custom_text.dart';
 import '../../../widget/common_map.dart';
-import 'rider_chat_screen.dart';
-import '../../profile/address_book_screen.dart';
+import '../../../constants/route_constants.dart';
+import '../../../model/address_model.dart';
 import '../../../bloc/order_tracking/order_tracking_bloc.dart';
 import '../../../bloc/order_tracking/order_tracking_event.dart';
 import '../../../bloc/order_tracking/order_tracking_state.dart';
@@ -493,13 +493,9 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
               Expanded(
                 child: GestureDetector(
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const RiderChatScreen(
-                          riderName: 'Akram Ali',
-                        ),
-                      ),
+                    Navigator.of(context).pushNamed(
+                      RouteConstants.riderChat,
+                      arguments: 'Akram Ali',
                     );
                   },
                   child: Container(
@@ -616,13 +612,9 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
               ),
               GestureDetector(
                 onTap: () async {
-                  final res = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AddressBookScreen(
-                        isSelectionMode: true,
-                      ),
-                    ),
+                  final res = await Navigator.of(context).pushNamed(
+                    RouteConstants.addressBook,
+                    arguments: true,
                   );
                   if (res != null && res is AddressModel) {
                     if (mounted) {
@@ -688,13 +680,9 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
               ),
               GestureDetector(
                 onTap: () async {
-                  final res = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AddressBookScreen(
-                        isSelectionMode: true,
-                      ),
-                    ),
+                  final res = await Navigator.of(context).pushNamed(
+                    RouteConstants.addressBook,
+                    arguments: true,
                   );
                   if (res != null && res is AddressModel) {
                     if (mounted) {

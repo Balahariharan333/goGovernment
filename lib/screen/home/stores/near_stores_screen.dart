@@ -4,9 +4,8 @@ import '../../../utils/responsive_helper.dart';
 import '../../../widget/common_background.dart';
 import '../../../widget/custom_text.dart';
 import '../../../widget/common_map.dart';
-import 'store_details_screen.dart';
 import '../../../widget/common_cart_badge.dart';
-import 'cart_screen.dart';
+import '../../../constants/route_constants.dart';
 import '../../../service/cart_manager.dart';
 
 class NearStoresScreen extends StatefulWidget {
@@ -171,11 +170,9 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
                         storeType = 'medical';
                       }
                     }
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => CartScreen(storeType: storeType),
-                      ),
+                    Navigator.of(context).pushNamed(
+                      RouteConstants.cart,
+                      arguments: storeType,
                     );
                   },
                 ),
@@ -190,17 +187,15 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
   Widget _buildStoreCard(Map<String, dynamic> store) {
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => StoreDetailsScreen(
-              storeId: store['id'],
-              storeName: store['title'],
-              storeAddress: store['address'],
-              storeImage: store['image'],
-              storeType: store['type'],
-            ),
-          ),
+        Navigator.of(context).pushNamed(
+          RouteConstants.storeDetails,
+          arguments: {
+            'storeId': store['id'],
+            'storeName': store['title'],
+            'storeAddress': store['address'],
+            'storeImage': store['image'],
+            'storeType': store['type'],
+          },
         );
       },
       child: Container(

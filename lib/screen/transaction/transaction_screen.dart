@@ -6,9 +6,7 @@ import '../../widget/custom_text.dart';
 import '../../bloc/transaction/transaction_bloc.dart';
 import '../../bloc/transaction/transaction_event.dart';
 import '../../bloc/transaction/transaction_state.dart';
-import 'all_transactions_screen.dart';
-import 'transaction_details_screen.dart';
-import 'qr_scan_pay_screen.dart';
+import '../../constants/route_constants.dart';
 
 class TransactionScreen extends StatelessWidget {
   const TransactionScreen({super.key});
@@ -486,12 +484,7 @@ class TransactionScreen extends StatelessWidget {
                         ),
                         GestureDetector(
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const QrScanPayScreen(),
-                              ),
-                            );
+                            Navigator.of(context).pushNamed(RouteConstants.qrScanPay);
                           },
                           child: Container(
                             width: Responsive.w(38),
@@ -699,12 +692,7 @@ class TransactionScreen extends StatelessWidget {
                   ),
                   GestureDetector(
                     onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const AllTransactionsScreen(),
-                        ),
-                      );
+                      Navigator.of(context).pushNamed(RouteConstants.allTransactions);
                     },
                     child: Container(
                       padding: EdgeInsets.symmetric(
@@ -786,14 +774,12 @@ class TransactionScreen extends StatelessWidget {
   }) {
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => TransactionDetailsScreen(
-              title: title,
-              transaction: transaction,
-            ),
-          ),
+        Navigator.of(context).pushNamed(
+          RouteConstants.transactionDetails,
+          arguments: {
+            'title': title,
+            'transaction': transaction,
+          },
         );
       },
       child: Container(
