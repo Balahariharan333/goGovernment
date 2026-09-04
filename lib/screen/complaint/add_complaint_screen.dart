@@ -22,10 +22,7 @@ import '../../bloc/transaction/transaction_event.dart';
 class AddComplaintScreen extends StatefulWidget {
   final String? category;
 
-  const AddComplaintScreen({
-    super.key,
-    this.category,
-  });
+  const AddComplaintScreen({super.key, this.category});
 
   @override
   State<AddComplaintScreen> createState() => _AddComplaintScreenState();
@@ -53,7 +50,9 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
   void initState() {
     super.initState();
     if (widget.category != null) {
-      context.read<ComplaintBloc>().add(SelectComplaintCategoryEvent(widget.category!));
+      context.read<ComplaintBloc>().add(
+        SelectComplaintCategoryEvent(widget.category!),
+      );
     }
     _descriptionController.addListener(_updateState);
     _detectLocation();
@@ -62,11 +61,16 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
   Future<void> _detectLocation() async {
     if (!mounted) return;
     setState(() => _isDetectingLocation = true);
-    final pos = await LocationService.getCurrentPosition(requestPermission: true);
+    final pos = await LocationService.getCurrentPosition(
+      requestPermission: true,
+    );
     if (!mounted) return;
     if (pos != null) {
       final latLng = LatLng(pos.latitude, pos.longitude);
-      final addr = await LocationService.getAddressFromCoordinates(pos.latitude, pos.longitude);
+      final addr = await LocationService.getAddressFromCoordinates(
+        pos.latitude,
+        pos.longitude,
+      );
       if (mounted) {
         setState(() {
           _currentLatLng = latLng;
@@ -111,7 +115,10 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
       _isCustomLocation = true;
       _isDetectingLocation = true;
     });
-    final addr = await LocationService.getAddressFromCoordinates(point.latitude, point.longitude);
+    final addr = await LocationService.getAddressFromCoordinates(
+      point.latitude,
+      point.longitude,
+    );
     if (!mounted) return;
     setState(() {
       _currentAddress = addr;
@@ -127,9 +134,16 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            Icon(Icons.edit_location_alt, color: AppColors.primary, size: Responsive.w(22)),
+            Icon(
+              Icons.edit_location_alt,
+              color: AppColors.primary,
+              size: Responsive.w(22),
+            ),
             SizedBox(width: Responsive.w(8)),
-            const Text('Edit Location Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text(
+              'Edit Location Details',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
           ],
         ),
         content: Column(
@@ -145,11 +159,17 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
               controller: controller,
               maxLines: 3,
               decoration: InputDecoration(
-                hintText: 'e.g. Near Pillar 45, Opposite City Hospital, Main Gate',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                hintText:
+                    'e.g. Near Pillar 45, Opposite City Hospital, Main Gate',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
+                    width: 1.5,
+                  ),
                 ),
                 contentPadding: const EdgeInsets.all(12),
               ),
@@ -164,7 +184,9 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onPressed: () {
               final newAddr = controller.text.trim();
@@ -176,7 +198,13 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
               }
               Navigator.pop(ctx);
             },
-            child: const Text('Save Address', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Save Address',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -199,33 +227,51 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
     showModalBottomSheet(
       context: context,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(Responsive.w(20))),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(Responsive.w(20)),
+        ),
       ),
       builder: (BuildContext bc) {
         return SafeArea(
           child: Wrap(
             children: <Widget>[
               ListTile(
-                leading: Icon(Icons.photo_library, color: AppColors.primary, size: Responsive.w(24)),
+                leading: Icon(
+                  Icons.photo_library,
+                  color: AppColors.primary,
+                  size: Responsive.w(24),
+                ),
                 title: CustomText.body('Photo Library'),
                 onTap: () async {
                   Navigator.of(bc).pop();
-                  final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+                  final XFile? image = await picker.pickImage(
+                    source: ImageSource.gallery,
+                  );
                   if (image != null) {
                     if (!context.mounted) return;
-                    context.read<ComplaintBloc>().add(PickComplaintImageEvent(image));
+                    context.read<ComplaintBloc>().add(
+                      PickComplaintImageEvent(image),
+                    );
                   }
                 },
               ),
               ListTile(
-                leading: Icon(Icons.photo_camera, color: AppColors.primary, size: Responsive.w(24)),
+                leading: Icon(
+                  Icons.photo_camera,
+                  color: AppColors.primary,
+                  size: Responsive.w(24),
+                ),
                 title: CustomText.body('Camera'),
                 onTap: () async {
                   Navigator.of(bc).pop();
-                  final XFile? image = await picker.pickImage(source: ImageSource.camera);
+                  final XFile? image = await picker.pickImage(
+                    source: ImageSource.camera,
+                  );
                   if (image != null) {
                     if (!context.mounted) return;
-                    context.read<ComplaintBloc>().add(PickComplaintImageEvent(image));
+                    context.read<ComplaintBloc>().add(
+                      PickComplaintImageEvent(image),
+                    );
                   }
                 },
               ),
@@ -286,9 +332,11 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
 
             // Reward citizen coins for reporting complaint
             final rewardTx = {
-              'id': 'REW-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}',
+              'id':
+                  'REW-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}',
               'title': 'Complaint coins',
-              'subtitle': 'Earned through reporting · ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
+              'subtitle':
+                  'Earned through reporting · ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
               'amount': '+200',
               'isPositive': true,
               'status': 'Credited',
@@ -314,11 +362,14 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
           }
         },
         builder: (context, state) {
-          final String selectedCategory = state.selectedCategory.isNotEmpty ? state.selectedCategory : (widget.category ?? '');
+          final String selectedCategory = state.selectedCategory.isNotEmpty
+              ? state.selectedCategory
+              : (widget.category ?? '');
           final XFile? imageFile = state.imageFile;
           final bool isSubmitting = state.isSubmitting;
 
-          final bool isFormValid = selectedCategory.isNotEmpty &&
+          final bool isFormValid =
+              selectedCategory.isNotEmpty &&
               _descriptionController.text.trim().isNotEmpty &&
               !isSubmitting;
 
@@ -351,7 +402,9 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                           children: [
                             Positioned.fill(
                               child: CommonMap(
-                                center: _currentLatLng ?? LocationService.defaultLocation,
+                                center:
+                                    _currentLatLng ??
+                                    LocationService.defaultLocation,
                                 zoom: 16.0,
                                 showUserLocation: true,
                                 interactive: true,
@@ -385,16 +438,26 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: Colors.black.withValues(alpha: 0.65),
-                                  borderRadius: BorderRadius.circular(Responsive.w(12)),
+                                  borderRadius: BorderRadius.circular(
+                                    Responsive.w(12),
+                                  ),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(Icons.touch_app, color: Colors.white, size: 14),
+                                    const Icon(
+                                      Icons.touch_app,
+                                      color: Colors.white,
+                                      size: 14,
+                                    ),
                                     SizedBox(width: Responsive.w(4)),
                                     const Text(
                                       'Tap map to set location',
-                                      style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -414,7 +477,9 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                     shape: BoxShape.circle,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.15),
+                                        color: Colors.black.withValues(
+                                          alpha: 0.15,
+                                        ),
                                         blurRadius: Responsive.w(6),
                                         offset: const Offset(0, 2),
                                       ),
@@ -442,7 +507,9 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                     shape: BoxShape.circle,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.15),
+                                        color: Colors.black.withValues(
+                                          alpha: 0.15,
+                                        ),
                                         blurRadius: Responsive.w(6),
                                         offset: const Offset(0, 2),
                                       ),
@@ -453,10 +520,11 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                           child: SizedBox(
                                             width: Responsive.w(14),
                                             height: Responsive.w(14),
-                                            child: const CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: AppColors.primary,
-                                            ),
+                                            child:
+                                                const CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: AppColors.primary,
+                                                ),
                                           ),
                                         )
                                       : const Icon(
@@ -467,6 +535,8 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                 ),
                               ),
                             ),
+                         
+                         
                           ],
                         ),
                       ),
@@ -496,13 +566,19 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                     vertical: Responsive.h(2),
                                   ),
                                   decoration: BoxDecoration(
-                                    color: _isCustomLocation ? const Color(0xFFFFF3E0) : const Color(0xFFE8F5E9),
-                                    borderRadius: BorderRadius.circular(Responsive.w(8)),
+                                    color: _isCustomLocation
+                                        ? const Color(0xFFFFF3E0)
+                                        : const Color(0xFFE8F5E9),
+                                    borderRadius: BorderRadius.circular(
+                                      Responsive.w(8),
+                                    ),
                                   ),
                                   child: Text(
                                     _isCustomLocation ? '📍 Custom' : '📡 GPS',
                                     style: TextStyle(
-                                      color: _isCustomLocation ? const Color(0xFFE65100) : const Color(0xFF2E7D32),
+                                      color: _isCustomLocation
+                                          ? const Color(0xFFE65100)
+                                          : const Color(0xFF2E7D32),
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -555,7 +631,9 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Padding(
-                                  padding: EdgeInsets.only(top: Responsive.h(2)),
+                                  padding: EdgeInsets.only(
+                                    top: Responsive.h(2),
+                                  ),
                                   child: Icon(
                                     Icons.location_on,
                                     color: AppColors.primary,
@@ -570,10 +648,11 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                             SizedBox(
                                               width: Responsive.w(14),
                                               height: Responsive.w(14),
-                                              child: const CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: AppColors.primary,
-                                              ),
+                                              child:
+                                                  const CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    color: AppColors.primary,
+                                                  ),
                                             ),
                                             SizedBox(width: Responsive.w(10)),
                                             CustomText.body(
@@ -584,7 +663,8 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                           ],
                                         )
                                       : Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             CustomText.body(
                                               _currentAddress,
@@ -595,7 +675,9 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                             ),
                                             if (_currentLatLng != null)
                                               Padding(
-                                                padding: EdgeInsets.only(top: Responsive.h(4)),
+                                                padding: EdgeInsets.only(
+                                                  top: Responsive.h(4),
+                                                ),
                                                 child: Text(
                                                   'Coordinates: ${_currentLatLng!.latitude.toStringAsFixed(4)}, ${_currentLatLng!.longitude.toStringAsFixed(4)}',
                                                   style: const TextStyle(
@@ -640,7 +722,9 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                       ),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFFF0F4F8),
-                                        borderRadius: BorderRadius.circular(Responsive.w(8)),
+                                        borderRadius: BorderRadius.circular(
+                                          Responsive.w(8),
+                                        ),
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
@@ -683,15 +767,21 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                         Container(
                           decoration: BoxDecoration(
                             color: AppColors.white,
-                            borderRadius: BorderRadius.circular(Responsive.w(16)),
+                            borderRadius: BorderRadius.circular(
+                              Responsive.w(16),
+                            ),
                             border: Border.all(
                               color: AppColors.outliner,
                               width: Responsive.w(1.5),
                             ),
                           ),
-                          padding: EdgeInsets.symmetric(horizontal: Responsive.w(16)),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: Responsive.w(16),
+                          ),
                           child: DropdownButtonFormField<String>(
-                            initialValue: selectedCategory.isNotEmpty ? selectedCategory : null,
+                            initialValue: selectedCategory.isNotEmpty
+                                ? selectedCategory
+                                : null,
                             hint: CustomText.body(
                               'Select Category',
                               color: Colors.grey,
@@ -708,7 +798,9 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                             }).toList(),
                             onChanged: (value) {
                               if (value != null) {
-                                context.read<ComplaintBloc>().add(SelectComplaintCategoryEvent(value));
+                                context.read<ComplaintBloc>().add(
+                                  SelectComplaintCategoryEvent(value),
+                                );
                               }
                             },
                           ),
@@ -741,21 +833,27 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                           ),
                           contentPadding: EdgeInsets.all(Responsive.w(16)),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(Responsive.w(16)),
+                            borderRadius: BorderRadius.circular(
+                              Responsive.w(16),
+                            ),
                             borderSide: BorderSide(
                               color: AppColors.outliner,
                               width: Responsive.w(1.5),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(Responsive.w(16)),
+                            borderRadius: BorderRadius.circular(
+                              Responsive.w(16),
+                            ),
                             borderSide: BorderSide(
                               color: AppColors.outliner,
                               width: Responsive.w(1.5),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(Responsive.w(16)),
+                            borderRadius: BorderRadius.circular(
+                              Responsive.w(16),
+                            ),
                             borderSide: BorderSide(
                               color: AppColors.primary,
                               width: Responsive.w(1.5),
@@ -780,7 +878,9 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                           width: double.infinity,
                           decoration: BoxDecoration(
                             color: AppColors.white,
-                            borderRadius: BorderRadius.circular(Responsive.w(16)),
+                            borderRadius: BorderRadius.circular(
+                              Responsive.w(16),
+                            ),
                             border: Border.all(
                               color: AppColors.outliner,
                               width: Responsive.w(1.5),
@@ -800,10 +900,14 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                       right: Responsive.w(8),
                                       child: GestureDetector(
                                         onTap: () {
-                                          context.read<ComplaintBloc>().add(ClearComplaintEvent());
+                                          context.read<ComplaintBloc>().add(
+                                            ClearComplaintEvent(),
+                                          );
                                         },
                                         child: Container(
-                                          padding: EdgeInsets.all(Responsive.w(4)),
+                                          padding: EdgeInsets.all(
+                                            Responsive.w(4),
+                                          ),
                                           decoration: const BoxDecoration(
                                             color: Colors.black54,
                                             shape: BoxShape.circle,
@@ -852,27 +956,36 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                       GestureDetector(
                         onTap: isFormValid
                             ? () {
-                                final categoryToSubmit = selectedCategory.isNotEmpty
+                                final categoryToSubmit =
+                                    selectedCategory.isNotEmpty
                                     ? selectedCategory
-                                    : (widget.category ?? 'Roads & Transportation');
+                                    : (widget.category ??
+                                          'Roads & Transportation');
                                 context.read<ComplaintBloc>().add(
-                                      SubmitComplaintEvent(
-                                        description: _descriptionController.text.trim(),
-                                        category: categoryToSubmit,
-                                        location: _currentAddress,
-                                        imagePath: imageFile?.path,
-                                      ),
-                                    );
+                                  SubmitComplaintEvent(
+                                    description: _descriptionController.text
+                                        .trim(),
+                                    category: categoryToSubmit,
+                                    location: _currentAddress,
+                                    imagePath: imageFile?.path,
+                                  ),
+                                );
                               }
                             : null,
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           height: Responsive.h(52),
                           decoration: BoxDecoration(
-                            color: isFormValid ? const Color(0xFFFFF6F3) : Colors.grey[200],
-                            borderRadius: BorderRadius.circular(Responsive.w(26)),
+                            color: isFormValid
+                                ? const Color(0xFFFFF6F3)
+                                : Colors.grey[200],
+                            borderRadius: BorderRadius.circular(
+                              Responsive.w(26),
+                            ),
                             border: Border.all(
-                              color: isFormValid ? AppColors.primary : Colors.grey[300]!,
+                              color: isFormValid
+                                  ? AppColors.primary
+                                  : Colors.grey[300]!,
                               width: Responsive.w(1.5),
                             ),
                           ),
@@ -883,12 +996,16 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2.0,
-                                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        AppColors.primary,
+                                      ),
                                     ),
                                   )
                                 : CustomText.title(
                                     'Submit',
-                                    color: isFormValid ? AppColors.primary : Colors.grey[400]!,
+                                    color: isFormValid
+                                        ? AppColors.primary
+                                        : Colors.grey[400]!,
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -920,10 +1037,34 @@ class MapPainter extends CustomPainter {
       ..color = const Color(0xFFFBF8F6)
       ..style = PaintingStyle.fill;
 
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.05, h * 0.05, w * 0.38, h * 0.38), const Radius.circular(12)), paintBlock);
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.55, h * 0.05, w * 0.4, h * 0.28), const Radius.circular(12)), paintBlock);
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.05, h * 0.55, w * 0.42, h * 0.4), const Radius.circular(12)), paintBlock);
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.58, h * 0.45, w * 0.37, h * 0.5), const Radius.circular(12)), paintBlock);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(w * 0.05, h * 0.05, w * 0.38, h * 0.38),
+        const Radius.circular(12),
+      ),
+      paintBlock,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(w * 0.55, h * 0.05, w * 0.4, h * 0.28),
+        const Radius.circular(12),
+      ),
+      paintBlock,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(w * 0.05, h * 0.55, w * 0.42, h * 0.4),
+        const Radius.circular(12),
+      ),
+      paintBlock,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(w * 0.58, h * 0.45, w * 0.37, h * 0.5),
+        const Radius.circular(12),
+      ),
+      paintBlock,
+    );
 
     // Draw white background roads
     final paintRoad = Paint()
@@ -942,14 +1083,28 @@ class MapPainter extends CustomPainter {
       ..color = const Color(0xFFEFECE9)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
-    canvas.drawLine(Offset(w * 0.5, -10), Offset(w * 0.5, h + 10), paintDivider);
-    canvas.drawLine(Offset(-10, h * 0.48), Offset(w + 10, h * 0.48), paintDivider);
+    canvas.drawLine(
+      Offset(w * 0.5, -10),
+      Offset(w * 0.5, h + 10),
+      paintDivider,
+    );
+    canvas.drawLine(
+      Offset(-10, h * 0.48),
+      Offset(w + 10, h * 0.48),
+      paintDivider,
+    );
 
     // Draw park block (soft green zone)
     final paintPark = Paint()
       ..color = const Color(0xFFE2F0D9)
       ..style = PaintingStyle.fill;
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.7, h * 0.1, w * 0.2, h * 0.2), const Radius.circular(8)), paintPark);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(w * 0.7, h * 0.1, w * 0.2, h * 0.2),
+        const Radius.circular(8),
+      ),
+      paintPark,
+    );
 
     // Draw radar wave circle around pin
     final paintRadar = Paint()

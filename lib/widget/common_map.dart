@@ -183,36 +183,38 @@ class _CommonMapState extends State<CommonMap> {
           ),
 
           // Recenter & GPS Controls
-          if (widget.showControls || widget.interactive)
-            Positioned(
-              right: Responsive.w(14),
-              bottom: Responsive.h(14),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FloatingActionButton.small(
-                    heroTag: 'map_recenter_${widget.hashCode}',
-                    backgroundColor: Colors.white,
-                    elevation: 3,
-                    onPressed: _recenterOnUser,
-                    child: _isLoadingGps
-                        ? SizedBox(
-                            width: Responsive.w(16),
-                            height: Responsive.w(16),
-                            child: const CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.primary,
-                            ),
-                          )
-                        : const Icon(
-                            Icons.my_location,
-                            color: AppColors.primary,
-                            size: 20,
-                          ),
-                  ),
-                ],
-              ),
-            ),
+          // if (widget.showControls || widget.interactive)
+          //   Positioned(
+          //     right: Responsive.w(14),
+          //     bottom: Responsive.h(14),
+          //     child: Column(
+          //       mainAxisSize: MainAxisSize.min,
+          //       children: [
+          //         FloatingActionButton.small(
+          //           heroTag: 'map_recenter_${widget.hashCode}',
+          //           backgroundColor: Colors.white,
+          //           elevation: 3,
+          //           onPressed: _recenterOnUser,
+          //           child: _isLoadingGps
+          //               ? SizedBox(
+          //                   width: Responsive.w(16),
+          //                   height: Responsive.w(16),
+          //                   child: const CircularProgressIndicator(
+          //                     strokeWidth: 2,
+          //                     color: AppColors.primary,
+          //                   ),
+          //                 )
+          //               : const Icon(
+          //                   Icons.my_location,
+          //                   color: AppColors.primary,
+          //                   size: 20,
+          //                 ),
+          //         ),
+          //       ],
+          //     ),
+          //   ),
+       
+       
         ],
       ),
     );

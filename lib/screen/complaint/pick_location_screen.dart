@@ -373,7 +373,7 @@ class _PickLocationScreenState extends State<PickLocationScreen> {
               // 3. Floating "Snap to My GPS" Action Button
               Positioned(
                 right: Responsive.w(16),
-                bottom: Responsive.h(190),
+                bottom: Responsive.h(250),
                 child: FloatingActionButton.small(
                   heroTag: 'recenter_gps_fab',
                   backgroundColor: AppColors.white,
