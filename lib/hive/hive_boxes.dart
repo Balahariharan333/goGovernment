@@ -13,6 +13,7 @@ class HiveKeys {
   static const String userPhone = 'user_phone';
   static const String userName = 'user_name';
   static const String userEmail = 'user_email';
+  static const String userProfileImage = 'user_profile_image';
 
   // Cart & Wishlist
   static const String cartItems = 'cart_items';

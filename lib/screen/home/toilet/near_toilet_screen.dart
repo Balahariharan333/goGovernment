@@ -9,6 +9,11 @@ import '../../../bloc/toilet/toilet_bloc.dart';
 import '../../../bloc/toilet/toilet_event.dart';
 import '../../../bloc/toilet/toilet_state.dart';
 
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+import '../../../service/location_service.dart';
+
 enum ToiletFlowState { list, directions, navigation }
 
 class NearToiletScreen extends StatefulWidget {
@@ -19,13 +24,73 @@ class NearToiletScreen extends StatefulWidget {
 }
 
 class _NearToiletScreenState extends State<NearToiletScreen> {
-  final List<Map<String, dynamic>> _toilets = [
-    {'title': 'Public toilet', 'distance': '260.0 m'},
-    {'title': 'Public toilet', 'distance': '310.0 m'},
-    {'title': 'Public toilet', 'distance': '450.0 m'},
-    {'title': 'Public toilet', 'distance': '520.0 m'},
-    {'title': 'Public toilet', 'distance': '680.0 m'},
-  ];
+  late List<Map<String, dynamic>> _toilets;
+  LatLng? _userPos;
+
+  @override
+  void initState() {
+    super.initState();
+    _initToilets();
+    _detectLocation();
+  }
+
+  void _initToilets() {
+    _toilets = [
+      {
+        'title': 'BBMP Public E-Toilet',
+        'address': 'Cubbon Park Main Gate, Bengaluru',
+        'lat': 12.9725,
+        'lng': 77.5955,
+        'distance': '260 m',
+      },
+      {
+        'title': 'Namma Toilet Facility',
+        'address': 'MG Road Metro Station, Bengaluru',
+        'lat': 12.9752,
+        'lng': 77.6065,
+        'distance': '310 m',
+      },
+      {
+        'title': 'Public Restroom Hub',
+        'address': 'Richmond Circle, Bengaluru',
+        'lat': 12.9645,
+        'lng': 77.5970,
+        'distance': '450 m',
+      },
+      {
+        'title': 'Community Sanitation Center',
+        'address': 'Brigade Road, Ashok Nagar, Bengaluru',
+        'lat': 12.9710,
+        'lng': 77.6075,
+        'distance': '520 m',
+      },
+      {
+        'title': 'Smart City E-Restroom',
+        'address': 'Residency Road, Bengaluru',
+        'lat': 12.9680,
+        'lng': 77.6020,
+        'distance': '680 m',
+      },
+    ];
+  }
+
+  Future<void> _detectLocation() async {
+    final Position? pos = await LocationService.getCurrentPosition(requestPermission: false);
+    if (pos != null && mounted) {
+      setState(() {
+        _userPos = LatLng(pos.latitude, pos.longitude);
+        for (var toilet in _toilets) {
+          final dist = LocationService.calculateDistance(
+            pos.latitude,
+            pos.longitude,
+            toilet['lat'] as double,
+            toilet['lng'] as double,
+          );
+          toilet['distance'] = LocationService.formatDistance(dist);
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +127,45 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
                                     ? MapState.directions
                                     : MapState.navigation,
                             isWalkMode: isWalkMode,
+                            center: (flowState != ToiletFlowState.list && selectedToiletIndex < _toilets.length)
+                                ? LatLng(_toilets[selectedToiletIndex]['lat'] as double, _toilets[selectedToiletIndex]['lng'] as double)
+                                : _userPos,
+                            markers: _toilets.asMap().entries.map((entry) {
+                              final idx = entry.key;
+                              final item = entry.value;
+                              final isSelected = idx == selectedToiletIndex && flowState != ToiletFlowState.list;
+                              return Marker(
+                                point: LatLng(item['lat'] as double, item['lng'] as double),
+                                width: 38,
+                                height: 38,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    context.read<ToiletBloc>().add(SelectToiletEvent(idx));
+                                    if (flowState == ToiletFlowState.list) {
+                                      context.read<ToiletBloc>().add(ChangeToiletFlowStateEvent(ToiletFlowState.directions));
+                                    }
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: isSelected ? AppColors.primary : Colors.white,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: AppColors.primary,
+                                        width: 2,
+                                      ),
+                                      boxShadow: const [
+                                        BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+                                      ],
+                                    ),
+                                    child: Icon(
+                                      Icons.wc,
+                                      color: isSelected ? Colors.white : AppColors.primary,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                           ),
                         ),
                         if (flowState == ToiletFlowState.list) const Spacer(),
@@ -277,7 +381,9 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
 
                     // Distance/Time summary text
                     CustomText.title(
-                      isWalkMode ? '4 min (350 m)' : '1 min (350 m)',
+                      selectedIndex < _toilets.length
+                          ? '${isWalkMode ? '4 min' : '1 min'} (${_toilets[selectedIndex]['distance']})'
+                          : (isWalkMode ? '4 min (350 m)' : '1 min (350 m)'),
                       color: const Color(0xFF4CAF50),
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -286,7 +392,17 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
 
                     // Action Start button
                     GestureDetector(
-                      onTap: () {
+                      onTap: () async {
+                        if (selectedIndex < _toilets.length) {
+                          final toilet = _toilets[selectedIndex];
+                          await LocationService.launchTurnByTurnNavigation(
+                            destLat: toilet['lat'] as double,
+                            destLng: toilet['lng'] as double,
+                            address: toilet['address'] as String,
+                            isWalking: isWalkMode,
+                          );
+                        }
+                        if (!context.mounted) return;
                         context.read<ToiletBloc>().add(ChangeToiletFlowStateEvent(ToiletFlowState.navigation));
                       },
                       child: Container(

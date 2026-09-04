@@ -5,7 +5,7 @@ import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
-import '../complaint/add_complaint_screen.dart'; // To reuse the MapPainter!
+import '../../widget/common_map.dart';
 import '../../widget/common_directions_button.dart';
 import '../../bloc/report/report_bloc.dart';
 import '../../bloc/report/report_event.dart';
@@ -143,7 +143,7 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
           final String? imagePath = liveReport['imagePath']?.toString() ?? widget.imagePath;
           final String userAddress = liveReport['userAddress']?.toString() ??
               widget.userAddress ??
-              'HSR Layout, Bengaluru, Karnataka';
+              'Location not specified';
           final String date = liveReport['date']?.toString() ?? widget.date ?? 'Today';
           final bool isLiked = liveReport['isLiked'] == true;
           final int likesCount = (liveReport['likesCount'] as num?)?.toInt() ?? 0;
@@ -329,7 +329,7 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
                                 ),
                                 Expanded(
                                   child: CustomText.body(
-                                    'HSR Layout BBMP Zone',
+                                    liveReport['engineerName']?.toString() ?? 'Ward Civic Engineer (Assigned on review)',
                                     fontSize: 13,
                                     color: AppColors.black,
                                     fontWeight: FontWeight.bold,
@@ -348,7 +348,7 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
                                 ),
                                 Expanded(
                                   child: CustomText.body(
-                                    '+91 12345 54321',
+                                    liveReport['engineerContact']?.toString() ?? 'Ward Helpline: 1912',
                                     fontSize: 13,
                                     color: AppColors.black,
                                     fontWeight: FontWeight.bold,
@@ -360,7 +360,7 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
 
                             // Miniature Map outline
                             Container(
-                              height: Responsive.h(90),
+                              height: Responsive.h(100),
                               width: double.infinity,
                               decoration: BoxDecoration(
                                 color: AppColors.white,
@@ -371,8 +371,9 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
                                 ),
                               ),
                               clipBehavior: Clip.antiAlias,
-                              child: CustomPaint(
-                                painter: MapPainter(),
+                              child: const CommonMap(
+                                interactive: false,
+                                showUserLocation: false,
                               ),
                             ),
                             SizedBox(height: Responsive.h(16)),

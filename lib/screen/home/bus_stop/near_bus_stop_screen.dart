@@ -9,6 +9,11 @@ import '../../../bloc/bus_stop/bus_stop_bloc.dart';
 import '../../../bloc/bus_stop/bus_stop_event.dart';
 import '../../../bloc/bus_stop/bus_stop_state.dart';
 
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+import '../../../service/location_service.dart';
+
 enum BusStopFlowState { list, directions, navigation }
 
 class NearBusStopScreen extends StatefulWidget {
@@ -19,13 +24,73 @@ class NearBusStopScreen extends StatefulWidget {
 }
 
 class _NearBusStopScreenState extends State<NearBusStopScreen> {
-  final List<Map<String, dynamic>> _busStops = [
-    {'title': 'Bus Stop', 'distance': '120.0 m'},
-    {'title': 'Bus Stop', 'distance': '240.0 m'},
-    {'title': 'Bus Stop', 'distance': '380.0 m'},
-    {'title': 'Bus Stop', 'distance': '450.0 m'},
-    {'title': 'Bus Stop', 'distance': '610.0 m'},
-  ];
+  late List<Map<String, dynamic>> _busStops;
+  LatLng? _userPos;
+
+  @override
+  void initState() {
+    super.initState();
+    _initBusStops();
+    _detectLocation();
+  }
+
+  void _initBusStops() {
+    _busStops = [
+      {
+        'title': 'BMTC Bus Stop - Corporation Circle',
+        'address': 'Kasturba Road, Corporation Circle, Bengaluru',
+        'lat': 12.9688,
+        'lng': 77.5912,
+        'distance': '120 m',
+      },
+      {
+        'title': 'BMTC Bus Stop - Richmond Town',
+        'address': 'General KS Thimayya Road, Richmond Town, Bengaluru',
+        'lat': 12.9650,
+        'lng': 77.5990,
+        'distance': '240 m',
+      },
+      {
+        'title': 'BMTC Bus Stop - Mayo Hall',
+        'address': 'MG Road, Ashok Nagar, Bengaluru',
+        'lat': 12.9730,
+        'lng': 77.6080,
+        'distance': '380 m',
+      },
+      {
+        'title': 'BMTC Bus Stop - Cubbon Park',
+        'address': 'Ambedkar Veedhi, Sampangi Rama Nagara, Bengaluru',
+        'lat': 12.9780,
+        'lng': 77.5925,
+        'distance': '450 m',
+      },
+      {
+        'title': 'BMTC Bus Stop - Halasuru',
+        'address': 'Old Madras Road, Halasuru, Bengaluru',
+        'lat': 12.9775,
+        'lng': 77.6250,
+        'distance': '610 m',
+      },
+    ];
+  }
+
+  Future<void> _detectLocation() async {
+    final Position? pos = await LocationService.getCurrentPosition(requestPermission: false);
+    if (pos != null && mounted) {
+      setState(() {
+        _userPos = LatLng(pos.latitude, pos.longitude);
+        for (var stop in _busStops) {
+          final dist = LocationService.calculateDistance(
+            pos.latitude,
+            pos.longitude,
+            stop['lat'] as double,
+            stop['lng'] as double,
+          );
+          stop['distance'] = LocationService.formatDistance(dist);
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +126,45 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
                                     ? MapState.directions
                                     : MapState.navigation,
                             isWalkMode: isWalkMode,
+                            center: (flowState != BusStopFlowState.list && selectedBusStopIndex < _busStops.length)
+                                ? LatLng(_busStops[selectedBusStopIndex]['lat'] as double, _busStops[selectedBusStopIndex]['lng'] as double)
+                                : _userPos,
+                            markers: _busStops.asMap().entries.map((entry) {
+                              final idx = entry.key;
+                              final item = entry.value;
+                              final isSelected = idx == selectedBusStopIndex && flowState != BusStopFlowState.list;
+                              return Marker(
+                                point: LatLng(item['lat'] as double, item['lng'] as double),
+                                width: 38,
+                                height: 38,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    context.read<BusStopBloc>().add(SelectBusStopEvent(idx));
+                                    if (flowState == BusStopFlowState.list) {
+                                      context.read<BusStopBloc>().add(ChangeBusStopFlowStateEvent(BusStopFlowState.directions));
+                                    }
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: isSelected ? AppColors.primary : Colors.white,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: AppColors.primary,
+                                        width: 2,
+                                      ),
+                                      boxShadow: const [
+                                        BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+                                      ],
+                                    ),
+                                    child: Icon(
+                                      Icons.directions_bus,
+                                      color: isSelected ? Colors.white : AppColors.primary,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                           ),
                         ),
                         if (flowState == BusStopFlowState.list) const Spacer(),
@@ -276,7 +380,9 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
 
                     // Distance/Time summary text
                     CustomText.title(
-                      isWalkMode ? '4 min (350 m)' : '1 min (350 m)',
+                      selectedIndex < _busStops.length
+                          ? '${isWalkMode ? '4 min' : '1 min'} (${_busStops[selectedIndex]['distance']})'
+                          : (isWalkMode ? '4 min (350 m)' : '1 min (350 m)'),
                       color: const Color(0xFF4CAF50),
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -285,7 +391,17 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
 
                     // Action Start button
                     GestureDetector(
-                      onTap: () {
+                      onTap: () async {
+                        if (selectedIndex < _busStops.length) {
+                          final stop = _busStops[selectedIndex];
+                          await LocationService.launchTurnByTurnNavigation(
+                            destLat: stop['lat'] as double,
+                            destLng: stop['lng'] as double,
+                            address: stop['address'] as String,
+                            isWalking: isWalkMode,
+                          );
+                        }
+                        if (!context.mounted) return;
                         context.read<BusStopBloc>().add(ChangeBusStopFlowStateEvent(BusStopFlowState.navigation));
                       },
                       child: Container(

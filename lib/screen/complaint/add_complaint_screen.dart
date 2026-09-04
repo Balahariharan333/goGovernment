@@ -2,10 +2,15 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:flutter_map/flutter_map.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
+import '../../widget/common_map.dart';
+import '../../service/location_service.dart';
+import '../../constants/route_constants.dart';
 import '../../bloc/complaint/complaint_bloc.dart';
 import '../../bloc/complaint/complaint_event.dart';
 import '../../bloc/complaint/complaint_state.dart';
@@ -28,6 +33,10 @@ class AddComplaintScreen extends StatefulWidget {
 
 class _AddComplaintScreenState extends State<AddComplaintScreen> {
   final TextEditingController _descriptionController = TextEditingController();
+  LatLng? _currentLatLng;
+  String _currentAddress = 'Detecting current GPS location...';
+  bool _isDetectingLocation = false;
+  bool _isCustomLocation = false;
 
   final List<String> _categories = [
     'Roads & Transportation',
@@ -47,6 +56,131 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
       context.read<ComplaintBloc>().add(SelectComplaintCategoryEvent(widget.category!));
     }
     _descriptionController.addListener(_updateState);
+    _detectLocation();
+  }
+
+  Future<void> _detectLocation() async {
+    if (!mounted) return;
+    setState(() => _isDetectingLocation = true);
+    final pos = await LocationService.getCurrentPosition(requestPermission: true);
+    if (!mounted) return;
+    if (pos != null) {
+      final latLng = LatLng(pos.latitude, pos.longitude);
+      final addr = await LocationService.getAddressFromCoordinates(pos.latitude, pos.longitude);
+      if (mounted) {
+        setState(() {
+          _currentLatLng = latLng;
+          _currentAddress = addr;
+          _isCustomLocation = false;
+          _isDetectingLocation = false;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _currentLatLng = LocationService.defaultLocation;
+          _currentAddress = 'Location not detected (Tap to retry)';
+          _isDetectingLocation = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _openLocationPicker() async {
+    final result = await Navigator.pushNamed(
+      context,
+      RouteConstants.pickLocation,
+      arguments: {
+        'initialLatLng': _currentLatLng,
+        'initialAddress': _currentAddress,
+      },
+    );
+
+    if (result is Map<String, dynamic> && mounted) {
+      setState(() {
+        _currentLatLng = result['latLng'] as LatLng;
+        _currentAddress = result['address'] as String;
+        _isCustomLocation = true;
+      });
+    }
+  }
+
+  Future<void> _onMiniMapTapped(LatLng point) async {
+    setState(() {
+      _currentLatLng = point;
+      _isCustomLocation = true;
+      _isDetectingLocation = true;
+    });
+    final addr = await LocationService.getAddressFromCoordinates(point.latitude, point.longitude);
+    if (!mounted) return;
+    setState(() {
+      _currentAddress = addr;
+      _isDetectingLocation = false;
+    });
+  }
+
+  void _editAddressManually() {
+    final controller = TextEditingController(text: _currentAddress);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.edit_location_alt, color: AppColors.primary, size: Responsive.w(22)),
+            SizedBox(width: Responsive.w(8)),
+            const Text('Edit Location Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Add specific landmark, building, street, or gate to help the inspection team locate it quickly:',
+              style: TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'e.g. Near Pillar 45, Opposite City Hospital, Main Gate',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                ),
+                contentPadding: const EdgeInsets.all(12),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              final newAddr = controller.text.trim();
+              if (newAddr.isNotEmpty) {
+                setState(() {
+                  _currentAddress = newAddr;
+                  _isCustomLocation = true;
+                });
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save Address', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -201,9 +335,9 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 1. Map container
+                      // 1. Map container with full interactive selection
                       Container(
-                        height: Responsive.h(180),
+                        height: Responsive.h(190),
                         decoration: BoxDecoration(
                           color: AppColors.white,
                           borderRadius: BorderRadius.circular(Responsive.w(24)),
@@ -216,51 +350,196 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                         child: Stack(
                           children: [
                             Positioned.fill(
-                              child: CustomPaint(
-                                painter: MapPainter(),
+                              child: CommonMap(
+                                center: _currentLatLng ?? LocationService.defaultLocation,
+                                zoom: 16.0,
+                                showUserLocation: true,
+                                interactive: true,
+                                showControls: false,
+                                onTap: _onMiniMapTapped,
+                                markers: _currentLatLng != null
+                                    ? [
+                                        Marker(
+                                          point: _currentLatLng!,
+                                          width: 42,
+                                          height: 42,
+                                          alignment: Alignment.topCenter,
+                                          child: const Icon(
+                                            Icons.location_on,
+                                            color: AppColors.primary,
+                                            size: 38,
+                                          ),
+                                        ),
+                                      ]
+                                    : null,
                               ),
                             ),
-                            // Compass Floating button in map
+                            // Top Banner Hint
                             Positioned(
-                              top: Responsive.h(12),
-                              right: Responsive.w(12),
+                              top: Responsive.h(10),
+                              left: Responsive.w(12),
                               child: Container(
-                                width: Responsive.w(38),
-                                height: Responsive.w(38),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: Responsive.w(10),
+                                  vertical: Responsive.h(4),
+                                ),
                                 decoration: BoxDecoration(
-                                  color: AppColors.white,
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.08),
-                                      blurRadius: Responsive.w(6),
-                                      offset: Offset(0, Responsive.h(2)),
+                                  color: Colors.black.withValues(alpha: 0.65),
+                                  borderRadius: BorderRadius.circular(Responsive.w(12)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.touch_app, color: Colors.white, size: 14),
+                                    SizedBox(width: Responsive.w(4)),
+                                    const Text(
+                                      'Tap map to set location',
+                                      style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
                                     ),
                                   ],
                                 ),
-                                child: Icon(
-                                  Icons.my_location,
-                                  color: AppColors.primary,
-                                  size: Responsive.w(20),
+                              ),
+                            ),
+                            // Top-right Expand / Pick on Map Button
+                            Positioned(
+                              top: Responsive.h(10),
+                              right: Responsive.w(12),
+                              child: GestureDetector(
+                                onTap: _openLocationPicker,
+                                child: Container(
+                                  width: Responsive.w(36),
+                                  height: Responsive.w(36),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.white,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.15),
+                                        blurRadius: Responsive.w(6),
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.open_in_full,
+                                    color: AppColors.primary,
+                                    size: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Bottom-right My GPS Button
+                            Positioned(
+                              bottom: Responsive.h(10),
+                              right: Responsive.w(12),
+                              child: GestureDetector(
+                                onTap: _detectLocation,
+                                child: Container(
+                                  width: Responsive.w(36),
+                                  height: Responsive.w(36),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.white,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.15),
+                                        blurRadius: Responsive.w(6),
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: _isDetectingLocation
+                                      ? Center(
+                                          child: SizedBox(
+                                            width: Responsive.w(14),
+                                            height: Responsive.w(14),
+                                            child: const CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: AppColors.primary,
+                                            ),
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.my_location,
+                                          color: AppColors.primary,
+                                          size: 18,
+                                        ),
                                 ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                      SizedBox(height: Responsive.h(20)),
+                      SizedBox(height: Responsive.h(16)),
 
-                      // 2. Current Location section
-                      CustomText.subtitle(
-                        'Current Location',
-                        fontSize: 13,
-                        color: AppColors.grayFont,
-                        fontWeight: FontWeight.bold,
+                      // 2. Complaint Location Section Header
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: CustomText.subtitle(
+                                    'Complaint Location',
+                                    fontSize: 13,
+                                    color: AppColors.grayFont,
+                                    fontWeight: FontWeight.bold,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                SizedBox(width: Responsive.w(6)),
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: Responsive.w(6),
+                                    vertical: Responsive.h(2),
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _isCustomLocation ? const Color(0xFFFFF3E0) : const Color(0xFFE8F5E9),
+                                    borderRadius: BorderRadius.circular(Responsive.w(8)),
+                                  ),
+                                  child: Text(
+                                    _isCustomLocation ? '📍 Custom' : '📡 GPS',
+                                    style: TextStyle(
+                                      color: _isCustomLocation ? const Color(0xFFE65100) : const Color(0xFF2E7D32),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(width: Responsive.w(8)),
+                          GestureDetector(
+                            onTap: _openLocationPicker,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.map_outlined,
+                                  size: Responsive.w(13),
+                                  color: AppColors.primary,
+                                ),
+                                SizedBox(width: Responsive.w(3)),
+                                CustomText.title(
+                                  'Choose on Map',
+                                  fontSize: 11,
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                       SizedBox(height: Responsive.h(8)),
+
+                      // Location Card with Edit Button
                       Container(
                         width: double.infinity,
-                        padding: EdgeInsets.all(Responsive.w(16)),
+                        padding: EdgeInsets.all(Responsive.w(14)),
                         decoration: BoxDecoration(
                           color: AppColors.white,
                           borderRadius: BorderRadius.circular(Responsive.w(16)),
@@ -269,12 +548,125 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                             width: Responsive.w(1.5),
                           ),
                         ),
-                        child: CustomText.body(
-                          '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102',
-                          fontSize: 13,
-                          color: const Color(0xFF333333),
-                          fontWeight: FontWeight.w500,
-                          height: 1.35,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: EdgeInsets.only(top: Responsive.h(2)),
+                                  child: Icon(
+                                    Icons.location_on,
+                                    color: AppColors.primary,
+                                    size: Responsive.w(18),
+                                  ),
+                                ),
+                                SizedBox(width: Responsive.w(10)),
+                                Expanded(
+                                  child: _isDetectingLocation
+                                      ? Row(
+                                          children: [
+                                            SizedBox(
+                                              width: Responsive.w(14),
+                                              height: Responsive.w(14),
+                                              child: const CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: AppColors.primary,
+                                              ),
+                                            ),
+                                            SizedBox(width: Responsive.w(10)),
+                                            CustomText.body(
+                                              'Detecting address...',
+                                              fontSize: 13,
+                                              color: Colors.grey,
+                                            ),
+                                          ],
+                                        )
+                                      : Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            CustomText.body(
+                                              _currentAddress,
+                                              fontSize: 13,
+                                              color: const Color(0xFF333333),
+                                              fontWeight: FontWeight.w500,
+                                              height: 1.35,
+                                            ),
+                                            if (_currentLatLng != null)
+                                              Padding(
+                                                padding: EdgeInsets.only(top: Responsive.h(4)),
+                                                child: Text(
+                                                  'Coordinates: ${_currentLatLng!.latitude.toStringAsFixed(4)}, ${_currentLatLng!.longitude.toStringAsFixed(4)}',
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                ),
+                                SizedBox(width: Responsive.w(8)),
+                                // Edit landmark details icon
+                                GestureDetector(
+                                  onTap: _editAddressManually,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      Icons.edit_outlined,
+                                      size: Responsive.w(16),
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_isCustomLocation) ...[
+                              SizedBox(height: Responsive.h(10)),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  GestureDetector(
+                                    onTap: _detectLocation,
+                                    child: Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: Responsive.w(8),
+                                        vertical: Responsive.h(4),
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF0F4F8),
+                                        borderRadius: BorderRadius.circular(Responsive.w(8)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.my_location,
+                                            size: Responsive.w(12),
+                                            color: AppColors.primary,
+                                          ),
+                                          SizedBox(width: Responsive.w(4)),
+                                          const Text(
+                                            'Reset to Current GPS',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: AppColors.primary,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                       SizedBox(height: Responsive.h(20)),
@@ -467,7 +859,7 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                       SubmitComplaintEvent(
                                         description: _descriptionController.text.trim(),
                                         category: categoryToSubmit,
-                                        location: '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102',
+                                        location: _currentAddress,
                                         imagePath: imageFile?.path,
                                       ),
                                     );

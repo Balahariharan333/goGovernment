@@ -6,6 +6,7 @@ import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
 import '../../widget/common_map.dart';
+import '../../hive/hive_service.dart';
 import 'address_book_screen.dart';
 
 class SelectDeliveryLocationScreen extends StatefulWidget {
@@ -26,7 +27,7 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _landmarkController = TextEditingController();
 
-  String _addressText = '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102';
+  String _addressText = 'Select delivery address location';
   String _selectedType = 'Home'; // 'Home', 'Office', 'Others'
   bool _isKeyboardVisible = false;
   XFile? _landmarkImage;
@@ -42,6 +43,13 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
       _phoneController.text = addr.phone;
       _landmarkController.text = addr.landmark ?? '';
       _existingImagePath = addr.imagePath;
+    } else {
+      if (HiveService.userName.isNotEmpty) {
+        _nameController.text = HiveService.userName;
+      }
+      if (HiveService.userPhone.isNotEmpty) {
+        _phoneController.text = HiveService.userPhone;
+      }
     }
   }
 

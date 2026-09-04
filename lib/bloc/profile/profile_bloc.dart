@@ -8,10 +8,15 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
   ProfileBloc._() : super(ProfileState.initial()) {
     on<UpdateProfileEvent>((event, emit) {
-      HiveService.saveProfile(name: event.name, email: event.email);
+      HiveService.saveProfile(
+        name: event.name,
+        email: event.email,
+        imagePath: event.imagePath,
+      );
       emit(state.copyWith(
         name: event.name,
         email: event.email,
+        imagePath: event.imagePath ?? state.imagePath,
       ));
     });
 
@@ -19,6 +24,13 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       HiveService.setUserPhone(event.phone);
       emit(state.copyWith(
         phone: event.phone,
+      ));
+    });
+
+    on<UpdateProfileImageEvent>((event, emit) {
+      HiveService.setUserProfileImage(event.imagePath);
+      emit(state.copyWith(
+        imagePath: event.imagePath,
       ));
     });
   }

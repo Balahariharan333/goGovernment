@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
@@ -13,12 +15,14 @@ import '../../constants/route_constants.dart';
 class EditProfileScreen extends StatefulWidget {
   final String initialName;
   final String initialEmail;
+  final String initialImagePath;
   final bool isRegistration;
 
   const EditProfileScreen({
     super.key,
     this.initialName = '',
     this.initialEmail = '',
+    this.initialImagePath = '',
     this.isRegistration = false,
   });
 
@@ -29,6 +33,8 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _nameController;
   late TextEditingController _emailController;
+  String _imagePath = '';
+  final ImagePicker _picker = ImagePicker();
 
   bool _isModified = false;
 
@@ -37,6 +43,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.initState();
     _nameController = TextEditingController(text: widget.initialName);
     _emailController = TextEditingController(text: widget.initialEmail);
+    _imagePath = widget.initialImagePath;
 
     _nameController.addListener(_checkModification);
     _emailController.addListener(_checkModification);
@@ -45,7 +52,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void _checkModification() {
     setState(() {
       _isModified = _nameController.text.trim() != widget.initialName ||
-          _emailController.text.trim() != widget.initialEmail;
+          _emailController.text.trim() != widget.initialEmail ||
+          _imagePath != widget.initialImagePath;
     });
   }
 
@@ -57,12 +65,178 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return _emailRegExp.hasMatch(email);
   }
 
-  bool get _canSubmit {
+  bool get _isValidName {
     final name = _nameController.text.trim();
+    return name.length >= 3;
+  }
+
+  bool get _canSubmit {
     if (widget.isRegistration) {
-      return name.length >= 2 && _isValidEmail;
+      return _isValidName && _isValidEmail;
     }
-    return _isModified && name.length >= 2 && _isValidEmail;
+    return _isModified && _isValidName && _isValidEmail;
+  }
+
+  String get _avatarInitial {
+    final name = _nameController.text.trim();
+    if (name.isNotEmpty) {
+      return name[0].toUpperCase();
+    }
+    if (widget.initialName.trim().isNotEmpty) {
+      return widget.initialName.trim()[0].toUpperCase();
+    }
+    return '?';
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? picked = await _picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (picked != null) {
+        setState(() {
+          _imagePath = picked.path;
+          _checkModification();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to pick image: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showImagePickerModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(Responsive.w(24)),
+            ),
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: Responsive.w(20),
+            vertical: Responsive.h(20),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: Responsive.w(40),
+                  height: Responsive.h(4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                SizedBox(height: Responsive.h(16)),
+                CustomText.header(
+                  'Profile Picture',
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.black,
+                ),
+                SizedBox(height: Responsive.h(6)),
+                CustomText.subtitle(
+                  'Take a photo or choose from gallery',
+                  fontSize: 13,
+                  color: AppColors.grayFont,
+                ),
+                SizedBox(height: Responsive.h(20)),
+                ListTile(
+                  leading: Container(
+                    padding: EdgeInsets.all(Responsive.w(10)),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFFF2EC),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.camera_alt_rounded,
+                      color: AppColors.primary,
+                      size: Responsive.w(22),
+                    ),
+                  ),
+                  title: CustomText.title(
+                    'Take Photo',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.camera);
+                  },
+                ),
+                ListTile(
+                  leading: Container(
+                    padding: EdgeInsets.all(Responsive.w(10)),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFFF2EC),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.photo_library_rounded,
+                      color: AppColors.primary,
+                      size: Responsive.w(22),
+                    ),
+                  ),
+                  title: CustomText.title(
+                    'Choose from Gallery',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.gallery);
+                  },
+                ),
+                if (_imagePath.isNotEmpty)
+                  ListTile(
+                    leading: Container(
+                      padding: EdgeInsets.all(Responsive.w(10)),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        color: AppColors.error,
+                        size: Responsive.w(22),
+                      ),
+                    ),
+                    title: CustomText.title(
+                      'Remove Photo',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.error,
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _imagePath = '';
+                        _checkModification();
+                      });
+                    },
+                  ),
+                SizedBox(height: Responsive.h(8)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -80,7 +254,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (widget.isRegistration) {
       await HiveService.setLoggedIn(true);
       if (!mounted) return;
-      context.read<ProfileBloc>().add(UpdateProfileEvent(name, email));
+      context.read<ProfileBloc>().add(UpdateProfileEvent(name, email, _imagePath));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Registration completed successfully!'),
@@ -99,6 +273,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       Navigator.pop(context, {
         'name': name,
         'email': email,
+        'imagePath': _imagePath,
       });
     }
   }
@@ -130,6 +305,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool hasImage = _imagePath.isNotEmpty && File(_imagePath).existsSync();
+
     final scaffold = Scaffold(
       backgroundColor: AppColors.screenColor,
       appBar: AppBar(
@@ -190,78 +367,155 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     child: Column(
                       children: [
                         SizedBox(height: Responsive.h(20)),
-                        // Square avatar with rounded corners and edit badge
-                        Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Container(
-                              width: Responsive.w(120),
-                              height: Responsive.w(120),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(Responsive.w(28)),
-                                border: Border.all(
-                                  color: AppColors.primary,
-                                  width: Responsive.w(2),
-                                ),
-                                image: const DecorationImage(
-                                  image: AssetImage('assets/images/avatar.png'),
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              top: -Responsive.w(8),
-                              right: -Responsive.w(8),
-                              child: Container(
-                                padding: EdgeInsets.all(Responsive.w(6)),
-                                decoration: const BoxDecoration(
-                                  color: AppColors.white,
-                                  shape: BoxShape.circle,
+
+                        // Profile image picker or dynamic 1st letter avatar
+                        GestureDetector(
+                          onTap: _showImagePickerModal,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
+                                width: Responsive.w(120),
+                                height: Responsive.w(120),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(Responsive.w(28)),
+                                  border: Border.all(
+                                    color: AppColors.primary,
+                                    width: Responsive.w(2.5),
+                                  ),
+                                  gradient: hasImage
+                                      ? null
+                                      : const LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            Color(0xFFFF9E80),
+                                            AppColors.primary,
+                                          ],
+                                        ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black12,
-                                      blurRadius: 4,
-                                      offset: Offset(0, 2),
-                                    )
+                                      color: AppColors.primary.withValues(alpha: 0.25),
+                                      blurRadius: 14,
+                                      offset: const Offset(0, 6),
+                                    ),
                                   ],
                                 ),
-                                child: Icon(
-                                  Icons.edit_outlined,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(Responsive.w(25.5)),
+                                  child: hasImage
+                                      ? Image.file(
+                                          File(_imagePath),
+                                          width: Responsive.w(120),
+                                          height: Responsive.w(120),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : Center(
+                                          child: _avatarInitial.isNotEmpty
+                                              ? Text(
+                                                  _avatarInitial,
+                                                  style: TextStyle(
+                                                    fontSize: Responsive.sp(48),
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.white,
+                                                    fontFamily: 'Valley Sans',
+                                                  ),
+                                                )
+                                              : Icon(
+                                                  Icons.add_a_photo_outlined,
+                                                  size: Responsive.w(42),
+                                                  color: Colors.white,
+                                                ),
+                                        ),
+                                ),
+                              ),
+                              // Camera / Edit badge
+                              Positioned(
+                                bottom: -Responsive.w(4),
+                                right: -Responsive.w(4),
+                                child: Container(
+                                  padding: EdgeInsets.all(Responsive.w(8)),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.white,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: AppColors.primary,
+                                      width: Responsive.w(1.5),
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Colors.black12,
+                                        blurRadius: 6,
+                                        offset: Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    Icons.camera_alt_rounded,
+                                    color: AppColors.primary,
+                                    size: Responsive.w(18),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: Responsive.h(10)),
+                        CustomText.subtitle(
+                          hasImage
+                              ? 'Tap to change photo'
+                              : (_avatarInitial.isNotEmpty
+                                  ? 'Tap to change photo (Optional)'
+                                  : 'Tap to add photo (Optional)'),
+                          fontSize: 12,
+                          color: AppColors.grayFont,
+                        ),
+                        SizedBox(height: Responsive.h(28)),
+
+                        // Name input container with minimum 3 characters requirement
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                color: AppColors.white,
+                                borderRadius: BorderRadius.circular(Responsive.w(16)),
+                                border: Border.all(
+                                  color: (_nameController.text.isNotEmpty && !_isValidName)
+                                      ? AppColors.error
+                                      : AppColors.outliner.withValues(alpha: 0.5),
+                                  width: Responsive.w(1.2),
+                                ),
+                              ),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: Responsive.w(16),
+                                vertical: Responsive.h(4),
+                              ),
+                              child: TextField(
+                                controller: _nameController,
+                                style: TextStyle(
+                                  fontSize: Responsive.sp(15),
+                                  fontWeight: FontWeight.w600,
                                   color: AppColors.black,
-                                  size: Responsive.w(18),
+                                ),
+                                decoration: const InputDecoration(
+                                  border: InputBorder.none,
+                                  hintText: 'Enter Name',
                                 ),
                               ),
                             ),
+                            if (_nameController.text.isNotEmpty && !_isValidName) ...[
+                              SizedBox(height: Responsive.h(4)),
+                              Padding(
+                                padding: EdgeInsets.only(left: Responsive.w(8)),
+                                child: CustomText.subtitle(
+                                  'Name must be at least 3 characters',
+                                  fontSize: 11,
+                                  color: AppColors.error,
+                                ),
+                              ),
+                            ],
                           ],
-                        ),
-                        SizedBox(height: Responsive.h(32)),
-
-                        // Name input container
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.white,
-                            borderRadius: BorderRadius.circular(Responsive.w(16)),
-                            border: Border.all(
-                              color: AppColors.outliner.withValues(alpha: 0.5),
-                              width: Responsive.w(1.2),
-                            ),
-                          ),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: Responsive.w(16),
-                            vertical: Responsive.h(4),
-                          ),
-                          child: TextField(
-                            controller: _nameController,
-                            style: TextStyle(
-                              fontSize: Responsive.sp(15),
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.black,
-                            ),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              hintText: 'Enter Name',
-                            ),
-                          ),
                         ),
                         SizedBox(height: Responsive.h(16)),
 

@@ -32,6 +32,7 @@ class RouteConstants {
   // Complaints
   static const String complaint = '/complaint';
   static const String addComplaint = '/add-complaint';
+  static const String pickLocation = '/pick-location';
 
   // Reports
   static const String report = '/report';

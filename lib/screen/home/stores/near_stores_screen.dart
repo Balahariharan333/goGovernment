@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../../utils/app_colors.dart';
 import '../../../utils/responsive_helper.dart';
 import '../../../widget/common_background.dart';
@@ -7,6 +10,7 @@ import '../../../widget/common_map.dart';
 import '../../../widget/common_cart_badge.dart';
 import '../../../constants/route_constants.dart';
 import '../../../service/cart_manager.dart';
+import '../../../service/location_service.dart';
 
 class NearStoresScreen extends StatefulWidget {
   const NearStoresScreen({super.key});
@@ -17,14 +21,86 @@ class NearStoresScreen extends StatefulWidget {
 
 class _NearStoresScreenState extends State<NearStoresScreen> {
   late final VoidCallback _cartListener;
+  LatLng? _userPos;
+
+  late List<Map<String, dynamic>> _stores;
 
   @override
   void initState() {
     super.initState();
+    _initStores();
     _cartListener = () {
       if (mounted) setState(() {});
     };
     CartManager.instance.cartItems.addListener(_cartListener);
+    _detectLocation();
+  }
+
+  void _initStores() {
+    _stores = [
+      {
+        'id': '1',
+        'title': 'Sanjivani Medicals',
+        'address':
+            '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102',
+        'image': 'assets/images/medical.png',
+        'type': 'medical',
+        'lat': 12.9116,
+        'lng': 77.6433,
+        'distance': '1.2 km',
+      },
+      {
+        'id': '2',
+        'title': 'Bangalore Horticulture',
+        'address':
+            'No.12, 100 Feet Rd, near Doordarshan Kendra, Indiranagar, Bengaluru, Karnataka 560038',
+        'image': 'assets/images/vegstore.png',
+        'type': 'vegstore',
+        'lat': 12.9719,
+        'lng': 77.6412,
+        'distance': '2.4 km',
+      },
+      {
+        'id': '3',
+        'title': 'Apothecary Pharmacy',
+        'address':
+            'Shop 4, ground floor, 5th Block, Koramangala, Bengaluru, Karnataka 560095',
+        'image': 'assets/images/medical.png',
+        'type': 'medical',
+        'lat': 12.9352,
+        'lng': 77.6245,
+        'distance': '3.1 km',
+      },
+      {
+        'id': '4',
+        'title': 'Organic Veggie Store',
+        'address':
+            '45, 9th Main Rd, opposite Shalini Ground, 5th Block, Jayanagar, Bengaluru, Karnataka 560041',
+        'image': 'assets/images/vegstore.png',
+        'type': 'vegstore',
+        'lat': 12.9250,
+        'lng': 77.5838,
+        'distance': '4.5 km',
+      },
+    ];
+  }
+
+  Future<void> _detectLocation() async {
+    final Position? pos = await LocationService.getCurrentPosition(requestPermission: false);
+    if (pos != null && mounted) {
+      setState(() {
+        _userPos = LatLng(pos.latitude, pos.longitude);
+        for (var store in _stores) {
+          final dist = LocationService.calculateDistance(
+            pos.latitude,
+            pos.longitude,
+            store['lat'] as double,
+            store['lng'] as double,
+          );
+          store['distance'] = LocationService.formatDistance(dist);
+        }
+      });
+    }
   }
 
   @override
@@ -32,41 +108,6 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
     CartManager.instance.cartItems.removeListener(_cartListener);
     super.dispose();
   }
-
-  final List<Map<String, dynamic>> _stores = [
-    {
-      'id': '1',
-      'title': 'Sanjivani Medicals',
-      'address':
-          '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102',
-      'image': 'assets/images/medical.png',
-      'type': 'medical',
-    },
-    {
-      'id': '2',
-      'title': 'Bangalore Horticulture',
-      'address':
-          'No.12, 100 Feet Rd, near Doordarshan Kendra, Indiranagar, Bengaluru, Karnataka 560038',
-      'image': 'assets/images/vegstore.png',
-      'type': 'vegstore',
-    },
-    {
-      'id': '3',
-      'title': 'Apothecary Pharmacy',
-      'address':
-          'Shop 4, ground floor, 5th Block, Koramangala, Bengaluru, Karnataka 560095',
-      'image': 'assets/images/medical.png',
-      'type': 'medical',
-    },
-    {
-      'id': '4',
-      'title': 'Organic Veggie Store',
-      'address':
-          '45, 9th Main Rd, opposite Shalini Ground, 5th Block, Jayanagar, Bengaluru, Karnataka 560041',
-      'image': 'assets/images/vegstore.png',
-      'type': 'vegstore',
-    },
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -84,9 +125,50 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
                     SizedBox(
                       width: double.infinity,
                       height: Responsive.h(280),
-                      child: const CommonMap(
+                      child: CommonMap(
                         mapState: MapState.list,
                         isWalkMode: false,
+                        center: _userPos,
+                        markers: _stores.map((store) {
+                          final isMedical = store['type'] == 'medical';
+                          return Marker(
+                            point: LatLng(store['lat'] as double, store['lng'] as double),
+                            width: 38,
+                            height: 38,
+                            child: GestureDetector(
+                              onTap: () {
+                                Navigator.of(context).pushNamed(
+                                  RouteConstants.storeDetails,
+                                  arguments: {
+                                    'storeId': store['id'],
+                                    'storeName': store['title'],
+                                    'storeAddress': store['address'],
+                                    'storeImage': store['image'],
+                                    'storeType': store['type'],
+                                  },
+                                );
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isMedical ? const Color(0xFFE53935) : const Color(0xFF4CAF50),
+                                    width: 2,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+                                  ],
+                                ),
+                                child: Icon(
+                                  isMedical ? Icons.local_pharmacy : Icons.eco,
+                                  color: isMedical ? const Color(0xFFE53935) : const Color(0xFF4CAF50),
+                                  size: 18,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
                       ),
                     ),
                     const Spacer(),
@@ -211,11 +293,37 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Store Title
-            CustomText.title(
-              store['title'],
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
+            // Store Title & Distance Pill
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: CustomText.title(
+                    store['title'],
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (store['distance'] != null)
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: Responsive.w(8),
+                      vertical: Responsive.h(2),
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(Responsive.w(10)),
+                    ),
+                    child: Text(
+                      store['distance'],
+                      style: const TextStyle(
+                        color: Color(0xFF2E7D32),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             SizedBox(height: Responsive.h(4)),
 

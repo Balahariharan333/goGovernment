@@ -39,8 +39,11 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    // Dispatch a fetch directions event with placeholder data
-    context.read<DirectionBloc>().add(FetchDirections(origin: 'origin_placeholder', destination: 'destination_placeholder'));
+    // Dispatch a fetch directions event with real store address
+    context.read<DirectionBloc>().add(FetchDirections(
+          origin: 'Current Location',
+          destination: widget.storeAddress,
+        ));
 
     _cartListener = () {
       if (mounted) setState(() {});

@@ -173,7 +173,45 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                     Expanded(
                       child: filteredAddresses.isEmpty
                           ? Center(
-                              child: CustomText.body('No saved addresses found'),
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(horizontal: Responsive.w(24)),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: Responsive.w(64),
+                                      height: Responsive.w(64),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFFFF2EC),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.add_location_alt_outlined,
+                                        color: AppColors.primary,
+                                        size: Responsive.w(32),
+                                      ),
+                                    ),
+                                    SizedBox(height: Responsive.h(16)),
+                                    CustomText.header(
+                                      _searchQuery.isNotEmpty
+                                          ? 'No Matching Addresses'
+                                          : 'No Saved Addresses Yet',
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    SizedBox(height: Responsive.h(6)),
+                                    CustomText.subtitle(
+                                      _searchQuery.isNotEmpty
+                                          ? 'Try searching with a different term'
+                                          : 'Tap the + button below to add your delivery address',
+                                      fontSize: 13,
+                                      color: AppColors.grayFont,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
                             )
                           : ListView.builder(
                               physics: const BouncingScrollPhysics(),

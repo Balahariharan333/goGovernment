@@ -4,22 +4,26 @@ class ProfileState {
   final String name;
   final String email;
   final String phone;
+  final String imagePath;
 
   ProfileState({
     required this.name,
     required this.email,
     required this.phone,
+    this.imagePath = '',
   });
 
   factory ProfileState.initial() {
     final storedName = HiveService.userName;
     final storedEmail = HiveService.userEmail;
     final storedPhone = HiveService.userPhone;
+    final storedImage = HiveService.userProfileImage;
 
     return ProfileState(
-      name: storedName.isNotEmpty ? storedName : 'SURIYAPRAKASH',
-      email: storedEmail.isNotEmpty ? storedEmail : 'suryaprakash@gmail.com',
-      phone: storedPhone.isNotEmpty ? storedPhone : '+91 12345 09876',
+      name: storedName,
+      email: storedEmail,
+      phone: storedPhone,
+      imagePath: storedImage,
     );
   }
 
@@ -27,11 +31,13 @@ class ProfileState {
     String? name,
     String? email,
     String? phone,
+    String? imagePath,
   }) {
     return ProfileState(
       name: name ?? this.name,
       email: email ?? this.email,
       phone: phone ?? this.phone,
+      imagePath: imagePath ?? this.imagePath,
     );
   }
 }

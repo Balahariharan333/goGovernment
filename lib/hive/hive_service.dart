@@ -51,15 +51,26 @@ class HiveService {
     await _authBox.put(HiveKeys.userEmail, email);
   }
 
+  static String get userProfileImage =>
+      _authBox.get(HiveKeys.userProfileImage, defaultValue: '') as String;
+
+  static Future<void> setUserProfileImage(String path) async {
+    await _authBox.put(HiveKeys.userProfileImage, path);
+  }
+
   static Future<void> saveProfile({
     required String name,
     required String email,
     String? phone,
+    String? imagePath,
   }) async {
     await _authBox.put(HiveKeys.userName, name);
     await _authBox.put(HiveKeys.userEmail, email);
     if (phone != null && phone.isNotEmpty) {
       await _authBox.put(HiveKeys.userPhone, phone);
+    }
+    if (imagePath != null) {
+      await _authBox.put(HiveKeys.userProfileImage, imagePath);
     }
   }
 
@@ -68,6 +79,7 @@ class HiveService {
     await _authBox.delete(HiveKeys.userPhone);
     await _authBox.delete(HiveKeys.userName);
     await _authBox.delete(HiveKeys.userEmail);
+    await _authBox.delete(HiveKeys.userProfileImage);
   }
 
   // ----------------------------------------------------

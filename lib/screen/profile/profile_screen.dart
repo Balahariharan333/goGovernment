@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../utils/app_colors.dart';
@@ -344,6 +345,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Expanded(
                       child: GestureDetector(
                         onTap: () {
+                          context.read<AuthBloc>().add(LogoutEvent());
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -454,14 +456,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   arguments: {
                                     'initialName': name,
                                     'initialEmail': email,
+                                    'initialImagePath': state.imagePath,
                                   },
                                 );
-                                 if (res != null && res is Map<String, String>) {
+                                if (res != null && res is Map<String, dynamic>) {
                                   if (!context.mounted) return;
                                   context.read<ProfileBloc>().add(
                                         UpdateProfileEvent(
-                                          res['name']!,
-                                          res['email']!,
+                                          res['name'] as String,
+                                          res['email'] as String,
+                                          res['imagePath'] as String?,
                                         ),
                                       );
                                 }
@@ -483,32 +487,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ],
                         ),
                         SizedBox(height: Responsive.h(10)),
-                        // Avatar and Suriyaprakash Info
-                        Container(
-                          width: Responsive.w(80),
-                          height: Responsive.w(80),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: AppColors.white,
-                              width: Responsive.w(2),
-                            ),
-                            image: const DecorationImage(
-                              image: AssetImage('assets/images/avatar.png'),
-                              fit: BoxFit.cover,
-                            ),
-                          ),
+                        // Avatar or First Letter Initial / Guide Icon
+                        Builder(
+                          builder: (context) {
+                            final bool hasImage = state.imagePath.isNotEmpty &&
+                                File(state.imagePath).existsSync();
+                            final bool hasName = name.trim().isNotEmpty;
+                            final String initialLetter = hasName
+                                ? name.trim()[0].toUpperCase()
+                                : '';
+
+                            return Container(
+                              width: Responsive.w(80),
+                              height: Responsive.w(80),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: AppColors.white,
+                                  width: Responsive.w(2.5),
+                                ),
+                                color: hasImage ? Colors.transparent : Colors.white,
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Colors.black12,
+                                    blurRadius: 8,
+                                    offset: Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: ClipOval(
+                                child: hasImage
+                                    ? Image.file(
+                                        File(state.imagePath),
+                                        width: Responsive.w(80),
+                                        height: Responsive.w(80),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Center(
+                                        child: hasName
+                                            ? Text(
+                                                initialLetter,
+                                                style: TextStyle(
+                                                  fontSize: Responsive.sp(32),
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppColors.primary,
+                                                  fontFamily: 'Valley Sans',
+                                                ),
+                                              )
+                                            : Icon(
+                                                Icons.person_outline_rounded,
+                                                size: Responsive.w(38),
+                                                color: AppColors.primary,
+                                              ),
+                                      ),
+                              ),
+                            );
+                          },
                         ),
                         SizedBox(height: Responsive.h(10)),
                         CustomText.header(
-                          name,
-                          fontSize: 20,
+                          name.trim().isNotEmpty ? name : 'Set Up Your Profile',
+                          fontSize: name.trim().isNotEmpty ? 20 : 17,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
                         SizedBox(height: Responsive.h(2)),
                         CustomText.subtitle(
-                          email,
+                          email.trim().isNotEmpty ? email : 'Tap the edit icon to add details',
                           fontSize: 13,
                           color: Colors.white70,
                         ),
@@ -528,7 +573,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     _buildProfileOption(
                       icon: Icons.phone_outlined,
-                      title: phone,
+                      title: phone.trim().isNotEmpty ? phone : 'Add Phone Number',
                       onTap: () async {
                         final res = await Navigator.of(context).pushNamed(
                           RouteConstants.editPhone,
@@ -537,6 +582,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         if (res != null && res is String) {
                           if (!context.mounted) return;
                           context.read<ProfileBloc>().add(UpdatePhoneEvent(res));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('Phone number updated successfully!'),
+                              backgroundColor: AppColors.success,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(Responsive.w(12)),
+                              ),
+                            ),
+                          );
                         }
                       },
                     ),

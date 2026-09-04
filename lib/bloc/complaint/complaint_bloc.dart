@@ -23,9 +23,10 @@ class ComplaintBloc extends Bloc<ComplaintEvent, ComplaintState> {
 
       final newComplaint = {
         'id': 'CMP${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}',
-        'userName': HiveService.userName.isNotEmpty ? HiveService.userName : 'user',
-        'userAddress': event.location ??
-            'no address found',
+        'userName': HiveService.userName.isNotEmpty ? HiveService.userName : 'Citizen',
+        'userAddress': (event.location != null && event.location!.isNotEmpty)
+            ? event.location!
+            : 'Location not specified',
         'category': event.category.isNotEmpty ? event.category : 'Road Damage',
         'description': event.description,
         'status': 'Under Review',

@@ -39,7 +39,11 @@ class HomeTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final profileState = context.watch<ProfileBloc>().state;
     final String name = profileState.name.trim();
-    final String displayName = name.isNotEmpty ? name : 'User';
+    final bool hasName = name.isNotEmpty;
+    final String greetingTitle = hasName ? '${_getGreeting()}, $name..' : '${_getGreeting()}! Welcome';
+    final String greetingSubtitle = hasName
+        ? 'Here are today\'s actions for you'
+        : 'Tap your profile to set up your details';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -53,13 +57,13 @@ class HomeTab extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   CustomText.header(
-                    '${_getGreeting()}, $displayName..',
+                    greetingTitle,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
                   SizedBox(height: Responsive.h(4)),
                   CustomText.subtitle(
-                    'Here are today\'s actions for you',
+                    greetingSubtitle,
                     fontSize: 14,
                     color: AppColors.grayFont,
                   ),
@@ -375,7 +379,7 @@ class HomeTab extends StatelessWidget {
                                     arguments: {
                                       'report': latestReport,
                                       'userName': latestReport['userName'] ??
-                                          displayName,
+                                          (name.isNotEmpty ? name : 'Citizen'),
                                       'status': status,
                                       'statusColor': statusColor,
                                       'category': category,

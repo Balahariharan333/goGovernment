@@ -9,6 +9,9 @@ import 'package:go_government/bloc/direction/direction_state.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
 import '../../widget/common_map.dart';
+import '../../service/location_service.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:flutter_map/flutter_map.dart';
 
 class DirectionsScreen extends StatefulWidget {
   final String title;
@@ -25,9 +28,12 @@ class DirectionsScreen extends StatefulWidget {
 }
 
 class _DirectionsScreenState extends State<DirectionsScreen> {
+  LatLng? _destinationLatLng;
+
   @override
   void initState() {
     super.initState();
+    _geocodeDestination();
     // Fetch directions after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<DirectionBloc>().add(FetchDirections(
@@ -36,6 +42,16 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
           ));
     });
   }
+
+  Future<void> _geocodeDestination() async {
+    final latLng = await LocationService.getCoordinatesFromAddress(widget.address);
+    if (latLng != null && mounted) {
+      setState(() {
+        _destinationLatLng = latLng;
+      });
+    }
+  }
+
   bool _isNavigating = false;
   bool _isWalkMode = false;
   Timer? _navTimer;
@@ -43,7 +59,17 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
   String _currentInstruction = 'Head north on 16th Main Rd (200m)';
   IconData _currentManeuverIcon = Icons.arrow_upward;
 
-  void _startNavigation() {
+  void _startNavigation() async {
+    // Launch external native navigation (Google Maps / Apple Maps)
+    await LocationService.launchTurnByTurnNavigation(
+      destLat: _destinationLatLng?.latitude,
+      destLng: _destinationLatLng?.longitude,
+      address: widget.address,
+      isWalking: _isWalkMode,
+    );
+
+    if (!mounted) return;
+
     setState(() {
       _isNavigating = true;
       _remainingSeconds = _isWalkMode ? 720 : 360;
@@ -134,6 +160,21 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
                 child: CommonMap(
                   mapState: _isNavigating ? MapState.navigation : MapState.directions,
                   isWalkMode: _isWalkMode,
+                  center: _destinationLatLng,
+                  markers: _destinationLatLng != null
+                      ? [
+                          Marker(
+                            point: _destinationLatLng!,
+                            width: 44,
+                            height: 44,
+                            child: const Icon(
+                              Icons.location_pin,
+                              color: Colors.red,
+                              size: 40,
+                            ),
+                          ),
+                        ]
+                      : null,
                 ),
               ),
 

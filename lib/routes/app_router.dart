@@ -27,6 +27,8 @@ import '../widget/common_success_screen.dart';
 // Complaint Screens
 import '../screen/complaint/complaint_screen.dart';
 import '../screen/complaint/add_complaint_screen.dart';
+import '../screen/complaint/pick_location_screen.dart';
+import 'package:latlong2/latlong.dart';
 
 // Report Screens
 import '../screen/report/report_screen.dart';
@@ -47,6 +49,8 @@ import '../screen/profile/select_delivery_location_screen.dart';
 import '../screen/profile/wishlist_screen.dart';
 import '../screen/profile/language_screen.dart';
 
+import '../hive/hive_service.dart';
+
 /// Responsibility: Generates and maps named routes to corresponding screen widgets with smooth page transitions.
 class AppRouter {
   AppRouter._();
@@ -55,6 +59,11 @@ class AppRouter {
     switch (settings.name) {
       // Root / Auth
       case RouteConstants.initial:
+        if (HiveService.isLoggedIn) {
+          return _buildSmoothRoute(const MainScreen(), settings);
+        }
+        return _buildSmoothRoute(const LoginScreen(), settings);
+
       case RouteConstants.login:
         return _buildSmoothRoute(const LoginScreen(), settings);
 
@@ -167,6 +176,16 @@ class AppRouter {
         final category = settings.arguments as String?;
         return _buildSmoothRoute(AddComplaintScreen(category: category), settings);
 
+      case RouteConstants.pickLocation:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        return _buildSmoothRoute(
+          PickLocationScreen(
+            initialLatLng: args['initialLatLng'] as LatLng?,
+            initialAddress: args['initialAddress'] as String?,
+          ),
+          settings,
+        );
+
       // Reports
       case RouteConstants.report:
         return _buildSmoothRoute(const ReportScreen(), settings);
@@ -219,6 +238,7 @@ class AppRouter {
           EditProfileScreen(
             initialName: args['initialName'] as String? ?? '',
             initialEmail: args['initialEmail'] as String? ?? '',
+            initialImagePath: args['initialImagePath'] as String? ?? '',
             isRegistration: args['isRegistration'] as bool? ?? false,
           ),
           settings,

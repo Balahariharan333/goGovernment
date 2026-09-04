@@ -22,29 +22,9 @@ class AddressState {
       );
     }
 
-    final defaultAddresses = [
-      AddressModel(
-        type: "Home",
-        description: "552, 2nd Floor 18th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102",
-        phone: "+91 98765 12345",
-      ),
-      AddressModel(
-        type: "Office",
-        description: "552, 2nd Floor 18th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102",
-        phone: "+91 98765 12345",
-      ),
-      AddressModel(
-        type: "Others",
-        description: "552, 2nd Floor 18th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102",
-        phone: "+91 98765 12345",
-      ),
-    ];
-    // Persist default addresses in background
-    HiveService.saveAddresses(defaultAddresses.map((a) => a.toMap()).toList());
-
     return AddressState(
-      addresses: defaultAddresses,
-      selectedAddress: defaultAddresses.first,
+      addresses: [],
+      selectedAddress: null,
     );
   }
 

@@ -74,7 +74,7 @@ class MainApp extends StatelessWidget {
             child: child!,
           );
         },
-        initialRoute: HiveService.isLoggedIn ? RouteConstants.main : RouteConstants.login,
+        initialRoute: RouteConstants.initial,
         onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );

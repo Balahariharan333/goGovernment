@@ -11,6 +11,7 @@ import '../../widget/custom_text.dart';
 import '../../constants/route_constants.dart';
 
 
+
 class OtpScreen extends StatefulWidget {
   final String phoneNumber;
 
@@ -76,18 +77,18 @@ class _OtpScreenState extends State<OtpScreen> {
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Verification successful! Please complete your registration.'),
-                backgroundColor: Colors.green,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-            Navigator.of(context).pushNamedAndRemoveUntil(
-              RouteConstants.editProfile,
-              (route) => false,
-              arguments: {'isRegistration': true},
-            );
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Verification successful! Please complete your registration.'),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+              Navigator.of(context).pushNamedAndRemoveUntil(
+                RouteConstants.editProfile,
+                (route) => false,
+                arguments: {'isRegistration': true},
+              );
           } else if (state is AuthFailure) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(

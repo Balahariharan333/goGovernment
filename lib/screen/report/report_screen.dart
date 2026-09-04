@@ -87,34 +87,7 @@ class _ReportScreenState extends State<ReportScreen> {
                     ),
                   ],
                 ),
-                Row(
-                  children: [
-                    // if (isMyActivity && state.myReports.isNotEmpty) ...[
-                    //   GestureDetector(
-                    //     onTap: () => _showClearComplaintsDialog(context),
-                    //     child: Container(
-                    //       padding: EdgeInsets.all(Responsive.w(10)),
-                    //       decoration: BoxDecoration(
-                    //         color: AppColors.white,
-                    //         borderRadius:
-                    //             BorderRadius.circular(Responsive.w(14)),
-                    //         border: Border.all(
-                    //           color: AppColors.error.withValues(alpha: 0.3),
-                    //           width: Responsive.w(1.2),
-                    //         ),
-                    //       ),
-                    //       child: Icon(
-                    //         Icons.delete_sweep_outlined,
-                    //         color: AppColors.error,
-                    //         size: Responsive.w(22),
-                    //       ),
-                    //     ),
-                    //   ),
-                    //   SizedBox(width: Responsive.w(8)),
-                    // ],
-                    _buildNotificationBell(),
-                  ],
-                ),
+                _buildNotificationBell(),
               ],
             ),
             SizedBox(height: Responsive.h(20)),
@@ -205,10 +178,45 @@ class _ReportScreenState extends State<ReportScreen> {
             if (filteredList.isEmpty)
               Center(
                 child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: Responsive.h(40)),
-                  child: CustomText.subtitle(
-                    'No activity found',
-                    fontSize: 14,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: Responsive.w(24),
+                    vertical: Responsive.h(40),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: Responsive.w(56),
+                        height: Responsive.w(56),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFFF2EC),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.assignment_outlined,
+                          color: AppColors.primary,
+                          size: Responsive.w(28),
+                        ),
+                      ),
+                      SizedBox(height: Responsive.h(12)),
+                      CustomText.header(
+                        isMyActivity
+                            ? 'No Complaints Reported Yet'
+                            : 'No Activity Found',
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: Responsive.h(4)),
+                      CustomText.subtitle(
+                        isMyActivity
+                            ? 'Report civic issues in your area like road damage or sanitation'
+                            : 'Community complaints and updates will appear here',
+                        fontSize: 12,
+                        color: AppColors.grayFont,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
                 ),
               )

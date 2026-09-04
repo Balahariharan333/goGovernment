@@ -30,7 +30,7 @@ class CartScreen extends StatefulWidget {
 
 class _CartScreenState extends State<CartScreen> {
   // Removed local coupon state; using CouponBloc
-  String _deliveryAddress = '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102';
+  String _deliveryAddress = '';
   String? _receiverName;
   String? _receiverPhone;
   bool _useComplaintCoins = false;
@@ -433,11 +433,25 @@ class _CartScreenState extends State<CartScreen> {
                           },
                           child: Row(
                             children: [
+                              Icon(
+                                Icons.location_on_outlined,
+                                color: (context.watch<AddressBloc>().state.selectedAddress == null && _deliveryAddress.isEmpty)
+                                    ? AppColors.primary
+                                    : AppColors.black,
+                                size: Responsive.w(18),
+                              ),
+                              SizedBox(width: Responsive.w(6)),
                               Expanded(
                                 child: CustomText.title(
-                                  context.watch<AddressBloc>().state.selectedAddress?.description ?? _deliveryAddress,
+                                  context.watch<AddressBloc>().state.selectedAddress?.description ??
+                                      (_deliveryAddress.isNotEmpty
+                                          ? _deliveryAddress
+                                          : 'Select Delivery Address'),
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold,
+                                  color: (context.watch<AddressBloc>().state.selectedAddress == null && _deliveryAddress.isEmpty)
+                                      ? AppColors.primary
+                                      : AppColors.black,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -500,6 +514,29 @@ class _CartScreenState extends State<CartScreen> {
                       // Solid Checkout CTA button
                       GestureDetector(
                         onTap: () {
+                          final selectedAddr = context.read<AddressBloc>().state.selectedAddress;
+                          final String currentAddr = selectedAddr?.description ?? _deliveryAddress;
+                          if (currentAddr.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Text('Please select or add a delivery address to proceed.'),
+                                backgroundColor: AppColors.primary,
+                                behavior: SnackBarBehavior.floating,
+                                action: SnackBarAction(
+                                  label: 'Select',
+                                  textColor: Colors.white,
+                                  onPressed: () {
+                                    Navigator.of(context).pushNamed(
+                                      RouteConstants.addressBook,
+                                      arguments: true,
+                                    );
+                                  },
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
                           showDialog(
                             context: context,
                             builder: (dialogContext) => AlertDialog(
@@ -553,7 +590,8 @@ class _CartScreenState extends State<CartScreen> {
                                     final String shortDate = '${months[now.month - 1]} ${now.day} - ${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'pm' : 'am'}';
 
                                     final selectedAddr = context.read<AddressBloc>().state.selectedAddress;
-                                    final String deliveryAddr = selectedAddr?.description ?? '552, 2nd Floor 16th Main, 15th Cross Rd, HSR Layout, Bengaluru';
+                                    final String deliveryAddr = selectedAddr?.description ??
+                                        (_deliveryAddress.isNotEmpty ? _deliveryAddress : 'Location not specified');
 
                                     final newTx = {
                                       'id': orderId,
