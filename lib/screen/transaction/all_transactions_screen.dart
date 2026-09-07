@@ -57,6 +57,9 @@ class AllTransactionsScreen extends StatelessWidget {
           child: BlocBuilder<TransactionBloc, TransactionState>(
             builder: (context, state) {
               final transactions = state.transactions;
+              if (transactions.isEmpty) {
+                return _buildEmptyState(context);
+              }
               return ListView.builder(
                 physics: const BouncingScrollPhysics(),
                 padding: EdgeInsets.symmetric(
@@ -74,6 +77,81 @@ class AllTransactionsScreen extends StatelessWidget {
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: Responsive.w(32)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: Responsive.w(90),
+              height: Responsive.w(90),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF2EC),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppColors.outliner,
+                  width: 1.5,
+                ),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.receipt_long_outlined,
+                  size: Responsive.w(44),
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            SizedBox(height: Responsive.h(20)),
+            CustomText.title(
+              'No Transactions Yet',
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+            SizedBox(height: Responsive.h(8)),
+            CustomText.subtitle(
+              'Your transaction and order history will appear here once you make a purchase or wallet payment.',
+              fontSize: 13,
+              color: AppColors.grayFont,
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: Responsive.h(24)),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                padding: EdgeInsets.symmetric(
+                  horizontal: Responsive.w(24),
+                  vertical: Responsive.h(12),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(Responsive.w(20)),
+                ),
+                elevation: 0,
+              ),
+              onPressed: () {
+                Navigator.of(context).pushNamed(RouteConstants.nearStores);
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.storefront_outlined, color: Colors.white, size: 18),
+                  SizedBox(width: Responsive.w(8)),
+                  CustomText.title(
+                    'Explore Stores',
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

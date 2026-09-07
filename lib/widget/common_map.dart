@@ -49,7 +49,6 @@ class _CommonMapState extends State<CommonMap> {
   late final MapController _mapController;
   LatLng _currentCenter = LocationService.defaultLocation;
   LatLng? _userGpsLocation;
-  bool _isLoadingGps = false;
 
   @override
   void initState() {
@@ -70,8 +69,9 @@ class _CommonMapState extends State<CommonMap> {
 
   Future<void> _detectUserPosition() async {
     if (!widget.showUserLocation && widget.center != null) return;
-    setState(() => _isLoadingGps = true);
-    final Position? pos = await LocationService.getCurrentPosition(requestPermission: false);
+    final Position? pos = await LocationService.getCurrentPosition(
+      requestPermission: false,
+    );
     if (!mounted) return;
     if (pos != null) {
       final userLatLng = LatLng(pos.latitude, pos.longitude);
@@ -81,37 +81,7 @@ class _CommonMapState extends State<CommonMap> {
           _currentCenter = userLatLng;
           _mapController.move(_currentCenter, widget.zoom ?? 15.0);
         }
-        _isLoadingGps = false;
       });
-    } else {
-      setState(() => _isLoadingGps = false);
-    }
-  }
-
-  void _recenterOnUser() async {
-    setState(() => _isLoadingGps = true);
-    final Position? pos = await LocationService.getCurrentPosition(requestPermission: true);
-    if (!mounted) return;
-    if (pos != null) {
-      final userLatLng = LatLng(pos.latitude, pos.longitude);
-      setState(() {
-        _userGpsLocation = userLatLng;
-        _currentCenter = userLatLng;
-        _isLoadingGps = false;
-      });
-      _mapController.move(userLatLng, 16.0);
-    } else {
-      setState(() => _isLoadingGps = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Unable to detect current GPS location. Please check permissions.'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Responsive.w(12)),
-          ),
-        ),
-      );
     }
   }
 
@@ -134,7 +104,8 @@ class _CommonMapState extends State<CommonMap> {
     // 2. Add screen-provided custom markers
     if (widget.markers != null) {
       allMarkers.addAll(widget.markers!);
-    } else if (widget.center != null && (_userGpsLocation == null || widget.center != _userGpsLocation)) {
+    } else if (widget.center != null &&
+        (_userGpsLocation == null || widget.center != _userGpsLocation)) {
       // Default pin at center if no markers provided
       allMarkers.add(
         Marker(
@@ -166,7 +137,9 @@ class _CommonMapState extends State<CommonMap> {
               initialCenter: _currentCenter,
               initialZoom: widget.zoom ?? 15.0,
               interactionOptions: InteractionOptions(
-                flags: widget.interactive ? InteractiveFlag.all : InteractiveFlag.none,
+                flags: widget.interactive
+                    ? InteractiveFlag.all
+                    : InteractiveFlag.none,
               ),
               onTap: (tapPosition, point) => widget.onTap?.call(point),
             ),
@@ -213,8 +186,6 @@ class _CommonMapState extends State<CommonMap> {
           //       ],
           //     ),
           //   ),
-       
-       
         ],
       ),
     );
@@ -260,13 +231,21 @@ class _CommonMapState extends State<CommonMap> {
         point: LatLng(center.latitude + 0.002, center.longitude + 0.002),
         width: 36,
         height: 36,
-        child: const Icon(Icons.location_on, color: AppColors.primary, size: 34),
+        child: const Icon(
+          Icons.location_on,
+          color: AppColors.primary,
+          size: 34,
+        ),
       ),
       Marker(
         point: LatLng(center.latitude - 0.0025, center.longitude + 0.0015),
         width: 36,
         height: 36,
-        child: const Icon(Icons.location_on, color: AppColors.primary, size: 34),
+        child: const Icon(
+          Icons.location_on,
+          color: AppColors.primary,
+          size: 34,
+        ),
       ),
     ];
   }

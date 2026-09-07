@@ -44,9 +44,12 @@ class _CartScreenState extends State<CartScreen> {
   @override
   void initState() {
     super.initState();
-    final initialAddr = context.read<AddressBloc>().state.selectedAddress;
-    if (initialAddr != null) {
-      _deliveryAddress = initialAddr.description;
+    final addrState = context.read<AddressBloc>().state;
+    if (addrState.selectedAddress != null) {
+      _deliveryAddress = addrState.selectedAddress!.description;
+    } else if (addrState.addresses.isNotEmpty) {
+      context.read<AddressBloc>().add(SelectActiveAddressEvent(addrState.addresses.first));
+      _deliveryAddress = addrState.addresses.first.description;
     }
 
     _cartListener = () {
@@ -78,6 +81,59 @@ class _CartScreenState extends State<CartScreen> {
     CartManager.instance.cartItems.removeListener(_cartListener);
     WishlistManager.instance.favoriteIds.removeListener(_favListener);
     super.dispose();
+  }
+
+  Future<void> _selectAddress() async {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    final selected = await Navigator.of(context).pushNamed(
+      RouteConstants.addressBook,
+      arguments: true,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    if (selected != null && selected is AddressModel) {
+      context.read<AddressBloc>().add(SelectActiveAddressEvent(selected));
+      setState(() {
+        _deliveryAddress = selected.description;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Delivering to ${selected.type} (${selected.description})',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          backgroundColor: AppColors.primary,
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(12))),
+        ),
+      );
+    } else {
+      final current = context.read<AddressBloc>().state.selectedAddress;
+      setState(() {
+        _deliveryAddress = current?.description ?? '';
+      });
+      if (current == null || current.description.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Please select or add a delivery address to proceed.'),
+            backgroundColor: AppColors.primary,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Select',
+              textColor: Colors.white,
+              onPressed: () {
+                _selectAddress();
+              },
+            ),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -417,50 +473,38 @@ class _CartScreenState extends State<CartScreen> {
                       SizedBox(width: Responsive.w(12)),
                       Expanded(
                         child: GestureDetector(
-                          onTap: () async {
-                            final selected = await Navigator.of(context).pushNamed(
-                              RouteConstants.addressBook,
-                              arguments: true,
-                            );
-                            if (selected != null && selected is AddressModel) {
-                              if (context.mounted) {
-                                context.read<AddressBloc>().add(SelectActiveAddressEvent(selected));
-                              }
-                              setState(() {
-                                _deliveryAddress = selected.description;
-                              });
-                            }
-                          },
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.location_on_outlined,
-                                color: (context.watch<AddressBloc>().state.selectedAddress == null && _deliveryAddress.isEmpty)
-                                    ? AppColors.primary
-                                    : AppColors.black,
-                                size: Responsive.w(18),
-                              ),
-                              SizedBox(width: Responsive.w(6)),
-                              Expanded(
-                                child: CustomText.title(
-                                  context.watch<AddressBloc>().state.selectedAddress?.description ??
-                                      (_deliveryAddress.isNotEmpty
-                                          ? _deliveryAddress
-                                          : 'Select Delivery Address'),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: (context.watch<AddressBloc>().state.selectedAddress == null && _deliveryAddress.isEmpty)
-                                      ? AppColors.primary
-                                      : AppColors.black,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              Icon(
-                                Icons.keyboard_arrow_down,
-                                color: AppColors.primary,
-                                size: Responsive.w(16),
-                              ),
-                            ],
+                          onTap: _selectAddress,
+                          child: Builder(
+                            builder: (context) {
+                              final addrState = context.watch<AddressBloc>().state;
+                              final activeAddr = addrState.selectedAddress;
+                              final String displayAddr = activeAddr?.description ?? '';
+                              final bool hasNoAddr = displayAddr.trim().isEmpty;
+                              return Row(
+                                children: [
+                                  Icon(
+                                    Icons.location_on_outlined,
+                                    color: hasNoAddr ? AppColors.primary : AppColors.black,
+                                    size: Responsive.w(18),
+                                  ),
+                                  SizedBox(width: Responsive.w(6)),
+                                  Expanded(
+                                    child: CustomText.title(
+                                      hasNoAddr ? 'Select Delivery Address' : displayAddr,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: hasNoAddr ? AppColors.primary : AppColors.black,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.keyboard_arrow_down,
+                                    color: AppColors.primary,
+                                    size: Responsive.w(16),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                         ),
                       ),
@@ -513,27 +557,14 @@ class _CartScreenState extends State<CartScreen> {
 
                       // Solid Checkout CTA button
                       GestureDetector(
-                        onTap: () {
+                        onTap: () async {
                           final selectedAddr = context.read<AddressBloc>().state.selectedAddress;
-                          final String currentAddr = selectedAddr?.description ?? _deliveryAddress;
+                          final String currentAddr = (selectedAddr?.description.trim().isNotEmpty == true)
+                              ? selectedAddr!.description
+                              : '';
                           if (currentAddr.trim().isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('Please select or add a delivery address to proceed.'),
-                                backgroundColor: AppColors.primary,
-                                behavior: SnackBarBehavior.floating,
-                                action: SnackBarAction(
-                                  label: 'Select',
-                                  textColor: Colors.white,
-                                  onPressed: () {
-                                    Navigator.of(context).pushNamed(
-                                      RouteConstants.addressBook,
-                                      arguments: true,
-                                    );
-                                  },
-                                ),
-                              ),
-                            );
+                            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                            await _selectAddress();
                             return;
                           }
 
@@ -637,7 +668,11 @@ class _CartScreenState extends State<CartScreen> {
                                         'dateString': dateFormatted,
                                         'buttonText': 'Track Order',
                                         'nextRoute': RouteConstants.orderStatus,
-                                        'nextRouteArgs': widget.storeType,
+                                        'nextRouteArgs': {
+                                          'storeType': widget.storeType,
+                                          'orderId': orderId,
+                                          'transaction': newTx,
+                                        },
                                       },
                                     );
                                   },

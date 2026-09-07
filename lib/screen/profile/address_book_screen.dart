@@ -204,10 +204,45 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                                     CustomText.subtitle(
                                       _searchQuery.isNotEmpty
                                           ? 'Try searching with a different term'
-                                          : 'Tap the + button below to add your delivery address',
+                                          : 'Tap the button below to add your delivery address',
                                       fontSize: 13,
                                       color: AppColors.grayFont,
                                       textAlign: TextAlign.center,
+                                    ),
+                                    SizedBox(height: Responsive.h(16)),
+                                    ElevatedButton.icon(
+                                      onPressed: () async {
+                                        final newAddr = await Navigator.of(context).pushNamed(
+                                          RouteConstants.selectDeliveryLocation,
+                                        );
+                                        if (newAddr != null && newAddr is AddressModel) {
+                                          if (context.mounted) {
+                                            context.read<AddressBloc>().add(AddAddressEvent(newAddr));
+                                            context.read<AddressBloc>().add(SelectActiveAddressEvent(newAddr));
+                                            if (widget.isSelectionMode) {
+                                              Navigator.pop(context, newAddr);
+                                            }
+                                          }
+                                        }
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primary,
+                                        elevation: 0,
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: Responsive.w(20),
+                                          vertical: Responsive.h(10),
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(Responsive.w(16)),
+                                        ),
+                                      ),
+                                      icon: const Icon(Icons.add, color: Colors.white, size: 18),
+                                      label: CustomText.title(
+                                        'Add Address',
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -242,6 +277,10 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
           if (newAddr != null && newAddr is AddressModel) {
             if (context.mounted) {
               context.read<AddressBloc>().add(AddAddressEvent(newAddr));
+              context.read<AddressBloc>().add(SelectActiveAddressEvent(newAddr));
+              if (widget.isSelectionMode) {
+                Navigator.pop(context, newAddr);
+              }
             }
           }
         },
@@ -258,20 +297,31 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
       iconData = Icons.place_outlined;
     }
 
+    final isSelected = context.watch<AddressBloc>().state.selectedAddress?.description == address.description;
+
     return GestureDetector(
-      onTap: widget.isSelectionMode
-          ? () {
-              Navigator.pop(context, address);
-            }
-          : null,
+      onTap: () {
+        context.read<AddressBloc>().add(SelectActiveAddressEvent(address));
+        if (widget.isSelectionMode) {
+          Navigator.pop(context, address);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Selected "${address.type}" as active delivery address'),
+              backgroundColor: AppColors.primary,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      },
       child: Container(
         padding: EdgeInsets.all(Responsive.w(16)),
         decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: BorderRadius.circular(Responsive.w(20)),
           border: Border.all(
-            color: AppColors.outliner,
-            width: Responsive.w(1.5),
+            color: isSelected ? AppColors.primary : AppColors.outliner,
+            width: isSelected ? Responsive.w(2.0) : Responsive.w(1.5),
           ),
         ),
         child: Row(
@@ -281,13 +331,13 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
             Container(
               width: Responsive.w(40),
               height: Responsive.w(40),
-              decoration: const BoxDecoration(
-                color: Color(0xFFFFF2EC),
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFFFFF2EC) : const Color(0xFFF5F5F5),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 iconData,
-                color: AppColors.primary,
+                color: isSelected ? AppColors.primary : Colors.grey.shade600,
                 size: Responsive.w(20),
               ),
             ),
@@ -298,11 +348,52 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CustomText.title(
-                    address.type,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
+                  Row(
+                    children: [
+                      CustomText.title(
+                        address.type,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      if (isSelected) ...[
+                        SizedBox(width: Responsive.w(8)),
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: Responsive.w(8),
+                            vertical: Responsive.h(2),
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F5E9),
+                            borderRadius: BorderRadius.circular(Responsive.w(8)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check, size: 12, color: Color(0xFF2E7D32)),
+                              SizedBox(width: 3),
+                              Text(
+                                'Selected',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF2E7D32),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
+                  if (address.name != null && address.name!.trim().isNotEmpty) ...[
+                    SizedBox(height: Responsive.h(4)),
+                    CustomText.title(
+                      address.name!.trim(),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.black,
+                    ),
+                  ],
                   SizedBox(height: Responsive.h(6)),
                   CustomText.body(
                     address.description,

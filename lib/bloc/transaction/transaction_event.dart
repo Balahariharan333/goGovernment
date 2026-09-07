@@ -44,3 +44,10 @@ class ReturnWatermelonProductEvent extends TransactionEvent {
   final int index;
   ReturnWatermelonProductEvent(this.index);
 }
+
+class UpdateOrderStatusEvent extends TransactionEvent {
+  final String orderId;
+  final String status;
+  UpdateOrderStatusEvent({required this.orderId, required this.status});
+}
+

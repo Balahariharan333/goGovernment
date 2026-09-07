@@ -19,9 +19,8 @@ class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
 
     on<AddTransactionEvent>((event, emit) async {
       await HiveService.saveTransaction(event.transaction);
-      final currentList = List<Map<String, dynamic>>.from(state.transactions);
-      currentList.insert(0, event.transaction);
-      emit(state.copyWith(transactions: currentList));
+      final updatedList = HiveService.getMyTransactions();
+      emit(state.copyWith(transactions: updatedList));
     });
 
     on<AddWalletMoneyEvent>((event, emit) async {
@@ -49,12 +48,11 @@ class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
       };
 
       await HiveService.saveTransaction(tx);
-      final currentList = List<Map<String, dynamic>>.from(state.transactions);
-      currentList.insert(0, tx);
+      final updatedList = HiveService.getMyTransactions();
 
       emit(state.copyWith(
         walletBalance: newBalance,
-        transactions: currentList,
+        transactions: updatedList,
       ));
     });
 
@@ -103,13 +101,12 @@ class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
       };
 
       await HiveService.saveTransaction(tx);
-      final currentList = List<Map<String, dynamic>>.from(state.transactions);
-      currentList.insert(0, tx);
+      final updatedList = HiveService.getMyTransactions();
 
       emit(state.copyWith(
         walletBalance: newBalance,
         coinsBalance: newCoins,
-        transactions: currentList,
+        transactions: updatedList,
       ));
     });
 
@@ -129,6 +126,26 @@ class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
         updatedList[event.index] = true;
       }
       emit(state.copyWith(watermelonReturned: updatedList));
+    });
+
+    on<UpdateOrderStatusEvent>((event, emit) async {
+      final currentList = HiveService.getMyTransactions();
+      final index = currentList.indexWhere((t) => t['id']?.toString() == event.orderId);
+      if (index != -1) {
+        currentList[index]['status'] = event.status;
+        await HiveService.saveAllTransactions(currentList);
+        emit(state.copyWith(transactions: currentList));
+      } else {
+        final inMemoryList = List<Map<String, dynamic>>.from(
+          state.transactions.map((t) => Map<String, dynamic>.from(t)),
+        );
+        final mIndex = inMemoryList.indexWhere((t) => t['id']?.toString() == event.orderId);
+        if (mIndex != -1) {
+          inMemoryList[mIndex]['status'] = event.status;
+          await HiveService.saveAllTransactions(inMemoryList);
+          emit(state.copyWith(transactions: inMemoryList));
+        }
+      }
     });
   }
 }

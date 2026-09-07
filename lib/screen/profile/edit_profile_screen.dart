@@ -266,8 +266,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
       );
       Navigator.of(context).pushNamedAndRemoveUntil(
-        RouteConstants.main,
+        RouteConstants.permission,
         (route) => false,
+        arguments: {'isFirstTime': true},
       );
     } else {
       Navigator.pop(context, {

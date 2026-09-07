@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../hive/hive_service.dart';
 
 /// Centralized service for device GPS, geocoding, distance computation, and turn-by-turn navigation.
 class LocationService {
@@ -29,6 +30,11 @@ class LocationService {
           permission == LocationPermission.deniedForever) {
         debugPrint('[LocationService] Location permissions denied ($permission).');
         return null;
+      }
+
+      // If location is permitted in-app, ensure hasSeenPermissionScreen is set so screen won't reappear on restart
+      if (!HiveService.hasSeenPermissionScreen) {
+        await HiveService.setHasSeenPermissionScreen(true);
       }
 
       return await Geolocator.getCurrentPosition(
@@ -73,6 +79,57 @@ class LocationService {
       debugPrint('[LocationService] Error reverse geocoding ($lat, $lng): $e');
     }
     return '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
+  }
+
+  /// Converts GPS coordinates into a map containing detected building/house and formatted address.
+  static Future<Map<String, String>> getDetailedAddressFromCoordinates(double lat, double lng) async {
+    try {
+      final List<Placemark> placemarks = await _geocoding.placemarkFromCoordinates(lat, lng);
+      if (placemarks.isNotEmpty) {
+        final p = placemarks.first;
+        final name = p.name?.trim() ?? '';
+        final street = p.street?.trim() ?? '';
+        final subThoroughfare = p.subThoroughfare?.trim() ?? '';
+        final thoroughfare = p.thoroughfare?.trim() ?? '';
+        final subLocality = p.subLocality?.trim() ?? '';
+        final locality = p.locality?.trim() ?? '';
+        final postalCode = p.postalCode?.trim() ?? '';
+
+        String houseNumber = '';
+        if (subThoroughfare.isNotEmpty) {
+          houseNumber = subThoroughfare;
+        } else if (name.isNotEmpty && name != street && name != thoroughfare) {
+          houseNumber = name;
+        } else if (name.isNotEmpty) {
+          houseNumber = name;
+        }
+
+        final List<String> addressParts = [];
+        if (street.isNotEmpty && street != houseNumber && !addressParts.contains(street)) {
+          addressParts.add(street);
+        } else if (thoroughfare.isNotEmpty && thoroughfare != houseNumber && !addressParts.contains(thoroughfare)) {
+          addressParts.add(thoroughfare);
+        }
+        if (subLocality.isNotEmpty && !addressParts.contains(subLocality)) addressParts.add(subLocality);
+        if (locality.isNotEmpty && !addressParts.contains(locality)) addressParts.add(locality);
+        if (postalCode.isNotEmpty && !addressParts.contains(postalCode)) addressParts.add(postalCode);
+
+        final String fullAddress = addressParts.isNotEmpty
+            ? addressParts.join(', ')
+            : (street.isNotEmpty ? street : '$lat, $lng');
+
+        return {
+          'house': houseNumber.isNotEmpty ? houseNumber : (name.isNotEmpty ? name : 'Flat 101'),
+          'address': fullAddress,
+        };
+      }
+    } catch (e) {
+      debugPrint('[LocationService] Error reverse geocoding details ($lat, $lng): $e');
+    }
+    return {
+      'house': 'Flat 101',
+      'address': '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}',
+    };
   }
 
   /// Converts a textual street address into latitude and longitude coordinates.

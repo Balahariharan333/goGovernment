@@ -7,5 +7,23 @@ class OrderTrackingBloc extends Bloc<OrderTrackingEvent, OrderTrackingState> {
     on<UpdateTrackingStepEvent>((event, emit) {
       emit(state.copyWith(currentStep: event.step));
     });
+
+    on<SetTrackingOrderEvent>((event, emit) {
+      final orderId = event.order['id']?.toString();
+      emit(state.copyWith(
+        activeOrderId: orderId,
+        activeOrder: event.order,
+        currentStep: event.initialStep,
+        isCancelled: false,
+      ));
+    });
+
+    on<CancelActiveOrderEvent>((event, emit) {
+      emit(state.copyWith(
+        isCancelled: true,
+        currentStep: 0,
+      ));
+    });
   }
 }
+

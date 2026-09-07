@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 class Responsive {
-  static late double screenWidth;
-  static late double screenHeight;
+  static double screenWidth = _designWidth;
+  static double screenHeight = _designHeight;
 
   // Design sizes from Figma (typically iPhone 14/15 Pro: 390 x 844)
   static const double _designWidth = 390.0;

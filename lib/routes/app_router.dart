@@ -4,6 +4,7 @@ import '../constants/route_constants.dart';
 // Auth Screens
 import '../screen/auth/login_screen.dart';
 import '../screen/auth/otp_screen.dart';
+import '../screen/auth/permission_screen.dart';
 
 // Home & Main Screens
 import '../screen/home/main_screen.dart';
@@ -48,6 +49,7 @@ import '../screen/profile/address_book_screen.dart';
 import '../screen/profile/select_delivery_location_screen.dart';
 import '../screen/profile/wishlist_screen.dart';
 import '../screen/profile/language_screen.dart';
+import '../screen/profile/your_orders_screen.dart';
 
 import '../hive/hive_service.dart';
 
@@ -60,6 +62,9 @@ class AppRouter {
       // Root / Auth
       case RouteConstants.initial:
         if (HiveService.isLoggedIn) {
+          if (!HiveService.hasSeenPermissionScreen) {
+            return _buildSmoothRoute(const PermissionScreen(), settings);
+          }
           return _buildSmoothRoute(const MainScreen(), settings);
         }
         return _buildSmoothRoute(const LoginScreen(), settings);
@@ -70,6 +75,9 @@ class AppRouter {
       case RouteConstants.otp:
         final phoneNumber = settings.arguments is String ? settings.arguments as String : '';
         return _buildSmoothRoute(OtpScreen(phoneNumber: phoneNumber), settings);
+
+      case RouteConstants.permission:
+        return _buildSmoothRoute(const PermissionScreen(), settings);
 
       // Home / Main Shell
       case RouteConstants.main:
@@ -145,8 +153,27 @@ class AppRouter {
         return _buildSmoothRoute(CouponsScreen(currentCouponCode: currentCouponCode), settings);
 
       case RouteConstants.orderStatus:
-        final storeType = settings.arguments is String ? settings.arguments as String : 'medical';
-        return _buildSmoothRoute(OrderStatusScreen(storeType: storeType), settings);
+        String storeType = 'medical';
+        Map<String, dynamic>? transaction;
+        String? orderId;
+
+        if (settings.arguments is String) {
+          storeType = settings.arguments as String;
+        } else if (settings.arguments is Map<String, dynamic>) {
+          final args = settings.arguments as Map<String, dynamic>;
+          storeType = args['storeType'] as String? ?? 'medical';
+          transaction = args['transaction'] as Map<String, dynamic>?;
+          orderId = args['orderId'] as String?;
+        }
+
+        return _buildSmoothRoute(
+          OrderStatusScreen(
+            storeType: storeType,
+            transaction: transaction,
+            orderId: orderId,
+          ),
+          settings,
+        );
 
       case RouteConstants.orderSuccess:
         final args = settings.arguments as Map<String, dynamic>? ?? {};
@@ -214,6 +241,9 @@ class AppRouter {
 
       case RouteConstants.allTransactions:
         return _buildSmoothRoute(const AllTransactionsScreen(), settings);
+
+      case RouteConstants.yourOrders:
+        return _buildSmoothRoute(const YourOrdersScreen(), settings);
 
       case RouteConstants.transactionDetails:
         final args = settings.arguments as Map<String, dynamic>? ?? {};

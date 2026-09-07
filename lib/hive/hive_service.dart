@@ -171,6 +171,26 @@ class HiveService {
     await _addressBox.put(HiveKeys.selectedAddressIndex, index);
   }
 
+  static Map<String, dynamic>? getManualLocation() {
+    final raw = _addressBox.get(HiveKeys.manualLocation);
+    if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+    return null;
+  }
+
+  static Future<void> setManualLocation({
+    required double latitude,
+    required double longitude,
+    required String address,
+  }) async {
+    await _addressBox.put(HiveKeys.manualLocation, {
+      'latitude': latitude,
+      'longitude': longitude,
+      'address': address,
+    });
+  }
+
   // ----------------------------------------------------
   // Complaints & Reports
   // ----------------------------------------------------
@@ -262,6 +282,14 @@ class HiveService {
     await _transactionBox.put(HiveKeys.coinsBalance, coins);
   }
 
+  static bool isReferralClaimed() {
+    return _transactionBox.get(HiveKeys.referralClaimed, defaultValue: false) as bool;
+  }
+
+  static Future<void> setReferralClaimed(bool claimed) async {
+    await _transactionBox.put(HiveKeys.referralClaimed, claimed);
+  }
+
   // ----------------------------------------------------
   // Settings
   // ----------------------------------------------------
@@ -272,5 +300,12 @@ class HiveService {
 
   static Future<void> setLanguage(String lang) async {
     await _settingsBox.put(HiveKeys.selectedLanguage, lang);
+  }
+
+  static bool get hasSeenPermissionScreen =>
+      _settingsBox.get(HiveKeys.hasSeenPermissionScreen, defaultValue: false) as bool;
+
+  static Future<void> setHasSeenPermissionScreen(bool value) async {
+    await _settingsBox.put(HiveKeys.hasSeenPermissionScreen, value);
   }
 }

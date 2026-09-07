@@ -8,6 +8,7 @@ class RouteConstants {
   // Auth
   static const String login = '/login';
   static const String otp = '/otp';
+  static const String permission = '/permission';
 
   // Home & Main
   static const String main = '/main';
@@ -41,6 +42,7 @@ class RouteConstants {
   // Transactions & Payments
   static const String transaction = '/transaction';
   static const String allTransactions = '/all-transactions';
+  static const String yourOrders = '/your-orders';
   static const String transactionDetails = '/transaction-details';
   static const String qrScanPay = '/qr-scan-pay';
 

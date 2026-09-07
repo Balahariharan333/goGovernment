@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/custom_text.dart';
@@ -7,6 +9,7 @@ import '../../bloc/transaction/transaction_bloc.dart';
 import '../../bloc/transaction/transaction_event.dart';
 import '../../bloc/transaction/transaction_state.dart';
 import '../../constants/route_constants.dart';
+import '../../hive/hive_service.dart';
 
 class TransactionScreen extends StatelessWidget {
   const TransactionScreen({super.key});
@@ -348,89 +351,292 @@ class TransactionScreen extends StatelessWidget {
   }
 
   void _showInviteShareDialog(BuildContext context) {
+    const String referralCode = 'GOV-CITIZEN-98';
+    const String shareText =
+        'Join Go Government to improve your city, report civic issues, and earn rewards! Use my referral code: $referralCode to receive 100 bonus civic coins!';
+
+    bool isClaimed = HiveService.isReferralClaimed();
+
     showDialog(
       context: context,
       builder: (dialogCtx) {
-        return AlertDialog(
-          backgroundColor: AppColors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Responsive.w(20)),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.share, color: AppColors.primary, size: Responsive.w(24)),
-              SizedBox(width: Responsive.w(8)),
-              CustomText.header('Invite Friends', fontSize: 18, fontWeight: FontWeight.bold),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CustomText.subtitle(
-                'Share your referral code with friends and family to help improve civic governance. Earn 100 coins on their first complaint or survey!',
-                fontSize: 13,
-                color: AppColors.grayFont,
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(Responsive.w(20)),
               ),
-              SizedBox(height: Responsive.h(16)),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: Responsive.w(14), vertical: Responsive.h(10)),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF2EC),
-                  borderRadius: BorderRadius.circular(Responsive.w(12)),
-                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    CustomText.header('GOV-CITIZEN-98', fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primary),
-                    Icon(Icons.copy, color: AppColors.primary, size: Responsive.w(20)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: CustomText.title('Close', color: AppColors.grayFont, fontSize: 14),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(12))),
-              ),
-              onPressed: () {
-                // Award referral bonus
-                final rewardTx = {
-                  'id': 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}',
-                  'title': 'Referral Bonus',
-                  'subtitle': 'Invite link shared · Today',
-                  'amount': '+100',
-                  'isPositive': true,
-                  'status': 'Credited',
-                  'date': 'Today',
-                  'items': [],
-                  'address': 'Citizen Invite Program',
-                  'listingPrice': '₹0.00',
-                  'sellingPrice': '₹100.00',
-                  'grandTotal': '₹100.00',
-                  'paid': '₹100.00',
-                };
-                context.read<TransactionBloc>().add(AddCoinsEvent(100));
-                context.read<TransactionBloc>().add(AddTransactionEvent(rewardTx));
-
-                Navigator.pop(dialogCtx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Invite shared & 100 Coins credited to your account!'),
-                    backgroundColor: AppColors.success,
+              title: Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(Responsive.w(8)),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFFF2EC),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.share, color: AppColors.primary, size: Responsive.w(20)),
                   ),
-                );
-              },
-              child: CustomText.title('Share Link (+100 Coins)', color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-          ],
+                  SizedBox(width: Responsive.w(10)),
+                  CustomText.header('Invite Friends', fontSize: 18, fontWeight: FontWeight.bold),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CustomText.subtitle(
+                    'Share your referral code with friends and family to help improve civic governance. Earn 100 coins on their first complaint or survey!',
+                    fontSize: 13,
+                    color: AppColors.grayFont,
+                  ),
+                  SizedBox(height: Responsive.h(16)),
+
+                  // Clickable Referral Code Container
+                  GestureDetector(
+                    onTap: () {
+                      Clipboard.setData(const ClipboardData(text: referralCode));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('Referral code "$referralCode" copied to clipboard!'),
+                          backgroundColor: AppColors.primary,
+                          duration: const Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(12))),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: Responsive.w(14), vertical: Responsive.h(12)),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF2EC),
+                        borderRadius: BorderRadius.circular(Responsive.w(12)),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Referral Code (Tap to Copy)',
+                                style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w600),
+                              ),
+                              SizedBox(height: Responsive.h(2)),
+                              CustomText.header(
+                                referralCode,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary,
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: EdgeInsets.all(Responsive.w(6)),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.copy, color: AppColors.primary, size: Responsive.w(18)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: Responsive.h(16)),
+
+                  // Claim +100 Coins Button (credits 100 coins and removes itself once claimed)
+                  if (!isClaimed) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFE65100),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(Responsive.w(12)),
+                          ),
+                          padding: EdgeInsets.symmetric(vertical: Responsive.h(12)),
+                          elevation: 2,
+                        ),
+                        icon: const Icon(Icons.monetization_on, color: Color(0xFFFFD54F), size: 20),
+                        label: const Text(
+                          'Claim +100 Coins',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        onPressed: () async {
+                          // 1. Credit 100 Civic Coins
+                          context.read<TransactionBloc>().add(AddCoinsEvent(100));
+
+                          // 2. Add transaction history entry
+                          final now = DateTime.now();
+                          final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                          final dateStr =
+                              '${months[now.month - 1]} ${now.day} - ${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'pm' : 'am'}';
+
+                          final rewardTx = {
+                            'id': 'CLM-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}',
+                            'title': 'Referral Welcome Bonus',
+                            'subtitle': '100 Civic Coins credited · $dateStr',
+                            'amount': '+100 Coins',
+                            'isPositive': true,
+                            'status': 'Credited',
+                            'date': dateStr,
+                            'items': [],
+                            'address': 'Citizen Referral Program',
+                            'listingPrice': '₹0.00',
+                            'sellingPrice': '100 Coins',
+                            'grandTotal': '100 Coins',
+                            'paid': '100 Coins',
+                          };
+                          context.read<TransactionBloc>().add(AddTransactionEvent(rewardTx));
+
+                          // 3. Mark as claimed in persistent storage
+                          await HiveService.setReferralClaimed(true);
+
+                          // 4. Remove it immediately from the UI
+                          setDialogState(() {
+                            isClaimed = true;
+                          });
+
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Row(
+                                  children: [
+                                    Icon(Icons.check_circle, color: Colors.white, size: 20),
+                                    SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        '100 Civic Coins credited to your wallet balance!',
+                                        style: TextStyle(fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                backgroundColor: AppColors.success,
+                                duration: const Duration(seconds: 3),
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(12))),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    SizedBox(height: Responsive.h(12)),
+                  ],
+
+                  // Quick Action Share Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final String encoded = Uri.encodeComponent(shareText);
+                            final Uri whatsappNativeUri = Uri.parse("whatsapp://send?text=$encoded");
+                            final Uri whatsappApiUri = Uri.parse("https://api.whatsapp.com/send?text=$encoded");
+                            final Uri waMeUri = Uri.parse("https://wa.me/?text=$encoded");
+
+                            bool launched = false;
+                            // 1. Try whatsapp://send with externalApplication
+                            try {
+                              launched = await launchUrl(whatsappNativeUri, mode: LaunchMode.externalApplication);
+                            } catch (_) {}
+
+                            // 2. Try api.whatsapp.com with externalApplication (intercepted by WhatsApp app)
+                            if (!launched) {
+                              try {
+                                launched = await launchUrl(whatsappApiUri, mode: LaunchMode.externalApplication);
+                              } catch (_) {}
+                            }
+
+                            // 3. Try api.whatsapp.com with platformDefault (lets OS handle URL)
+                            if (!launched) {
+                              try {
+                                launched = await launchUrl(whatsappApiUri, mode: LaunchMode.platformDefault);
+                              } catch (_) {}
+                            }
+
+                            // 4. Try wa.me
+                            if (!launched) {
+                              try {
+                                launched = await launchUrl(waMeUri, mode: LaunchMode.externalApplication);
+                              } catch (_) {}
+                            }
+
+                            // 5. Fallback: Copy to clipboard with user notification
+                            if (!launched) {
+                              Clipboard.setData(ClipboardData(text: shareText));
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: const Text('Could not open WhatsApp. Invite message copied to clipboard!'),
+                                    backgroundColor: AppColors.primary,
+                                    duration: const Duration(seconds: 2),
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(12))),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFF25D366), width: 1.2),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(12))),
+                            padding: EdgeInsets.symmetric(vertical: Responsive.h(10)),
+                          ),
+                          icon: const Icon(Icons.chat, color: Color(0xFF25D366), size: 16),
+                          label: const Text(
+                            'WhatsApp',
+                            style: TextStyle(color: Color(0xFF25D366), fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: Responsive.w(8)),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Clipboard.setData(const ClipboardData(text: shareText));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Text('Invite message & link copied to clipboard!'),
+                                backgroundColor: AppColors.primary,
+                                duration: const Duration(seconds: 2),
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(12))),
+                              ),
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.primary, width: 1.2),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(12))),
+                            padding: EdgeInsets.symmetric(vertical: Responsive.h(10)),
+                          ),
+                          icon: Icon(Icons.link, color: AppColors.primary, size: 16),
+                          label: Text(
+                            'Copy Link',
+                            style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: CustomText.title('Close', color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -593,64 +799,64 @@ class TransactionScreen extends StatelessWidget {
               SizedBox(height: Responsive.h(20)),
 
               // 2. Complaint Coins & Rewards Card
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(Responsive.w(24)),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFFFFB74D), // Light gold
-                      Color(0xFFE65100), // Dark orange
+              GestureDetector(
+                onTap: () => _showInviteShareDialog(context),
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(Responsive.w(24)),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFFFFB74D), // Light gold
+                        Color(0xFFE65100), // Dark orange
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFE65100).withValues(alpha: 0.25),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
                     ],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFE65100).withValues(alpha: 0.25),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                padding: EdgeInsets.all(Responsive.w(16)),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: EdgeInsets.symmetric(horizontal: Responsive.w(8), vertical: Responsive.h(3)),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.25),
-                                  borderRadius: BorderRadius.circular(Responsive.w(8)),
+                  padding: EdgeInsets.all(Responsive.w(16)),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: EdgeInsets.symmetric(horizontal: Responsive.w(8), vertical: Responsive.h(3)),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.25),
+                                    borderRadius: BorderRadius.circular(Responsive.w(8)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.monetization_on, color: Colors.white, size: Responsive.w(14)),
+                                      SizedBox(width: Responsive.w(4)),
+                                      CustomText.title('$coinsBalance Coins', fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                    ],
+                                  ),
                                 ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.monetization_on, color: Colors.white, size: Responsive.w(14)),
-                                    SizedBox(width: Responsive.w(4)),
-                                    CustomText.title('$coinsBalance Coins', fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: Responsive.h(6)),
-                          CustomText.title(
-                            'Invite a friend & get\n100 coins',
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            height: 1.25,
-                          ),
-                          SizedBox(height: Responsive.h(10)),
-                          GestureDetector(
-                            onTap: () => _showInviteShareDialog(context),
-                            child: Container(
+                              ],
+                            ),
+                            SizedBox(height: Responsive.h(6)),
+                            CustomText.title(
+                              'Invite a friend & get\n100 coins',
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              height: 1.25,
+                            ),
+                            SizedBox(height: Responsive.h(10)),
+                            Container(
                               height: Responsive.h(32),
                               width: Responsive.w(120),
                               decoration: BoxDecoration(
@@ -666,17 +872,17 @@ class TransactionScreen extends StatelessWidget {
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    Image.asset(
-                      'assets/images/coins.png',
-                      width: Responsive.w(90),
-                      height: Responsive.w(90),
-                      fit: BoxFit.contain,
-                    ),
-                  ],
+                      Image.asset(
+                        'assets/images/coins.png',
+                        width: Responsive.w(90),
+                        height: Responsive.w(90),
+                        fit: BoxFit.contain,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               SizedBox(height: Responsive.h(24)),

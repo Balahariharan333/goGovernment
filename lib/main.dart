@@ -5,6 +5,7 @@ import 'package:go_government/bloc/coupon/coupon_bloc.dart';
 import 'package:go_government/bloc/direction/direction_bloc.dart';
 import 'package:go_government/bloc/product/product_bloc.dart';
 import 'utils/app_theme.dart';
+import 'utils/responsive_helper.dart';
 import 'bloc/auth/auth_bloc.dart';
 import 'bloc/cart/cart_bloc.dart';
 import 'bloc/toilet/toilet_bloc.dart';
@@ -17,6 +18,7 @@ import 'bloc/complaint/complaint_bloc.dart';
 import 'bloc/order_tracking/order_tracking_bloc.dart';
 import 'bloc/rider_chat/rider_chat_bloc.dart';
 import 'bloc/address/address_bloc.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'hive/hive_service.dart';
 import 'constants/route_constants.dart';
@@ -25,6 +27,20 @@ import 'routes/app_router.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await HiveService.init();
+
+  // If citizen is logged in and device GPS permission is already active (granted in-app or in OS settings),
+  // ensure hasSeenPermissionScreen is marked true so the permission screen is never shown on restart!
+  if (HiveService.isLoggedIn && !HiveService.hasSeenPermissionScreen) {
+    try {
+      final locStatus = await Permission.location.status;
+      if (locStatus.isGranted) {
+        await HiveService.setHasSeenPermissionScreen(true);
+      }
+    } catch (e) {
+      debugPrint('[Main] Location permission startup check: $e');
+    }
+  }
+
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -65,6 +81,7 @@ class MainApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         builder: (context, child) {
+          Responsive.init(context);
           return AnnotatedRegion<SystemUiOverlayStyle>(
             value: const SystemUiOverlayStyle(
               statusBarColor: Colors.transparent,

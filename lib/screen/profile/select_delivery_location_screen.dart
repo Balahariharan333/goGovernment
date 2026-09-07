@@ -7,6 +7,9 @@ import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
 import '../../widget/common_map.dart';
 import '../../hive/hive_service.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import '../../service/location_service.dart';
 import 'address_book_screen.dart';
 
 class SelectDeliveryLocationScreen extends StatefulWidget {
@@ -23,13 +26,16 @@ class SelectDeliveryLocationScreen extends StatefulWidget {
 
 class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScreen> {
   final TextEditingController _houseController = TextEditingController();
+  final TextEditingController _floorController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _landmarkController = TextEditingController();
+  final MapController _mapController = MapController();
 
   String _addressText = 'Select delivery address location';
   String _selectedType = 'Home'; // 'Home', 'Office', 'Others'
   bool _isKeyboardVisible = false;
+  bool _isLoadingLocation = false;
   XFile? _landmarkImage;
   String? _existingImagePath;
 
@@ -40,6 +46,14 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
       final addr = widget.editAddress!;
       _selectedType = addr.type;
       _addressText = addr.description;
+      if (addr.name != null && addr.name!.isNotEmpty) {
+        _nameController.text = addr.name!;
+      } else if (HiveService.userName.isNotEmpty) {
+        _nameController.text = HiveService.userName;
+      }
+      if (addr.floor != null) {
+        _floorController.text = addr.floor!;
+      }
       _phoneController.text = addr.phone;
       _landmarkController.text = addr.landmark ?? '';
       _existingImagePath = addr.imagePath;
@@ -49,6 +63,45 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
       }
       if (HiveService.userPhone.isNotEmpty) {
         _phoneController.text = HiveService.userPhone;
+      }
+    }
+  }
+
+  Future<void> _useCurrentLocation() async {
+    setState(() => _isLoadingLocation = true);
+    final pos = await LocationService.getCurrentPosition(requestPermission: true);
+    if (!mounted) return;
+    if (pos != null) {
+      final details = await LocationService.getDetailedAddressFromCoordinates(pos.latitude, pos.longitude);
+      if (mounted) {
+        setState(() {
+          _houseController.text = details['house'] ?? '';
+          _addressText = details['address'] ?? '';
+          _isLoadingLocation = false;
+        });
+        _mapController.move(LatLng(pos.latitude, pos.longitude), 16.0);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Location & house details auto-filled from current GPS'),
+            backgroundColor: AppColors.primary,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        setState(() => _isLoadingLocation = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Could not access current location. Please enable GPS permissions.'),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
       }
     }
   }
@@ -102,6 +155,7 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
   @override
   void dispose() {
     _houseController.dispose();
+    _floorController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
     _landmarkController.dispose();
@@ -113,8 +167,11 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
     // Detect keyboard visibility to toggle layouts statefully
     _isKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
 
-    final bool isFormValid = _nameController.text.trim().isNotEmpty &&
-        _phoneController.text.trim().isNotEmpty;
+    final bool isHouseValid = _houseController.text.trim().isNotEmpty;
+    final bool isNameValid = _nameController.text.trim().isNotEmpty;
+    final bool isPhoneValid = _phoneController.text.trim().isNotEmpty &&
+        _phoneController.text.trim().length >= 10;
+    final bool isFormValid = isHouseValid && isNameValid && isPhoneValid;
 
     return Scaffold(
       backgroundColor: AppColors.screenColor,
@@ -180,6 +237,7 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
                                 child: CommonMap(
                                   mapState: MapState.directions,
                                   isWalkMode: false,
+                                  mapController: _mapController,
                                 ),
                               ),
                               // Floating Center Pin Marker
@@ -199,35 +257,63 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
                                 left: 0,
                                 right: 0,
                                 child: Center(
-                                  child: Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: Responsive.w(16),
-                                      vertical: Responsive.h(8),
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.white,
-                                      borderRadius: BorderRadius.circular(Responsive.w(20)),
-                                      border: Border.all(
-                                        color: AppColors.primary,
-                                        width: 1.2,
+                                  child: GestureDetector(
+                                    onTap: _isLoadingLocation ? null : _useCurrentLocation,
+                                    child: Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: Responsive.w(16),
+                                        vertical: Responsive.h(8),
                                       ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.my_location,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.white,
+                                        borderRadius: BorderRadius.circular(Responsive.w(20)),
+                                        border: Border.all(
                                           color: AppColors.primary,
-                                          size: Responsive.w(14),
+                                          width: 1.2,
                                         ),
-                                        SizedBox(width: Responsive.w(6)),
-                                        CustomText.title(
-                                          'Use current location',
-                                          color: AppColors.primary,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ],
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(alpha: 0.08),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (_isLoadingLocation) ...[
+                                            SizedBox(
+                                              width: Responsive.w(14),
+                                              height: Responsive.w(14),
+                                              child: const CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: AppColors.primary,
+                                              ),
+                                            ),
+                                            SizedBox(width: Responsive.w(6)),
+                                            CustomText.title(
+                                              'Locating...',
+                                              color: AppColors.primary,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ] else ...[
+                                            Icon(
+                                              Icons.my_location,
+                                              color: AppColors.primary,
+                                              size: Responsive.w(14),
+                                            ),
+                                            SizedBox(width: Responsive.w(6)),
+                                            CustomText.title(
+                                              'Use current location',
+                                              color: AppColors.primary,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ],
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -278,26 +364,37 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
                             ),
                             SizedBox(height: Responsive.h(16)),
 
-                            // Floor / House no
+                            // House / Flat / Building No. (Mandatory)
                             _buildInputBox(
                               controller: _houseController,
-                              hint: 'E.g. Floor, House no.',
+                              hint: 'House / Flat / Building No. *',
+                              icon: Icons.home_work_outlined,
+                              onChanged: (val) => setState(() {}),
                             ),
                             SizedBox(height: Responsive.h(12)),
 
-                            // User Name*
+                            // Floor / Level (Optional)
+                            _buildInputBox(
+                              controller: _floorController,
+                              hint: 'Floor / Level (Optional, e.g. 2nd Floor)',
+                              icon: Icons.layers_outlined,
+                              onChanged: (val) => setState(() {}),
+                            ),
+                            SizedBox(height: Responsive.h(12)),
+
+                            // Receiver Name* (Mandatory)
                             _buildInputBox(
                               controller: _nameController,
-                              hint: 'User Name*',
+                              hint: 'Receiver Name *',
                               icon: Icons.person_outline,
                               onChanged: (val) => setState(() {}),
                             ),
                             SizedBox(height: Responsive.h(12)),
 
-                            // User Number*
+                            // Receiver Mobile Number* (Mandatory)
                             _buildInputBox(
                               controller: _phoneController,
-                              hint: 'User Number*',
+                              hint: 'Mobile Number * (10 digits)',
                               icon: Icons.phone_android_outlined,
                               keyboardType: TextInputType.phone,
                               onChanged: (val) => setState(() {}),
@@ -462,34 +559,81 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
           vertical: Responsive.h(16),
         ),
         child: GestureDetector(
-          onTap: isFormValid
-              ? () {
-                  final newAddr = AddressModel(
-                    type: _selectedType,
-                    description: _houseController.text.trim().isNotEmpty
-                        ? '${_houseController.text.trim()}, $_addressText'
-                        : _addressText,
-                    phone: _phoneController.text.trim(),
-                    landmark: _landmarkController.text.trim(),
-                    imagePath: _landmarkImage?.path ?? _existingImagePath,
-                  );
-                  Navigator.pop(context, newAddr);
-                }
-              : null,
+          onTap: () {
+            if (_houseController.text.trim().isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Please enter House / Flat / Building No.'),
+                  backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(12))),
+                ),
+              );
+              return;
+            }
+            if (_nameController.text.trim().isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Please enter Receiver Name'),
+                  backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(12))),
+                ),
+              );
+              return;
+            }
+            if (_phoneController.text.trim().length < 10) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Please enter a valid 10-digit Mobile Number'),
+                  backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(12))),
+                ),
+              );
+              return;
+            }
+
+            final List<String> addressParts = [];
+            if (_houseController.text.trim().isNotEmpty) {
+              addressParts.add(_houseController.text.trim());
+            }
+            if (_floorController.text.trim().isNotEmpty) {
+              addressParts.add('Floor: ${_floorController.text.trim()}');
+            }
+            if (_addressText.trim().isNotEmpty &&
+                _addressText != 'Select delivery address location') {
+              addressParts.add(_addressText.trim());
+            }
+
+            final String fullDescription =
+                addressParts.isNotEmpty ? addressParts.join(', ') : _addressText;
+
+            final newAddr = AddressModel(
+              type: _selectedType,
+              description: fullDescription,
+              name: _nameController.text.trim(),
+              floor: _floorController.text.trim(),
+              phone: _phoneController.text.trim(),
+              landmark: _landmarkController.text.trim(),
+              imagePath: _landmarkImage?.path ?? _existingImagePath,
+            );
+            Navigator.pop(context, newAddr);
+          },
           child: Container(
             height: Responsive.h(48),
             decoration: BoxDecoration(
-              color: isFormValid ? AppColors.primary : Colors.grey.shade200,
+              color: isFormValid ? AppColors.primary : Colors.grey.shade400,
               borderRadius: BorderRadius.circular(Responsive.w(24)),
               border: Border.all(
-                color: isFormValid ? AppColors.primary : Colors.grey.shade300,
+                color: isFormValid ? AppColors.primary : Colors.grey.shade400,
                 width: 1.2,
               ),
             ),
             child: Center(
               child: CustomText.title(
                 'Save address',
-                color: isFormValid ? Colors.white : Colors.grey,
+                color: Colors.white,
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
               ),

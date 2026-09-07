@@ -605,6 +605,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     SizedBox(height: Responsive.h(6)),
                     _buildProfileOption(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'Your Orders',
+                      onTap: () {
+                        Navigator.of(context).pushNamed(RouteConstants.yourOrders);
+                      },
+                    ),
+                    SizedBox(height: Responsive.h(6)),
+                    _buildProfileOption(
                       icon: Icons.favorite_outline,
                       title: 'Wishlist',
                       onTap: () {

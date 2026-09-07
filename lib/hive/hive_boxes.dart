@@ -23,6 +23,7 @@ class HiveKeys {
   // Address
   static const String savedAddresses = 'saved_addresses';
   static const String selectedAddressIndex = 'selected_address_index';
+  static const String manualLocation = 'manual_location';
 
   // Complaints & Reports
   static const String myComplaints = 'my_complaints';
@@ -31,8 +32,10 @@ class HiveKeys {
   static const String myTransactions = 'my_transactions';
   static const String walletBalance = 'wallet_balance';
   static const String coinsBalance = 'coins_balance';
+  static const String referralClaimed = 'referral_claimed';
 
   // Settings
   static const String selectedLanguage = 'selected_language';
   static const String isDarkMode = 'is_dark_mode';
+  static const String hasSeenPermissionScreen = 'has_seen_permission_screen';
 }
