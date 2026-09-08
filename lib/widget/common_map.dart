@@ -22,7 +22,9 @@ class CommonMap extends StatefulWidget {
   final bool interactive;
   final bool showControls;
   final void Function(LatLng)? onTap;
+  final void Function(MapCamera, bool)? onPositionChanged;
   final MapController? mapController;
+  final LatLng? userLocationOverride; // manual/picked location shown as user pin
 
   const CommonMap({
     super.key,
@@ -38,7 +40,9 @@ class CommonMap extends StatefulWidget {
     this.interactive = true,
     this.showControls = false,
     this.onTap,
+    this.onPositionChanged,
     this.mapController,
+    this.userLocationOverride,
   });
 
   @override
@@ -55,6 +59,9 @@ class _CommonMapState extends State<CommonMap> {
     super.initState();
     _mapController = widget.mapController ?? MapController();
     _currentCenter = widget.center ?? LocationService.defaultLocation;
+    if (widget.showUserLocation) {
+      _userGpsLocation = LocationService.defaultLocation;
+    }
     _detectUserPosition();
   }
 
@@ -89,11 +96,12 @@ class _CommonMapState extends State<CommonMap> {
   Widget build(BuildContext context) {
     final List<Marker> allMarkers = [];
 
-    // 1. Add User live GPS marker if available
-    if (widget.showUserLocation && _userGpsLocation != null) {
+    // 1. Add User location marker - use override (manual pick) if provided, else GPS
+    final LatLng? effectiveUserPos = widget.userLocationOverride ?? _userGpsLocation;
+    if (widget.showUserLocation && effectiveUserPos != null) {
       allMarkers.add(
         Marker(
-          point: _userGpsLocation!,
+          point: effectiveUserPos,
           width: Responsive.w(44),
           height: Responsive.w(44),
           child: _buildUserLocationMarker(),
@@ -142,6 +150,7 @@ class _CommonMapState extends State<CommonMap> {
                     : InteractiveFlag.none,
               ),
               onTap: (tapPosition, point) => widget.onTap?.call(point),
+              onPositionChanged: widget.onPositionChanged,
             ),
             children: [
               TileLayer(

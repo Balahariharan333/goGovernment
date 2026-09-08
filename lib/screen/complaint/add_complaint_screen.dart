@@ -58,8 +58,27 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
     _detectLocation();
   }
 
-  Future<void> _detectLocation() async {
+  Future<void> _detectLocation({bool forceGps = false}) async {
     if (!mounted) return;
+
+    if (forceGps) {
+      await _resetToGps();
+      return;
+    }
+
+    if (LocationService.hasManualLocation) {
+      final mPos = LocationService.getManualPosition();
+      setState(() {
+        _currentLatLng = mPos != null
+            ? LatLng(mPos.latitude, mPos.longitude)
+            : LocationService.defaultLocation;
+        _currentAddress = LocationService.manualAddress ?? 'Custom Selected Location';
+        _isCustomLocation = true;
+        _isDetectingLocation = false;
+      });
+      return;
+    }
+
     setState(() => _isDetectingLocation = true);
     final pos = await LocationService.getCurrentPosition(
       requestPermission: true,
@@ -86,6 +105,40 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
           _currentAddress = 'Location not detected (Tap to retry)';
           _isDetectingLocation = false;
         });
+      }
+    }
+  }
+
+  Future<void> _resetToGps() async {
+    if (!mounted) return;
+    setState(() => _isDetectingLocation = true);
+
+    final pos = await LocationService.switchToLiveGps();
+    if (!mounted) return;
+
+    if (pos != null) {
+      final latLng = LatLng(pos.latitude, pos.longitude);
+      final addr = await LocationService.getAddressFromCoordinates(
+        pos.latitude,
+        pos.longitude,
+      );
+      if (mounted) {
+        setState(() {
+          _currentLatLng = latLng;
+          _currentAddress = addr;
+          _isCustomLocation = false;
+          _isDetectingLocation = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Switched to live GPS location'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        setState(() => _isDetectingLocation = false);
       }
     }
   }
@@ -407,6 +460,8 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                     LocationService.defaultLocation,
                                 zoom: 16.0,
                                 showUserLocation: true,
+                                userLocationOverride:
+                                    _isCustomLocation ? _currentLatLng : null,
                                 interactive: true,
                                 showControls: false,
                                 onTap: _onMiniMapTapped,
@@ -498,7 +553,7 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                               bottom: Responsive.h(10),
                               right: Responsive.w(12),
                               child: GestureDetector(
-                                onTap: _detectLocation,
+                                onTap: _resetToGps,
                                 child: Container(
                                   width: Responsive.w(36),
                                   height: Responsive.w(36),
@@ -714,7 +769,7 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
                                   GestureDetector(
-                                    onTap: _detectLocation,
+                                    onTap: _resetToGps,
                                     child: Container(
                                       padding: EdgeInsets.symmetric(
                                         horizontal: Responsive.w(8),

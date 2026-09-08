@@ -58,6 +58,16 @@ class HiveService {
     await _authBox.put(HiveKeys.userProfileImage, path);
   }
 
+  static String get citizenId {
+    final stored = _authBox.get('citizenId', defaultValue: '') as String;
+    if (stored.isNotEmpty) return stored;
+    
+    // Generate a unique citizen ID for this device if none exists
+    final newId = 'CTZ_${DateTime.now().millisecondsSinceEpoch}_${(1000 + DateTime.now().microsecond).toString()}';
+    _authBox.put('citizenId', newId);
+    return newId;
+  }
+
   static Future<void> saveProfile({
     required String name,
     required String email,
@@ -172,9 +182,13 @@ class HiveService {
   }
 
   static Map<String, dynamic>? getManualLocation() {
-    final raw = _addressBox.get(HiveKeys.manualLocation);
-    if (raw is Map) {
-      return Map<String, dynamic>.from(raw);
+    try {
+      final raw = _addressBox.get(HiveKeys.manualLocation);
+      if (raw is Map) {
+        return Map<String, dynamic>.from(raw);
+      }
+    } catch (_) {
+      return null;
     }
     return null;
   }
@@ -189,6 +203,10 @@ class HiveService {
       'longitude': longitude,
       'address': address,
     });
+  }
+
+  static Future<void> clearManualLocation() async {
+    await _addressBox.delete(HiveKeys.manualLocation);
   }
 
   // ----------------------------------------------------

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "520701809814",
+    "project_id": "gogovernment",
+    "storage_bucket": "gogovernment.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:520701809814:android:f4387248bd8b623fa05eb7",
+        "android_client_info": {
+          "package_name": "com.hikizo.goGovernment"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA1v1iaI6DiXGhjlV-hWbfsSDIG3Ryys0o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -32,12 +33,42 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
   final TextEditingController _landmarkController = TextEditingController();
   final MapController _mapController = MapController();
 
-  String _addressText = 'Select delivery address location';
+  LatLng _currentMapCenter = LocationService.defaultLocation;
+  String _addressText = LocationService.manualAddress ?? 'Select delivery address location';
   String _selectedType = 'Home'; // 'Home', 'Office', 'Others'
   bool _isKeyboardVisible = false;
   bool _isLoadingLocation = false;
   XFile? _landmarkImage;
   String? _existingImagePath;
+  Timer? _mapDragDebounce;
+  bool _isFromGps = false;
+
+  void _onMapPositionChanged(MapCamera camera, bool hasGesture) {
+    _currentMapCenter = camera.center;
+    if (hasGesture) {
+      _isFromGps = false;
+      _mapDragDebounce?.cancel();
+      _mapDragDebounce = Timer(const Duration(milliseconds: 500), () async {
+        if (!mounted) return;
+        setState(() => _isLoadingLocation = true);
+        final details = await LocationService.getDetailedAddressFromCoordinates(
+          camera.center.latitude,
+          camera.center.longitude,
+        );
+        if (!mounted) return;
+        setState(() {
+          if (details['house'] != null &&
+              details['house']!.isNotEmpty &&
+              details['house'] != 'Flat 101') {
+            _houseController.text = details['house']!;
+          }
+          _addressText = details['address'] ??
+              '${camera.center.latitude.toStringAsFixed(4)}, ${camera.center.longitude.toStringAsFixed(4)}';
+          _isLoadingLocation = false;
+        });
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -69,9 +100,14 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
 
   Future<void> _useCurrentLocation() async {
     setState(() => _isLoadingLocation = true);
-    final pos = await LocationService.getCurrentPosition(requestPermission: true);
+    final pos = await LocationService.getCurrentPosition(
+      requestPermission: true,
+      forceGps: true,
+    );
     if (!mounted) return;
     if (pos != null) {
+      _isFromGps = true;
+      _currentMapCenter = LatLng(pos.latitude, pos.longitude);
       final details = await LocationService.getDetailedAddressFromCoordinates(pos.latitude, pos.longitude);
       if (mounted) {
         setState(() {
@@ -154,6 +190,7 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
 
   @override
   void dispose() {
+    _mapDragDebounce?.cancel();
     _houseController.dispose();
     _floorController.dispose();
     _nameController.dispose();
@@ -235,9 +272,11 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
                             children: [
                               Positioned.fill(
                                 child: CommonMap(
-                                  mapState: MapState.directions,
+                                  mapState: MapState.list,
                                   isWalkMode: false,
+                                  center: _currentMapCenter,
                                   mapController: _mapController,
+                                  onPositionChanged: _onMapPositionChanged,
                                 ),
                               ),
                               // Floating Center Pin Marker
@@ -559,7 +598,7 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
           vertical: Responsive.h(16),
         ),
         child: GestureDetector(
-          onTap: () {
+          onTap: () async {
             if (_houseController.text.trim().isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -618,7 +657,21 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
               landmark: _landmarkController.text.trim(),
               imagePath: _landmarkImage?.path ?? _existingImagePath,
             );
-            Navigator.pop(context, newAddr);
+
+            final nav = Navigator.of(context);
+
+            // If user explicitly chose live GPS, keep GPS mode active; otherwise persist chosen pin as manual location
+            if (_isFromGps) {
+              await HiveService.clearManualLocation();
+            } else {
+              await HiveService.setManualLocation(
+                latitude: _currentMapCenter.latitude,
+                longitude: _currentMapCenter.longitude,
+                address: fullDescription,
+              );
+            }
+
+            nav.pop(newAddr);
           },
           child: Container(
             height: Responsive.h(48),

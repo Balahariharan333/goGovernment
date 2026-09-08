@@ -286,39 +286,46 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       // Back Button & Name
-                      Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.pop(context);
-                            },
-                            child: Container(
-                              width: Responsive.w(44),
-                              height: Responsive.w(44),
-                              decoration: BoxDecoration(
-                                color: AppColors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: AppColors.outliner,
-                                  width: Responsive.w(1.5),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.pop(context);
+                              },
+                              child: Container(
+                                width: Responsive.w(44),
+                                height: Responsive.w(44),
+                                decoration: BoxDecoration(
+                                  color: AppColors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: AppColors.outliner,
+                                    width: Responsive.w(1.5),
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.chevron_left,
+                                  color: AppColors.black,
+                                  size: Responsive.w(24),
                                 ),
                               ),
-                              child: Icon(
-                                Icons.chevron_left,
+                            ),
+                            SizedBox(width: Responsive.w(12)),
+                            Expanded(
+                              child: CustomText.header(
+                                widget.storeName,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
                                 color: AppColors.black,
-                                size: Responsive.w(24),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                          ),
-                          SizedBox(width: Responsive.w(12)),
-                          CustomText.header(
-                            widget.storeName,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.black,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      SizedBox(width: Responsive.w(10)),
 
                       // Directions button
                       CommonDirectionsButton(

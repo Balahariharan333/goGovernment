@@ -13,6 +13,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../service/location_service.dart';
+import '../../../network/ola_maps_service.dart';
+import '../../../constants/route_constants.dart';
+import '../../../hive/hive_service.dart';
 
 enum ToiletFlowState { list, directions, navigation }
 
@@ -26,69 +29,153 @@ class NearToiletScreen extends StatefulWidget {
 class _NearToiletScreenState extends State<NearToiletScreen> {
   late List<Map<String, dynamic>> _toilets;
   LatLng? _userPos;
+  String _locationLabel = 'Your Location';
+  bool _isManualLocation = false;
+
+  // Real-time ETA cache for selected items
+  final Map<int, String> _olaBikeDurationCache = {};
+  final Map<int, String> _olaWalkDurationCache = {};
+  int? _fetchingEtaForIndex;
 
   @override
   void initState() {
     super.initState();
+    // Load existing manual location if saved
+    if (LocationService.hasManualLocation) {
+      final manualPos = LocationService.getManualPosition();
+      final manualAddr = LocationService.manualAddress;
+      if (manualPos != null) {
+        _userPos = LatLng(manualPos.latitude, manualPos.longitude);
+        _isManualLocation = true;
+        _locationLabel = manualAddr ?? 'Manual Location';
+      }
+    } else {
+      _userPos = LocationService.defaultLocation;
+    }
     _initToilets();
+    _loadRealToilets();
     _detectLocation();
   }
 
+  void _fetchOlaEtasIfNeeded(int index) {
+    if (index < 0 || index >= _toilets.length) return;
+    if (_olaBikeDurationCache.containsKey(index) && _olaWalkDurationCache.containsKey(index)) return;
+    if (_fetchingEtaForIndex == index) return;
+    _fetchingEtaForIndex = index;
+
+    final toilet = _toilets[index];
+    final basePos = _userPos ?? LocationService.defaultLocation;
+    final dest = LatLng((toilet['lat'] as num).toDouble(), (toilet['lng'] as num).toDouble());
+
+    Future.microtask(() async {
+      try {
+        final bikeRes = await OlaMapsService.getDirections(
+          origin: basePos,
+          destination: dest,
+          mode: 'driving',
+        );
+        if (mounted && bikeRes != null && bikeRes.readableDuration.isNotEmpty) {
+          setState(() {
+            _olaBikeDurationCache[index] = bikeRes.readableDuration;
+          });
+        }
+      } catch (_) {}
+
+      try {
+        final walkRes = await OlaMapsService.getDirections(
+          origin: basePos,
+          destination: dest,
+          mode: 'walking',
+        );
+        if (mounted && walkRes != null && walkRes.readableDuration.isNotEmpty) {
+          setState(() {
+            _olaWalkDurationCache[index] = walkRes.readableDuration;
+          });
+        }
+      } catch (_) {}
+    });
+  }
+
   void _initToilets() {
+    final basePos = _userPos ?? LocationService.defaultLocation;
     _toilets = [
       {
-        'title': 'BBMP Public E-Toilet',
-        'address': 'Cubbon Park Main Gate, Bengaluru',
-        'lat': 12.9725,
-        'lng': 77.5955,
-        'distance': '260 m',
+        'title': 'Public Toilet (Locating...)',
+        'address': 'Searching nearby public restrooms...',
+        'lat': basePos.latitude + 0.0018,
+        'lng': basePos.longitude + 0.0012,
+        'distance': '...',
       },
       {
-        'title': 'Namma Toilet Facility',
-        'address': 'MG Road Metro Station, Bengaluru',
-        'lat': 12.9752,
-        'lng': 77.6065,
-        'distance': '310 m',
+        'title': 'Public Toilet (Locating...)',
+        'address': 'Searching nearby public restrooms...',
+        'lat': basePos.latitude - 0.0022,
+        'lng': basePos.longitude + 0.0018,
+        'distance': '...',
       },
       {
-        'title': 'Public Restroom Hub',
-        'address': 'Richmond Circle, Bengaluru',
-        'lat': 12.9645,
-        'lng': 77.5970,
-        'distance': '450 m',
-      },
-      {
-        'title': 'Community Sanitation Center',
-        'address': 'Brigade Road, Ashok Nagar, Bengaluru',
-        'lat': 12.9710,
-        'lng': 77.6075,
-        'distance': '520 m',
-      },
-      {
-        'title': 'Smart City E-Restroom',
-        'address': 'Residency Road, Bengaluru',
-        'lat': 12.9680,
-        'lng': 77.6020,
-        'distance': '680 m',
+        'title': 'Public Toilet (Locating...)',
+        'address': 'Searching nearby public restrooms...',
+        'lat': basePos.latitude + 0.0035,
+        'lng': basePos.longitude - 0.0025,
+        'distance': '...',
       },
     ];
+
+    _updateRealtimeDistances();
+  }
+
+  void _updateRealtimeDistances() {
+    final basePos = _userPos ?? LocationService.defaultLocation;
+    for (var toilet in _toilets) {
+      final dist = LocationService.calculateDistance(
+        basePos.latitude,
+        basePos.longitude,
+        toilet['lat'] as double,
+        toilet['lng'] as double,
+      );
+      toilet['distance'] = LocationService.formatDistance(dist);
+    }
+  }
+
+  Future<void> _loadRealToilets() async {
+    final basePos = _userPos ?? LocationService.defaultLocation;
+    final realPlaces = await LocationService.fetchRealNearbyFacilities(
+      keyword: 'public toilet',
+      center: basePos,
+      fallbackCategory: 'Public Toilet',
+    );
+
+    if (!mounted) return;
+    if (realPlaces.isNotEmpty) {
+      setState(() {
+        _toilets = realPlaces;
+      });
+    }
   }
 
   Future<void> _detectLocation() async {
+    // If manual location is active, don't override with GPS
+    if (_isManualLocation) return;
+
     final Position? pos = await LocationService.getCurrentPosition(requestPermission: false);
-    if (pos != null && mounted) {
+    final LatLng activePos = pos != null
+        ? LatLng(pos.latitude, pos.longitude)
+        : LocationService.defaultLocation;
+
+    if (mounted) {
+      final bool shifted = _userPos == null ||
+          ((_userPos!.latitude - activePos.latitude).abs() > 0.0005 ||
+              (_userPos!.longitude - activePos.longitude).abs() > 0.0005);
       setState(() {
-        _userPos = LatLng(pos.latitude, pos.longitude);
-        for (var toilet in _toilets) {
-          final dist = LocationService.calculateDistance(
-            pos.latitude,
-            pos.longitude,
-            toilet['lat'] as double,
-            toilet['lng'] as double,
-          );
-          toilet['distance'] = LocationService.formatDistance(dist);
-        }
+        _userPos = activePos;
+        _locationLabel = 'Your Location';
+        _isManualLocation = false;
+        _updateRealtimeDistances();
       });
+      if (shifted) {
+        _loadRealToilets();
+      }
     }
   }
 
@@ -127,6 +214,7 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
                                     ? MapState.directions
                                     : MapState.navigation,
                             isWalkMode: isWalkMode,
+                            userLocationOverride: _isManualLocation ? _userPos : null,
                             center: (flowState != ToiletFlowState.list && selectedToiletIndex < _toilets.length)
                                 ? LatLng(_toilets[selectedToiletIndex]['lat'] as double, _toilets[selectedToiletIndex]['lng'] as double)
                                 : _userPos,
@@ -173,54 +261,61 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
                     ),
                   ),
 
-                  // 2. Circle Back Button overlay (visible in list & directions modes)
+                  // 2. Circle Back Button & Location Picker overlay (visible in list & directions modes)
                   if (flowState != ToiletFlowState.navigation)
                     Positioned(
                       top: Responsive.h(10),
                       left: Responsive.w(20),
+                      right: Responsive.w(20),
                       child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          GestureDetector(
-                            onTap: () {
-                              if (flowState == ToiletFlowState.directions) {
-                                context.read<ToiletBloc>().add(ChangeToiletFlowStateEvent(ToiletFlowState.list));
-                              } else {
-                                Navigator.pop(context);
-                              }
-                            },
-                            child: Container(
-                              width: Responsive.w(44),
-                              height: Responsive.w(44),
-                              decoration: BoxDecoration(
-                                color: AppColors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: AppColors.outliner,
-                                  width: Responsive.w(1.5),
+                          Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  if (flowState == ToiletFlowState.directions) {
+                                    context.read<ToiletBloc>().add(ChangeToiletFlowStateEvent(ToiletFlowState.list));
+                                  } else {
+                                    Navigator.pop(context);
+                                  }
+                                },
+                                child: Container(
+                                  width: Responsive.w(44),
+                                  height: Responsive.w(44),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.white,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: AppColors.outliner,
+                                      width: Responsive.w(1.5),
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.chevron_left,
+                                    color: AppColors.black,
+                                    size: Responsive.w(24),
+                                  ),
                                 ),
                               ),
-                              child: Icon(
-                                Icons.chevron_left,
-                                color: AppColors.black,
-                                size: Responsive.w(24),
-                              ),
-                            ),
+                              SizedBox(width: Responsive.w(12)),
+                              if (flowState == ToiletFlowState.list)
+                                CustomText.header(
+                                  'Near Toilet',
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.black,
+                                ),
+                              if (flowState == ToiletFlowState.directions)
+                                CustomText.header(
+                                  'Directions',
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.black,
+                                ),
+                            ],
                           ),
-                          SizedBox(width: Responsive.w(12)),
-                          if (flowState == ToiletFlowState.list)
-                            CustomText.header(
-                              'Near Toilet',
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.black,
-                            ),
-                          if (flowState == ToiletFlowState.directions)
-                            CustomText.header(
-                              'Directions',
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.black,
-                            ),
+                          if (flowState == ToiletFlowState.list) _buildLocationPickerBadge(),
                         ],
                       ),
                     ),
@@ -262,6 +357,32 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
         );
 
       case ToiletFlowState.directions:
+        final basePos = _userPos ?? LocationService.defaultLocation;
+        final currentFacility = (selectedIndex >= 0 && selectedIndex < _toilets.length)
+            ? _toilets[selectedIndex]
+            : null;
+        final double distMeters = currentFacility != null
+            ? LocationService.calculateDistance(
+                basePos.latitude,
+                basePos.longitude,
+                (currentFacility['lat'] as num).toDouble(),
+                (currentFacility['lng'] as num).toDouble(),
+              )
+            : 350.0;
+
+        final int bikeEtaMins = LocationService.calculateEtaMinutes(distMeters, isWalking: false);
+        final int walkEtaMins = LocationService.calculateEtaMinutes(distMeters, isWalking: true);
+
+        final String bikeEtaStr = _olaBikeDurationCache[selectedIndex] ?? LocationService.formatEta(bikeEtaMins);
+        final String walkEtaStr = _olaWalkDurationCache[selectedIndex] ?? LocationService.formatEta(walkEtaMins);
+
+        final String activeEtaStr = isWalkMode ? walkEtaStr : bikeEtaStr;
+        final String displayDistance = (currentFacility != null && currentFacility['distance'] != null && currentFacility['distance'] != '...')
+            ? currentFacility['distance'] as String
+            : LocationService.formatDistance(distMeters);
+
+        _fetchOlaEtasIfNeeded(selectedIndex);
+
         return Stack(
           children: [
             // Top Location search overview card
@@ -295,7 +416,14 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
                           ),
                         ),
                         SizedBox(width: Responsive.w(16)),
-                        CustomText.title('Your Location', fontSize: 14),
+                        Expanded(
+                          child: CustomText.title(
+                            _isManualLocation ? _locationLabel : 'Your Location',
+                            fontSize: 14,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                     Padding(
@@ -314,7 +442,14 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
                           size: Responsive.w(14),
                         ),
                         SizedBox(width: Responsive.w(14)),
-                        CustomText.title(_toilets[selectedIndex]['title'], fontSize: 14),
+                        Expanded(
+                          child: CustomText.title(
+                            _toilets[selectedIndex]['title'] as String? ?? 'Near Toilet',
+                            fontSize: 14,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -357,7 +492,7 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
                         Expanded(
                           child: _buildModeTab(
                             icon: Icons.motorcycle,
-                            label: '1 min',
+                            label: bikeEtaStr,
                             isSelected: !isWalkMode,
                             onTap: () {
                               context.read<ToiletBloc>().add(ChangeToiletWalkModeEvent(false));
@@ -368,7 +503,7 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
                         Expanded(
                           child: _buildModeTab(
                             icon: Icons.directions_walk,
-                            label: '1 min',
+                            label: walkEtaStr,
                             isSelected: isWalkMode,
                             onTap: () {
                               context.read<ToiletBloc>().add(ChangeToiletWalkModeEvent(true));
@@ -381,9 +516,7 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
 
                     // Distance/Time summary text
                     CustomText.title(
-                      selectedIndex < _toilets.length
-                          ? '${isWalkMode ? '4 min' : '1 min'} (${_toilets[selectedIndex]['distance']})'
-                          : (isWalkMode ? '4 min (350 m)' : '1 min (350 m)'),
+                      '$activeEtaStr ($displayDistance)',
                       color: const Color(0xFF4CAF50),
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -392,18 +525,24 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
 
                     // Action Start button
                     GestureDetector(
-                      onTap: () async {
+                      onTap: () {
                         if (selectedIndex < _toilets.length) {
                           final toilet = _toilets[selectedIndex];
-                          await LocationService.launchTurnByTurnNavigation(
-                            destLat: toilet['lat'] as double,
-                            destLng: toilet['lng'] as double,
-                            address: toilet['address'] as String,
-                            isWalking: isWalkMode,
+                          Navigator.of(context).pushNamed(
+                            RouteConstants.directions,
+                            arguments: {
+                              'title': toilet['title'] as String? ?? 'Near Toilet',
+                              'address': toilet['address'] as String? ?? '',
+                              'destinationCoords': LatLng(
+                                (toilet['lat'] as num).toDouble(),
+                                (toilet['lng'] as num).toDouble(),
+                              ),
+                              // Pass current userPos (live GPS or manual pick) as origin
+                              'originCoords': _userPos,
+                              'isWalkMode': isWalkMode,
+                            },
                           );
                         }
-                        if (!context.mounted) return;
-                        context.read<ToiletBloc>().add(ChangeToiletFlowStateEvent(ToiletFlowState.navigation));
                       },
                       child: Container(
                         width: double.infinity,
@@ -420,7 +559,7 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
                           child: CustomText.title(
                             'Start',
                             color: AppColors.primary,
-                            fontSize: 16,
+                            fontSize: 15,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -434,6 +573,28 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
         );
 
       case ToiletFlowState.navigation:
+        final basePos = _userPos ?? LocationService.defaultLocation;
+        final currentFacility = (selectedIndex >= 0 && selectedIndex < _toilets.length)
+            ? _toilets[selectedIndex]
+            : null;
+        final double distMeters = currentFacility != null
+            ? LocationService.calculateDistance(
+                basePos.latitude,
+                basePos.longitude,
+                (currentFacility['lat'] as num).toDouble(),
+                (currentFacility['lng'] as num).toDouble(),
+              )
+            : 350.0;
+
+        final int activeMins = LocationService.calculateEtaMinutes(distMeters, isWalking: isWalkMode);
+        final String activeEtaStr = isWalkMode
+            ? (_olaWalkDurationCache[selectedIndex] ?? LocationService.formatEta(activeMins))
+            : (_olaBikeDurationCache[selectedIndex] ?? LocationService.formatEta(activeMins));
+        final String displayDistance = (currentFacility != null && currentFacility['distance'] != null && currentFacility['distance'] != '...')
+            ? currentFacility['distance'] as String
+            : LocationService.formatDistance(distMeters);
+        final String arrivalTime = LocationService.formatArrivalTime(activeMins);
+
         return Stack(
           children: [
             // Top Navigation Instruction bar
@@ -485,14 +646,14 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
               ),
             ),
 
-            // Bottom Navigation Active Progress bar
+            // Bottom Navigation HUD Controls
             Positioned(
-              bottom: Responsive.h(20),
+              bottom: Responsive.h(30),
               left: Responsive.w(20),
               right: Responsive.w(20),
               child: Row(
                 children: [
-                  // Cancel button
+                  // Close Navigation button
                   GestureDetector(
                     onTap: () {
                       context.read<ToiletBloc>().add(ChangeToiletFlowStateEvent(ToiletFlowState.directions));
@@ -500,10 +661,11 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
                     child: Container(
                       width: Responsive.w(48),
                       height: Responsive.w(48),
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         color: AppColors.white,
                         shape: BoxShape.circle,
-                        boxShadow: [
+                        border: Border.all(color: AppColors.outliner, width: 1.5),
+                        boxShadow: const [
                           BoxShadow(
                             color: Colors.black12,
                             blurRadius: 6,
@@ -519,7 +681,7 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
                   ),
                   SizedBox(width: Responsive.w(12)),
 
-                  // Center time progress bubble
+                  // Center time progress bubble with dynamic real-time data
                   Expanded(
                     child: Container(
                       height: Responsive.h(48),
@@ -538,14 +700,14 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             CustomText.title(
-                              isWalkMode ? '4 min' : '1 min',
+                              activeEtaStr,
                               color: const Color(0xFF4CAF50),
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
                             ),
                             SizedBox(width: Responsive.w(8)),
                             CustomText.subtitle(
-                              isWalkMode ? '(350 m) - 12:35 pm' : '(350 m) - 12:31 pm',
+                              '($displayDistance) · $arrivalTime',
                               fontSize: 12,
                               color: AppColors.grayFont,
                             ),
@@ -560,10 +722,11 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
                   Container(
                     width: Responsive.w(48),
                     height: Responsive.w(48),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.white,
                       shape: BoxShape.circle,
-                      boxShadow: [
+                      border: Border.all(color: AppColors.outliner, width: 1.5),
+                      boxShadow: const [
                         BoxShadow(
                           color: Colors.black12,
                           blurRadius: 6,
@@ -571,7 +734,7 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
                       ],
                     ),
                     child: Icon(
-                      Icons.gps_fixed,
+                      Icons.navigation,
                       color: AppColors.primary,
                       size: Responsive.w(20),
                     ),
@@ -590,10 +753,13 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
+    final cleanLabel = LocationService.cleanDurationString(label);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         height: Responsive.h(48),
+        padding: EdgeInsets.symmetric(horizontal: Responsive.w(6)),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFFFF2EC) : AppColors.white,
           borderRadius: BorderRadius.circular(Responsive.w(16)),
@@ -610,12 +776,16 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
               color: isSelected ? AppColors.primary : AppColors.grayFont,
               size: Responsive.w(20),
             ),
-            SizedBox(width: Responsive.w(8)),
-            CustomText.title(
-              label,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: isSelected ? AppColors.primary : AppColors.grayFont,
+            SizedBox(width: Responsive.w(6)),
+            Flexible(
+              child: CustomText.title(
+                cleanLabel,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? AppColors.primary : AppColors.grayFont,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -684,6 +854,179 @@ class _NearToiletScreenState extends State<NearToiletScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLocationPickerBadge() {
+    final hasManual = LocationService.hasManualLocation;
+    return GestureDetector(
+      onTap: _openLocationPickerSheet,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: Responsive.w(10),
+          vertical: Responsive.h(6),
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(Responsive.w(20)),
+          border: Border.all(
+            color: hasManual ? const Color(0xFFF57F17) : AppColors.primary,
+            width: 1.2,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              hasManual ? Icons.edit_location_alt : Icons.my_location,
+              size: 14,
+              color: hasManual ? const Color(0xFFF57F17) : AppColors.primary,
+            ),
+            SizedBox(width: Responsive.w(4)),
+            Text(
+              hasManual ? 'Manual' : 'Live GPS',
+              style: TextStyle(
+                color: hasManual ? const Color(0xFFF57F17) : AppColors.primary,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(width: Responsive.w(2)),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 16,
+              color: hasManual ? const Color(0xFFF57F17) : AppColors.primary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openLocationPickerSheet() async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: Responsive.w(20),
+            vertical: Responsive.h(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Change Toilet Search Location',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.black,
+                ),
+              ),
+              SizedBox(height: Responsive.h(12)),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE8F5E9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.my_location, color: Color(0xFF2E7D32)),
+                ),
+                title: const Text('Use Live GPS Location', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: const Text('Find public toilets near your live device coordinates', style: TextStyle(fontSize: 12)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final pos = await LocationService.switchToLiveGps();
+                  if (pos != null && mounted) {
+                    setState(() {
+                      _userPos = LatLng(pos.latitude, pos.longitude);
+                      _updateRealtimeDistances();
+                    });
+                    _loadRealToilets();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Switched to Live GPS location'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+              ),
+              const Divider(),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFFF3E0),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.map_outlined, color: Color(0xFFE65100)),
+                ),
+                title: const Text('Pick on Map / Search Area', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: const Text('Search any landmark, city, or drop a pin', style: TextStyle(fontSize: 12)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final result = await Navigator.pushNamed(context, RouteConstants.pickLocation);
+                  if (result is Map<String, dynamic>) {
+                    final isGps = result['isGps'] == true;
+                    if (isGps) {
+                      final pos = await LocationService.switchToLiveGps();
+                      if (pos != null && mounted) {
+                        setState(() {
+                          _userPos = LatLng(pos.latitude, pos.longitude);
+                          _updateRealtimeDistances();
+                        });
+                        _loadRealToilets();
+                      }
+                    } else if (result['latLng'] != null) {
+                      final latLng = result['latLng'] as LatLng;
+                      final addr = (result['address'] as String?) ?? 'Manual Location';
+                      await HiveService.setManualLocation(
+                        latitude: latLng.latitude,
+                        longitude: latLng.longitude,
+                        address: addr,
+                      );
+                      if (mounted) {
+                        setState(() {
+                          _userPos = latLng;
+                          _isManualLocation = true;
+                          _locationLabel = addr;
+                          // Clear ETA cache - will re-fetch for new origin
+                          _olaBikeDurationCache.clear();
+                          _olaWalkDurationCache.clear();
+                          _fetchingEtaForIndex = null;
+                          _updateRealtimeDistances();
+                        });
+                        _loadRealToilets();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Updated toilet location to: $addr'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

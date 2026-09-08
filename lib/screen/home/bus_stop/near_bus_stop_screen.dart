@@ -13,6 +13,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../service/location_service.dart';
+import '../../../network/ola_maps_service.dart';
+import '../../../constants/route_constants.dart';
+import '../../../hive/hive_service.dart';
 
 enum BusStopFlowState { list, directions, navigation }
 
@@ -26,69 +29,153 @@ class NearBusStopScreen extends StatefulWidget {
 class _NearBusStopScreenState extends State<NearBusStopScreen> {
   late List<Map<String, dynamic>> _busStops;
   LatLng? _userPos;
+  String _locationLabel = 'Your Location';
+  bool _isManualLocation = false;
+
+  // Real-time ETA cache for selected items
+  final Map<int, String> _olaBikeDurationCache = {};
+  final Map<int, String> _olaWalkDurationCache = {};
+  int? _fetchingEtaForIndex;
 
   @override
   void initState() {
     super.initState();
+    // Check if there's already a saved manual location
+    if (LocationService.hasManualLocation) {
+      final manualPos = LocationService.getManualPosition();
+      final manualAddr = LocationService.manualAddress;
+      if (manualPos != null) {
+        _userPos = LatLng(manualPos.latitude, manualPos.longitude);
+        _isManualLocation = true;
+        _locationLabel = manualAddr ?? 'Manual Location';
+      }
+    } else {
+      _userPos = LocationService.defaultLocation;
+    }
     _initBusStops();
+    _loadRealBusStops();
     _detectLocation();
   }
 
+  void _fetchOlaEtasIfNeeded(int index) {
+    if (index < 0 || index >= _busStops.length) return;
+    if (_olaBikeDurationCache.containsKey(index) && _olaWalkDurationCache.containsKey(index)) return;
+    if (_fetchingEtaForIndex == index) return;
+    _fetchingEtaForIndex = index;
+
+    final stop = _busStops[index];
+    final basePos = _userPos ?? LocationService.defaultLocation;
+    final dest = LatLng((stop['lat'] as num).toDouble(), (stop['lng'] as num).toDouble());
+
+    Future.microtask(() async {
+      try {
+        final bikeRes = await OlaMapsService.getDirections(
+          origin: basePos,
+          destination: dest,
+          mode: 'driving',
+        );
+        if (mounted && bikeRes != null && bikeRes.readableDuration.isNotEmpty) {
+          setState(() {
+            _olaBikeDurationCache[index] = bikeRes.readableDuration;
+          });
+        }
+      } catch (_) {}
+
+      try {
+        final walkRes = await OlaMapsService.getDirections(
+          origin: basePos,
+          destination: dest,
+          mode: 'walking',
+        );
+        if (mounted && walkRes != null && walkRes.readableDuration.isNotEmpty) {
+          setState(() {
+            _olaWalkDurationCache[index] = walkRes.readableDuration;
+          });
+        }
+      } catch (_) {}
+    });
+  }
+
   void _initBusStops() {
+    final basePos = _userPos ?? LocationService.defaultLocation;
     _busStops = [
       {
-        'title': 'BMTC Bus Stop - Corporation Circle',
-        'address': 'Kasturba Road, Corporation Circle, Bengaluru',
-        'lat': 12.9688,
-        'lng': 77.5912,
-        'distance': '120 m',
+        'title': 'Bus Stop (Locating...)',
+        'address': 'Searching nearby bus stops...',
+        'lat': basePos.latitude + 0.0010,
+        'lng': basePos.longitude - 0.0008,
+        'distance': '...',
       },
       {
-        'title': 'BMTC Bus Stop - Richmond Town',
-        'address': 'General KS Thimayya Road, Richmond Town, Bengaluru',
-        'lat': 12.9650,
-        'lng': 77.5990,
-        'distance': '240 m',
+        'title': 'Bus Stop (Locating...)',
+        'address': 'Searching nearby bus stops...',
+        'lat': basePos.latitude - 0.0018,
+        'lng': basePos.longitude + 0.0015,
+        'distance': '...',
       },
       {
-        'title': 'BMTC Bus Stop - Mayo Hall',
-        'address': 'MG Road, Ashok Nagar, Bengaluru',
-        'lat': 12.9730,
-        'lng': 77.6080,
-        'distance': '380 m',
-      },
-      {
-        'title': 'BMTC Bus Stop - Cubbon Park',
-        'address': 'Ambedkar Veedhi, Sampangi Rama Nagara, Bengaluru',
-        'lat': 12.9780,
-        'lng': 77.5925,
-        'distance': '450 m',
-      },
-      {
-        'title': 'BMTC Bus Stop - Halasuru',
-        'address': 'Old Madras Road, Halasuru, Bengaluru',
-        'lat': 12.9775,
-        'lng': 77.6250,
-        'distance': '610 m',
+        'title': 'Bus Stop (Locating...)',
+        'address': 'Searching nearby bus stops...',
+        'lat': basePos.latitude + 0.0028,
+        'lng': basePos.longitude + 0.0022,
+        'distance': '...',
       },
     ];
+
+    _updateRealtimeDistances();
+  }
+
+  void _updateRealtimeDistances() {
+    final basePos = _userPos ?? LocationService.defaultLocation;
+    for (var stop in _busStops) {
+      final dist = LocationService.calculateDistance(
+        basePos.latitude,
+        basePos.longitude,
+        stop['lat'] as double,
+        stop['lng'] as double,
+      );
+      stop['distance'] = LocationService.formatDistance(dist);
+    }
+  }
+
+  Future<void> _loadRealBusStops() async {
+    final basePos = _userPos ?? LocationService.defaultLocation;
+    final realPlaces = await LocationService.fetchRealNearbyFacilities(
+      keyword: 'bus stop',
+      center: basePos,
+      fallbackCategory: 'Bus Stop',
+    );
+
+    if (!mounted) return;
+    if (realPlaces.isNotEmpty) {
+      setState(() {
+        _busStops = realPlaces;
+      });
+    }
   }
 
   Future<void> _detectLocation() async {
+    // If manual location is active, don't override it with GPS
+    if (_isManualLocation) return;
+
     final Position? pos = await LocationService.getCurrentPosition(requestPermission: false);
-    if (pos != null && mounted) {
+    final LatLng activePos = pos != null
+        ? LatLng(pos.latitude, pos.longitude)
+        : LocationService.defaultLocation;
+
+    if (mounted) {
+      final bool shifted = _userPos == null ||
+          ((_userPos!.latitude - activePos.latitude).abs() > 0.0005 ||
+              (_userPos!.longitude - activePos.longitude).abs() > 0.0005);
       setState(() {
-        _userPos = LatLng(pos.latitude, pos.longitude);
-        for (var stop in _busStops) {
-          final dist = LocationService.calculateDistance(
-            pos.latitude,
-            pos.longitude,
-            stop['lat'] as double,
-            stop['lng'] as double,
-          );
-          stop['distance'] = LocationService.formatDistance(dist);
-        }
+        _userPos = activePos;
+        _locationLabel = 'Your Location';
+        _isManualLocation = false;
+        _updateRealtimeDistances();
       });
+      if (shifted) {
+        _loadRealBusStops();
+      }
     }
   }
 
@@ -125,6 +212,7 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
                                 : flowState == BusStopFlowState.directions
                                     ? MapState.directions
                                     : MapState.navigation,
+                            userLocationOverride: _isManualLocation ? _userPos : null,
                             isWalkMode: isWalkMode,
                             center: (flowState != BusStopFlowState.list && selectedBusStopIndex < _busStops.length)
                                 ? LatLng(_busStops[selectedBusStopIndex]['lat'] as double, _busStops[selectedBusStopIndex]['lng'] as double)
@@ -172,54 +260,61 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
                     ),
                   ),
 
-                  // 2. Circle Back Button & Title Overlay
+                  // 2. Circle Back Button & Location Picker overlay (visible in list & directions modes)
                   if (flowState != BusStopFlowState.navigation)
                     Positioned(
                       top: Responsive.h(10),
                       left: Responsive.w(20),
+                      right: Responsive.w(20),
                       child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          GestureDetector(
-                            onTap: () {
-                              if (flowState == BusStopFlowState.directions) {
-                                context.read<BusStopBloc>().add(ChangeBusStopFlowStateEvent(BusStopFlowState.list));
-                              } else {
-                                Navigator.pop(context);
-                              }
-                            },
-                            child: Container(
-                              width: Responsive.w(44),
-                              height: Responsive.w(44),
-                              decoration: BoxDecoration(
-                                color: AppColors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: AppColors.outliner,
-                                  width: Responsive.w(1.5),
+                          Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  if (flowState == BusStopFlowState.directions) {
+                                    context.read<BusStopBloc>().add(ChangeBusStopFlowStateEvent(BusStopFlowState.list));
+                                  } else {
+                                    Navigator.pop(context);
+                                  }
+                                },
+                                child: Container(
+                                  width: Responsive.w(44),
+                                  height: Responsive.w(44),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.white,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: AppColors.outliner,
+                                      width: Responsive.w(1.5),
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.chevron_left,
+                                    color: AppColors.black,
+                                    size: Responsive.w(24),
+                                  ),
                                 ),
                               ),
-                              child: Icon(
-                                Icons.chevron_left,
-                                color: AppColors.black,
-                                size: Responsive.w(24),
-                              ),
-                            ),
+                              SizedBox(width: Responsive.w(12)),
+                              if (flowState == BusStopFlowState.list)
+                                CustomText.header(
+                                  'Near Bus Stop',
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.black,
+                                ),
+                              if (flowState == BusStopFlowState.directions)
+                                CustomText.header(
+                                  'Directions',
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.black,
+                                ),
+                            ],
                           ),
-                          SizedBox(width: Responsive.w(12)),
-                          if (flowState == BusStopFlowState.list)
-                            CustomText.header(
-                              'Near Bus Stop',
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.black,
-                            ),
-                          if (flowState == BusStopFlowState.directions)
-                            CustomText.header(
-                              'Directions',
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.black,
-                            ),
+                          if (flowState == BusStopFlowState.list) _buildLocationPickerBadge(),
                         ],
                       ),
                     ),
@@ -261,6 +356,32 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
         );
 
       case BusStopFlowState.directions:
+        final basePos = _userPos ?? LocationService.defaultLocation;
+        final currentStop = (selectedIndex >= 0 && selectedIndex < _busStops.length)
+            ? _busStops[selectedIndex]
+            : null;
+        final double distMeters = currentStop != null
+            ? LocationService.calculateDistance(
+                basePos.latitude,
+                basePos.longitude,
+                (currentStop['lat'] as num).toDouble(),
+                (currentStop['lng'] as num).toDouble(),
+              )
+            : 350.0;
+
+        final int bikeEtaMins = LocationService.calculateEtaMinutes(distMeters, isWalking: false);
+        final int walkEtaMins = LocationService.calculateEtaMinutes(distMeters, isWalking: true);
+
+        final String bikeEtaStr = _olaBikeDurationCache[selectedIndex] ?? LocationService.formatEta(bikeEtaMins);
+        final String walkEtaStr = _olaWalkDurationCache[selectedIndex] ?? LocationService.formatEta(walkEtaMins);
+
+        final String activeEtaStr = isWalkMode ? walkEtaStr : bikeEtaStr;
+        final String displayDistance = (currentStop != null && currentStop['distance'] != null && currentStop['distance'] != '...')
+            ? currentStop['distance'] as String
+            : LocationService.formatDistance(distMeters);
+
+        _fetchOlaEtasIfNeeded(selectedIndex);
+
         return Stack(
           children: [
             // Top Location search overview card
@@ -294,7 +415,14 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
                           ),
                         ),
                         SizedBox(width: Responsive.w(16)),
-                        CustomText.title('Your Location', fontSize: 14),
+                        Expanded(
+                           child: CustomText.title(
+                             _isManualLocation ? _locationLabel : 'Your Location',
+                             fontSize: 14,
+                             maxLines: 1,
+                             overflow: TextOverflow.ellipsis,
+                           ),
+                         ),
                       ],
                     ),
                     Padding(
@@ -313,7 +441,14 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
                           size: Responsive.w(14),
                         ),
                         SizedBox(width: Responsive.w(14)),
-                        CustomText.title(_busStops[selectedIndex]['title'], fontSize: 14),
+                        Expanded(
+                          child: CustomText.title(
+                            _busStops[selectedIndex]['title'] as String? ?? 'Near Bus Stop',
+                            fontSize: 14,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -350,13 +485,13 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
                     ),
                     SizedBox(height: Responsive.h(16)),
 
-                    // Mode selectors
+                    // Mode selectors with dynamic real-time durations
                     Row(
                       children: [
                         Expanded(
                           child: _buildModeTab(
                             icon: Icons.motorcycle,
-                            label: '1 min',
+                            label: bikeEtaStr,
                             isSelected: !isWalkMode,
                             onTap: () {
                               context.read<BusStopBloc>().add(ChangeBusStopWalkModeEvent(false));
@@ -367,7 +502,7 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
                         Expanded(
                           child: _buildModeTab(
                             icon: Icons.directions_walk,
-                            label: '1 min',
+                            label: walkEtaStr,
                             isSelected: isWalkMode,
                             onTap: () {
                               context.read<BusStopBloc>().add(ChangeBusStopWalkModeEvent(true));
@@ -380,9 +515,7 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
 
                     // Distance/Time summary text
                     CustomText.title(
-                      selectedIndex < _busStops.length
-                          ? '${isWalkMode ? '4 min' : '1 min'} (${_busStops[selectedIndex]['distance']})'
-                          : (isWalkMode ? '4 min (350 m)' : '1 min (350 m)'),
+                      '$activeEtaStr ($displayDistance)',
                       color: const Color(0xFF4CAF50),
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -391,18 +524,24 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
 
                     // Action Start button
                     GestureDetector(
-                      onTap: () async {
+                      onTap: () {
                         if (selectedIndex < _busStops.length) {
                           final stop = _busStops[selectedIndex];
-                          await LocationService.launchTurnByTurnNavigation(
-                            destLat: stop['lat'] as double,
-                            destLng: stop['lng'] as double,
-                            address: stop['address'] as String,
-                            isWalking: isWalkMode,
+                          Navigator.of(context).pushNamed(
+                            RouteConstants.directions,
+                            arguments: {
+                              'title': stop['title'] as String? ?? 'Near Bus Stop',
+                              'address': stop['address'] as String? ?? '',
+                              'destinationCoords': LatLng(
+                                (stop['lat'] as num).toDouble(),
+                                (stop['lng'] as num).toDouble(),
+                              ),
+                              // Pass current userPos (live GPS or manual pick) as origin
+                              'originCoords': _userPos,
+                              'isWalkMode': isWalkMode,
+                            },
                           );
                         }
-                        if (!context.mounted) return;
-                        context.read<BusStopBloc>().add(ChangeBusStopFlowStateEvent(BusStopFlowState.navigation));
                       },
                       child: Container(
                         width: double.infinity,
@@ -433,6 +572,28 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
         );
 
       case BusStopFlowState.navigation:
+        final basePos = _userPos ?? LocationService.defaultLocation;
+        final currentStop = (selectedIndex >= 0 && selectedIndex < _busStops.length)
+            ? _busStops[selectedIndex]
+            : null;
+        final double distMeters = currentStop != null
+            ? LocationService.calculateDistance(
+                basePos.latitude,
+                basePos.longitude,
+                (currentStop['lat'] as num).toDouble(),
+                (currentStop['lng'] as num).toDouble(),
+              )
+            : 350.0;
+
+        final int activeMins = LocationService.calculateEtaMinutes(distMeters, isWalking: isWalkMode);
+        final String activeEtaStr = isWalkMode
+            ? (_olaWalkDurationCache[selectedIndex] ?? LocationService.formatEta(activeMins))
+            : (_olaBikeDurationCache[selectedIndex] ?? LocationService.formatEta(activeMins));
+        final String displayDistance = (currentStop != null && currentStop['distance'] != null && currentStop['distance'] != '...')
+            ? currentStop['distance'] as String
+            : LocationService.formatDistance(distMeters);
+        final String arrivalTime = LocationService.formatArrivalTime(activeMins);
+
         return Stack(
           children: [
             // Top Instruction Card Overlay
@@ -499,10 +660,11 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
                     child: Container(
                       width: Responsive.w(48),
                       height: Responsive.w(48),
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         color: AppColors.white,
                         shape: BoxShape.circle,
-                        boxShadow: [
+                        border: Border.all(color: AppColors.outliner, width: 1.5),
+                        boxShadow: const [
                           BoxShadow(
                             color: Colors.black12,
                             blurRadius: 6,
@@ -518,7 +680,7 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
                   ),
                   SizedBox(width: Responsive.w(12)),
 
-                  // Center time progress bubble
+                  // Center time progress bubble with dynamic real-time data
                   Expanded(
                     child: Container(
                       height: Responsive.h(48),
@@ -537,14 +699,14 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             CustomText.title(
-                              isWalkMode ? '4 min' : '1 min',
+                              activeEtaStr,
                               color: const Color(0xFF4CAF50),
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
                             ),
                             SizedBox(width: Responsive.w(8)),
                             CustomText.subtitle(
-                              isWalkMode ? '(350 m) - 12:35 pm' : '(350 m) - 12:31 pm',
+                              '($displayDistance) · $arrivalTime',
                               fontSize: 12,
                               color: AppColors.grayFont,
                             ),
@@ -559,10 +721,11 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
                   Container(
                     width: Responsive.w(48),
                     height: Responsive.w(48),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.white,
                       shape: BoxShape.circle,
-                      boxShadow: [
+                      border: Border.all(color: AppColors.outliner, width: 1.5),
+                      boxShadow: const [
                         BoxShadow(
                           color: Colors.black12,
                           blurRadius: 6,
@@ -570,7 +733,7 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
                       ],
                     ),
                     child: Icon(
-                      Icons.gps_fixed,
+                      Icons.navigation,
                       color: AppColors.primary,
                       size: Responsive.w(20),
                     ),
@@ -589,10 +752,13 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
+    final cleanLabel = LocationService.cleanDurationString(label);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         height: Responsive.h(48),
+        padding: EdgeInsets.symmetric(horizontal: Responsive.w(6)),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFFFF2EC) : AppColors.white,
           borderRadius: BorderRadius.circular(Responsive.w(16)),
@@ -609,12 +775,16 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
               color: isSelected ? AppColors.primary : AppColors.grayFont,
               size: Responsive.w(20),
             ),
-            SizedBox(width: Responsive.w(8)),
-            CustomText.title(
-              label,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: isSelected ? AppColors.primary : AppColors.grayFont,
+            SizedBox(width: Responsive.w(6)),
+            Flexible(
+              child: CustomText.title(
+                cleanLabel,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? AppColors.primary : AppColors.grayFont,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -683,6 +853,180 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLocationPickerBadge() {
+    final hasManual = LocationService.hasManualLocation;
+    return GestureDetector(
+      onTap: _openLocationPickerSheet,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: Responsive.w(10),
+          vertical: Responsive.h(6),
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(Responsive.w(20)),
+          border: Border.all(
+            color: hasManual ? const Color(0xFFF57F17) : AppColors.primary,
+            width: 1.2,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              hasManual ? Icons.edit_location_alt : Icons.my_location,
+              size: 14,
+              color: hasManual ? const Color(0xFFF57F17) : AppColors.primary,
+            ),
+            SizedBox(width: Responsive.w(4)),
+            Text(
+              hasManual ? 'Manual' : 'Live GPS',
+              style: TextStyle(
+                color: hasManual ? const Color(0xFFF57F17) : AppColors.primary,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(width: Responsive.w(2)),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 16,
+              color: hasManual ? const Color(0xFFF57F17) : AppColors.primary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+
+  Future<void> _openLocationPickerSheet() async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: Responsive.w(20),
+            vertical: Responsive.h(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Change Bus Stop Search Location',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.black,
+                ),
+              ),
+              SizedBox(height: Responsive.h(12)),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE8F5E9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.my_location, color: Color(0xFF2E7D32)),
+                ),
+                title: const Text('Use Live GPS Location', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: const Text('Find bus stops near your live device coordinates', style: TextStyle(fontSize: 12)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final pos = await LocationService.switchToLiveGps();
+                  if (pos != null && mounted) {
+                    setState(() {
+                      _userPos = LatLng(pos.latitude, pos.longitude);
+                      _updateRealtimeDistances();
+                    });
+                    _loadRealBusStops();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Switched to Live GPS location'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+              ),
+              const Divider(),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFFF3E0),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.map_outlined, color: Color(0xFFE65100)),
+                ),
+                title: const Text('Pick on Map / Search Area', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: const Text('Search any landmark, city, or drop a pin', style: TextStyle(fontSize: 12)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final result = await Navigator.pushNamed(context, RouteConstants.pickLocation);
+                  if (result is Map<String, dynamic>) {
+                    final isGps = result['isGps'] == true;
+                    if (isGps) {
+                      final pos = await LocationService.switchToLiveGps();
+                      if (pos != null && mounted) {
+                        setState(() {
+                          _userPos = LatLng(pos.latitude, pos.longitude);
+                          _updateRealtimeDistances();
+                        });
+                        _loadRealBusStops();
+                      }
+                    } else if (result['latLng'] != null) {
+                      final latLng = result['latLng'] as LatLng;
+                      final addr = (result['address'] as String?) ?? 'Manual Location';
+                      await HiveService.setManualLocation(
+                        latitude: latLng.latitude,
+                        longitude: latLng.longitude,
+                        address: addr,
+                      );
+                      if (mounted) {
+                        setState(() {
+                          _userPos = latLng;
+                          _isManualLocation = true;
+                          _locationLabel = addr;
+                          // Clear ETA cache — will re-fetch for new origin
+                          _olaBikeDurationCache.clear();
+                          _olaWalkDurationCache.clear();
+                          _fetchingEtaForIndex = null;
+                          _updateRealtimeDistances();
+                        });
+                        _loadRealBusStops();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Updated bus stop location to: $addr'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -102,6 +102,9 @@ class AppRouter {
           DirectionsScreen(
             title: args['title'] as String? ?? 'Directions',
             address: args['address'] as String? ?? '',
+            destinationCoords: args['destinationCoords'] as LatLng?,
+            originCoords: args['originCoords'] as LatLng?, // manual/picked location
+            initialWalkMode: args['isWalkMode'] as bool? ?? false,
           ),
           settings,
         );
@@ -209,6 +212,7 @@ class AppRouter {
           PickLocationScreen(
             initialLatLng: args['initialLatLng'] as LatLng?,
             initialAddress: args['initialAddress'] as String?,
+            isLiveGps: args['isLiveGps'] as bool?,
           ),
           settings,
         );

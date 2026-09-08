@@ -11,6 +11,7 @@ import '../../../widget/common_cart_badge.dart';
 import '../../../constants/route_constants.dart';
 import '../../../service/cart_manager.dart';
 import '../../../service/location_service.dart';
+import '../../../hive/hive_service.dart';
 
 class NearStoresScreen extends StatefulWidget {
   const NearStoresScreen({super.key});
@@ -28,7 +29,18 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
   @override
   void initState() {
     super.initState();
+    if (LocationService.hasManualLocation) {
+      final mPos = LocationService.getManualPosition();
+      if (mPos != null) {
+        _userPos = LatLng(mPos.latitude, mPos.longitude);
+      } else {
+        _userPos = LocationService.defaultLocation;
+      }
+    } else {
+      _userPos = LocationService.defaultLocation;
+    }
     _initStores();
+    _loadRealStores();
     _cartListener = () {
       if (mounted) setState(() {});
     };
@@ -37,69 +49,135 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
   }
 
   void _initStores() {
+    final basePos = _userPos ?? LocationService.defaultLocation;
     _stores = [
       {
         'id': '1',
-        'title': 'Sanjivani Medicals',
-        'address':
-            '552, 2nd Floor 16th Main, 15th Cross Rd, 4th Sector, HSR Layout, Bengaluru, Karnataka 560102',
+        'title': 'Pharmacy (Locating...)',
+        'address': 'Searching nearby medical stores...',
         'image': 'assets/images/medical.png',
         'type': 'medical',
-        'lat': 12.9116,
-        'lng': 77.6433,
-        'distance': '1.2 km',
+        'lat': basePos.latitude + 0.0028,
+        'lng': basePos.longitude + 0.0022,
+        'distance': '...',
       },
       {
         'id': '2',
-        'title': 'Bangalore Horticulture',
-        'address':
-            'No.12, 100 Feet Rd, near Doordarshan Kendra, Indiranagar, Bengaluru, Karnataka 560038',
+        'title': 'Grocery & Veggies (Locating...)',
+        'address': 'Searching nearby vegetable stores...',
         'image': 'assets/images/vegstore.png',
         'type': 'vegstore',
-        'lat': 12.9719,
-        'lng': 77.6412,
-        'distance': '2.4 km',
+        'lat': basePos.latitude - 0.0035,
+        'lng': basePos.longitude + 0.0028,
+        'distance': '...',
       },
       {
         'id': '3',
-        'title': 'Apothecary Pharmacy',
-        'address':
-            'Shop 4, ground floor, 5th Block, Koramangala, Bengaluru, Karnataka 560095',
+        'title': 'Pharmacy (Locating...)',
+        'address': 'Searching nearby medical stores...',
         'image': 'assets/images/medical.png',
         'type': 'medical',
-        'lat': 12.9352,
-        'lng': 77.6245,
-        'distance': '3.1 km',
+        'lat': basePos.latitude + 0.0055,
+        'lng': basePos.longitude - 0.0042,
+        'distance': '...',
       },
       {
         'id': '4',
-        'title': 'Organic Veggie Store',
-        'address':
-            '45, 9th Main Rd, opposite Shalini Ground, 5th Block, Jayanagar, Bengaluru, Karnataka 560041',
+        'title': 'Grocery & Veggies (Locating...)',
+        'address': 'Searching nearby vegetable stores...',
         'image': 'assets/images/vegstore.png',
         'type': 'vegstore',
-        'lat': 12.9250,
-        'lng': 77.5838,
-        'distance': '4.5 km',
+        'lat': basePos.latitude - 0.0075,
+        'lng': basePos.longitude - 0.0065,
+        'distance': '...',
       },
     ];
+
+    _updateRealtimeDistances();
+  }
+
+  void _updateRealtimeDistances() {
+    final basePos = _userPos ?? LocationService.defaultLocation;
+    for (var store in _stores) {
+      final dist = LocationService.calculateDistance(
+        basePos.latitude,
+        basePos.longitude,
+        store['lat'] as double,
+        store['lng'] as double,
+      );
+      store['distance'] = LocationService.formatDistance(dist);
+    }
+  }
+
+  Future<void> _loadRealStores() async {
+    final basePos = _userPos ?? LocationService.defaultLocation;
+    final realPharmacies = await LocationService.fetchRealNearbyFacilities(
+      keyword: 'pharmacy',
+      center: basePos,
+      fallbackCategory: 'Pharmacy',
+      limit: 2,
+    );
+
+    final realGroceries = await LocationService.fetchRealNearbyFacilities(
+      keyword: 'supermarket',
+      center: basePos,
+      fallbackCategory: 'Grocery & Veggies',
+      limit: 2,
+    );
+
+    final combined = <Map<String, dynamic>>[];
+    int counter = 1;
+    for (final p in realPharmacies) {
+      combined.add({
+        'id': '${counter++}',
+        'title': p['title'],
+        'address': p['address'],
+        'image': 'assets/images/medical.png',
+        'type': 'medical',
+        'lat': p['lat'],
+        'lng': p['lng'],
+        'distance': p['distance'],
+      });
+    }
+    for (final g in realGroceries) {
+      combined.add({
+        'id': '${counter++}',
+        'title': g['title'],
+        'address': g['address'],
+        'image': 'assets/images/vegstore.png',
+        'type': 'vegstore',
+        'lat': g['lat'],
+        'lng': g['lng'],
+        'distance': g['distance'],
+      });
+    }
+
+    if (!mounted) return;
+    if (combined.isNotEmpty) {
+      setState(() {
+        _stores = combined;
+      });
+    }
   }
 
   Future<void> _detectLocation() async {
+    if (LocationService.hasManualLocation) return;
     final Position? pos = await LocationService.getCurrentPosition(requestPermission: false);
-    if (pos != null && mounted) {
+    final LatLng activePos = pos != null
+        ? LatLng(pos.latitude, pos.longitude)
+        : LocationService.defaultLocation;
+
+    if (mounted) {
+      final bool shifted = _userPos == null ||
+          ((_userPos!.latitude - activePos.latitude).abs() > 0.0005 ||
+              (_userPos!.longitude - activePos.longitude).abs() > 0.0005);
       setState(() {
-        _userPos = LatLng(pos.latitude, pos.longitude);
-        for (var store in _stores) {
-          final dist = LocationService.calculateDistance(
-            pos.latitude,
-            pos.longitude,
-            store['lat'] as double,
-            store['lng'] as double,
-          );
-          store['distance'] = LocationService.formatDistance(dist);
-        }
+        _userPos = activePos;
+        _updateRealtimeDistances();
       });
+      if (shifted) {
+        _loadRealStores();
+      }
     }
   }
 
@@ -129,6 +207,7 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
                         mapState: MapState.list,
                         isWalkMode: false,
                         center: _userPos,
+                        userLocationOverride: LocationService.hasManualLocation ? _userPos : null,
                         markers: _stores.map((store) {
                           final isMedical = store['type'] == 'medical';
                           return Marker(
@@ -176,41 +255,48 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
                 ),
               ),
 
-              // 2. Back Button Overlay
+              // 2. Top Header with Back Button and Location Picker Badge
               Positioned(
                 top: Responsive.h(10),
                 left: Responsive.w(20),
+                right: Responsive.w(20),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.pop(context);
-                      },
-                      child: Container(
-                        width: Responsive.w(44),
-                        height: Responsive.w(44),
-                        decoration: BoxDecoration(
-                          color: AppColors.white,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppColors.outliner,
-                            width: Responsive.w(1.5),
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pop(context);
+                          },
+                          child: Container(
+                            width: Responsive.w(44),
+                            height: Responsive.w(44),
+                            decoration: BoxDecoration(
+                              color: AppColors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.outliner,
+                                width: Responsive.w(1.5),
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.chevron_left,
+                              color: AppColors.black,
+                              size: Responsive.w(24),
+                            ),
                           ),
                         ),
-                        child: Icon(
-                          Icons.chevron_left,
+                        SizedBox(width: Responsive.w(12)),
+                        CustomText.header(
+                          'Near Stores',
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                           color: AppColors.black,
-                          size: Responsive.w(24),
                         ),
-                      ),
+                      ],
                     ),
-                    SizedBox(width: Responsive.w(12)),
-                    CustomText.header(
-                      'Near Stores',
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.black,
-                    ),
+                    _buildLocationPickerBadge(),
                   ],
                 ),
               ),
@@ -381,6 +467,173 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLocationPickerBadge() {
+    final hasManual = LocationService.hasManualLocation;
+    return GestureDetector(
+      onTap: _openLocationPickerSheet,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: Responsive.w(10),
+          vertical: Responsive.h(6),
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(Responsive.w(20)),
+          border: Border.all(
+            color: hasManual ? const Color(0xFFF57F17) : AppColors.primary,
+            width: 1.2,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              hasManual ? Icons.edit_location_alt : Icons.my_location,
+              size: 14,
+              color: hasManual ? const Color(0xFFF57F17) : AppColors.primary,
+            ),
+            SizedBox(width: Responsive.w(4)),
+            Text(
+              hasManual ? 'Manual' : 'Live GPS',
+              style: TextStyle(
+                color: hasManual ? const Color(0xFFF57F17) : AppColors.primary,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(width: Responsive.w(2)),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 16,
+              color: hasManual ? const Color(0xFFF57F17) : AppColors.primary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openLocationPickerSheet() async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: Responsive.w(20),
+            vertical: Responsive.h(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Change Store Location',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.black,
+                ),
+              ),
+              SizedBox(height: Responsive.h(12)),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE8F5E9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.my_location, color: Color(0xFF2E7D32)),
+                ),
+                title: const Text('Use Live GPS Location', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: const Text('Find stores near your live device coordinates', style: TextStyle(fontSize: 12)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final pos = await LocationService.switchToLiveGps();
+                  if (pos != null && mounted) {
+                    setState(() {
+                      _userPos = LatLng(pos.latitude, pos.longitude);
+                      _updateRealtimeDistances();
+                    });
+                    _loadRealStores();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Switched to Live GPS location'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+              ),
+              const Divider(),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFFF3E0),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.map_outlined, color: Color(0xFFE65100)),
+                ),
+                title: const Text('Pick on Map / Search Area', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: const Text('Search any landmark, city, or drop a pin', style: TextStyle(fontSize: 12)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final result = await Navigator.pushNamed(context, RouteConstants.pickLocation);
+                  if (result is Map<String, dynamic>) {
+                    final isGps = result['isGps'] == true;
+                    if (isGps) {
+                      final pos = await LocationService.switchToLiveGps();
+                      if (pos != null && mounted) {
+                        setState(() {
+                          _userPos = LatLng(pos.latitude, pos.longitude);
+                          _updateRealtimeDistances();
+                        });
+                        _loadRealStores();
+                      }
+                    } else if (result['latLng'] != null) {
+                      final latLng = result['latLng'] as LatLng;
+                      final addr = (result['address'] as String?) ?? 'Manual Location';
+                      await HiveService.setManualLocation(
+                        latitude: latLng.latitude,
+                        longitude: latLng.longitude,
+                        address: addr,
+                      );
+                      if (mounted) {
+                        setState(() {
+                          _userPos = latLng;
+                          _updateRealtimeDistances();
+                        });
+                        _loadRealStores();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Updated stores location to: $addr'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:go_government/service/location_service.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../constants/route_constants.dart';
@@ -33,6 +34,7 @@ class _PermissionScreenState extends State<PermissionScreen> {
     final locationStatus = await Permission.location.status;
     if (locationStatus.isGranted) {
       await HiveService.setHasSeenPermissionScreen(true);
+      if (!mounted) return;
       final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       final isFirstTime = args?['isFirstTime'] ?? false;
       // If this screen was opened on restart (not first-time registration onboarding) and GPS is active,
@@ -83,6 +85,29 @@ class _PermissionScreenState extends State<PermissionScreen> {
     });
     if (status.isGranted) {
       await HiveService.setHasSeenPermissionScreen(true);
+      await HiveService.clearManualLocation();
+      setState(() {
+        _manualAddress = null;
+      });
+      final pos = await LocationService.getCurrentPosition(requestPermission: false, forceGps: true);
+      if (pos != null && mounted) {
+        final addr = await LocationService.getAddressFromCoordinates(pos.latitude, pos.longitude);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.gps_fixed, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('GPS Enabled: $addr', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                ],
+              ),
+              backgroundColor: AppColors.primary,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
     }
     if (status.isPermanentlyDenied) {
       _showSettingsNotice('Location');
@@ -97,15 +122,25 @@ class _PermissionScreenState extends State<PermissionScreen> {
       ),
     );
 
-    if (result != null && result['address'] != null) {
-      final LatLng latLng = result['latLng'] as LatLng;
-      final String addr = result['address'] as String;
+    if (result != null) {
+      if (result['isGps'] == true) {
+        await HiveService.clearManualLocation();
+        setState(() {
+          _manualAddress = null;
+          _isLocationGranted = true;
+        });
+        return;
+      }
 
-      await HiveService.setManualLocation(
-        latitude: latLng.latitude,
-        longitude: latLng.longitude,
-        address: addr,
-      );
+      if (result['address'] != null) {
+        final LatLng latLng = result['latLng'] as LatLng;
+        final String addr = result['address'] as String;
+
+        await HiveService.setManualLocation(
+          latitude: latLng.latitude,
+          longitude: latLng.longitude,
+          address: addr,
+        );
 
       // Also create a default address in saved addresses if empty
       final existingAddresses = HiveService.getSavedAddresses();
@@ -149,6 +184,7 @@ class _PermissionScreenState extends State<PermissionScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(12))),
         ),
       );
+      }
     }
   }
 

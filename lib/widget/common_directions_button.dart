@@ -1,20 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import '../utils/app_colors.dart';
 import '../utils/responsive_helper.dart';
 import '../widget/custom_text.dart';
 import '../constants/route_constants.dart';
+import '../service/location_service.dart';
 
 enum DirectionsButtonStyle { circle, wide, card }
 
 class CommonDirectionsButton extends StatelessWidget {
   final String title;
   final String address;
+  final LatLng? destinationCoords;
+  final LatLng? originCoords; // manual/picked location as route start
   final DirectionsButtonStyle style;
 
   const CommonDirectionsButton({
     super.key,
     required this.title,
     required this.address,
+    this.destinationCoords,
+    this.originCoords,
     required this.style,
   });
 
@@ -22,11 +28,21 @@ class CommonDirectionsButton extends StatelessWidget {
   Widget build(BuildContext context) {
     void onTap() {
       debugPrint("Directions button tapped for: $title - $address");
+      LatLng? effOrigin = originCoords;
+      if (effOrigin == null && LocationService.hasManualLocation) {
+        final mPos = LocationService.getManualPosition();
+        if (mPos != null) {
+          effOrigin = LatLng(mPos.latitude, mPos.longitude);
+        }
+      }
+
       Navigator.of(context).pushNamed(
         RouteConstants.directions,
         arguments: {
           'title': title,
           'address': address,
+          ...?destinationCoords != null ? {'destinationCoords': destinationCoords} : null,
+          ...?effOrigin != null ? {'originCoords': effOrigin} : null,
         },
       );
     }

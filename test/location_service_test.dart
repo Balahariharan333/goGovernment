@@ -23,5 +23,40 @@ void main() {
       expect(meters, greaterThan(1000));
       expect(meters, lessThan(3000));
     });
+
+    test('calculateEtaMinutes computes dynamic duration for bike and walk', () {
+      // 350 meters: ~1 min bike, ~5 min walk
+      expect(LocationService.calculateEtaMinutes(350, isWalking: false), 1);
+      expect(LocationService.calculateEtaMinutes(350, isWalking: true), 5);
+
+      // 1400 meters: ~4 min bike, ~18 min walk
+      expect(LocationService.calculateEtaMinutes(1400, isWalking: false), 4);
+      expect(LocationService.calculateEtaMinutes(1400, isWalking: true), 18);
+
+      // Edge cases
+      expect(LocationService.calculateEtaMinutes(0, isWalking: false), 1);
+      expect(LocationService.calculateEtaMinutes(-10, isWalking: true), 1);
+    });
+
+    test('formatEta formats minutes into friendly duration strings', () {
+      expect(LocationService.formatEta(1), '1 min');
+      expect(LocationService.formatEta(15), '15 min');
+      expect(LocationService.formatEta(60), '1 hr');
+      expect(LocationService.formatEta(75), '1 hr 15 min');
+      expect(LocationService.formatEta(130), '2 hr 10 min');
+    });
+
+    test('cleanDurationString removes redundant 0 hours and keeps minutes only', () {
+      expect(LocationService.cleanDurationString('0 hours 4 mins'), '4 mins');
+      expect(LocationService.cleanDurationString('0 hours 1 min'), '1 min');
+      expect(LocationService.cleanDurationString('0 hour 1 min'), '1 min');
+      expect(LocationService.cleanDurationString('0 hrs 14 mins'), '14 mins');
+      expect(LocationService.cleanDurationString('0 hr 25 min'), '25 min');
+      expect(LocationService.cleanDurationString('0 hours and 12 mins'), '12 mins');
+      expect(LocationService.cleanDurationString('0 hours, 12 mins'), '12 mins');
+      expect(LocationService.cleanDurationString('0 hours'), '1 min');
+      expect(LocationService.cleanDurationString('1 hour 15 mins'), '1 hour 15 mins');
+      expect(LocationService.cleanDurationString('2 hours'), '2 hours');
+    });
   });
 }

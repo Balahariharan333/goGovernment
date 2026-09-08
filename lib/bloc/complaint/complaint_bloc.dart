@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../hive/hive_service.dart';
 import 'complaint_event.dart';
 import 'complaint_state.dart';
+import '../../service/firebase_service.dart';
 
 class ComplaintBloc extends Bloc<ComplaintEvent, ComplaintState> {
   ComplaintBloc() : super(ComplaintState.initial()) {
@@ -15,14 +16,24 @@ class ComplaintBloc extends Bloc<ComplaintEvent, ComplaintState> {
 
     on<SubmitComplaintEvent>((event, emit) async {
       emit(state.copyWith(isSubmitting: true));
-      await Future.delayed(const Duration(milliseconds: 1000));
 
       final now = DateTime.now();
       final timeStr =
           "${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
 
+      final complaintId = 'CMP${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
+      final rawPath = event.imagePath ?? state.imageFile?.path;
+
+      String? remoteImagePath = rawPath;
+      if (rawPath != null && rawPath.isNotEmpty && !rawPath.startsWith('assets/')) {
+        final uploaded = await FirebaseService.uploadComplaintImage(rawPath, complaintId);
+        if (uploaded != null && uploaded.isNotEmpty) {
+          remoteImagePath = uploaded;
+        }
+      }
+
       final newComplaint = {
-        'id': 'CMP${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}',
+        'id': complaintId,
         'userName': HiveService.userName.isNotEmpty ? HiveService.userName : 'Citizen',
         'userAddress': (event.location != null && event.location!.isNotEmpty)
             ? event.location!
@@ -31,13 +42,18 @@ class ComplaintBloc extends Bloc<ComplaintEvent, ComplaintState> {
         'description': event.description,
         'status': 'Under Review',
         'statusColor': 0xFFFF5252,
-        'imagePath': event.imagePath ?? state.imageFile?.path,
+        'imagePath': remoteImagePath,
         'date': 'Today, $timeStr',
         'likesCount': 0,
         'isLiked': false,
         'comments': <Map<String, dynamic>>[],
       };
+      
+      // Save locally (optional fallback)
       await HiveService.saveComplaint(newComplaint);
+      
+      // Upload to Firebase Firestore in real-time
+      await FirebaseService.submitComplaint(newComplaint);
 
       emit(state.copyWith(isSubmitting: false, isSubmitted: true));
     });

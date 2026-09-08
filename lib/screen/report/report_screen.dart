@@ -8,6 +8,7 @@ import '../../bloc/report/report_bloc.dart';
 import '../../bloc/report/report_event.dart';
 import '../../bloc/report/report_state.dart';
 import '../../hive/hive_service.dart';
+import '../../widget/complaint_image_widget.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -569,6 +570,20 @@ class _ReportScreenState extends State<ReportScreen> {
               color: Colors.grey.shade600,
               maxLines: 2,
             ),
+            if (report['imagePath'] != null && report['imagePath'].toString().isNotEmpty) ...[
+              SizedBox(height: Responsive.h(10)),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(Responsive.w(14)),
+                child: SizedBox(
+                  height: Responsive.h(140),
+                  width: double.infinity,
+                  child: ComplaintImageWidget(
+                    imagePath: report['imagePath']?.toString(),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            ],
             SizedBox(height: Responsive.h(10)),
 
             // Status line

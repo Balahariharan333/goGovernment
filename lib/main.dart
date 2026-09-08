@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_government/bloc/coupon/coupon_bloc.dart';
 import 'package:go_government/bloc/direction/direction_bloc.dart';
@@ -26,6 +27,15 @@ import 'routes/app_router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase
+  try {
+    await Firebase.initializeApp();
+    debugPrint('[Main] Firebase initialized successfully');
+  } catch (e) {
+    debugPrint('[Main] Firebase initialization error: $e');
+  }
+
   await HiveService.init();
 
   // If citizen is logged in and device GPS permission is already active (granted in-app or in OS settings),

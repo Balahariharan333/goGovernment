@@ -8,8 +8,39 @@ import '../../constants/route_constants.dart';
 import '../../bloc/report/report_bloc.dart';
 import '../../bloc/report/report_state.dart';
 
-class HomeTab extends StatelessWidget {
+import 'package:latlong2/latlong.dart';
+import '../../hive/hive_service.dart';
+import '../../service/location_service.dart';
+
+class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
+
+  @override
+  State<HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<HomeTab> {
+  String? _liveGpsAddress;
+  bool _isLoadingLocation = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentAddress();
+  }
+
+  Future<void> _loadCurrentAddress() async {
+    if (!LocationService.hasManualLocation) {
+      if (mounted) setState(() => _isLoadingLocation = true);
+      final addr = await LocationService.getEffectiveAddress();
+      if (mounted) {
+        setState(() {
+          _liveGpsAddress = addr;
+          _isLoadingLocation = false;
+        });
+      }
+    }
+  }
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
@@ -74,7 +105,11 @@ class HomeTab extends StatelessWidget {
             _buildNotificationBell(context),
           ],
         ),
-        SizedBox(height: Responsive.h(24)),
+
+        // 1b. Active Location Chip
+        _buildLocationBanner(context),
+
+        SizedBox(height: Responsive.h(20)),
 
         // 2. Action Grid (2x2)
         GridView.count(
@@ -499,6 +534,254 @@ class HomeTab extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLocationBanner(BuildContext context) {
+    final hasManual = LocationService.hasManualLocation;
+    final rawAddress = hasManual
+        ? (LocationService.manualAddress ?? 'Manual Location')
+        : (_liveGpsAddress ?? (LocationService.cachedGpsAddress ?? 'Detecting GPS location...'));
+
+    String primaryTitle = '';
+    String secondarySubtitle = rawAddress;
+
+    if (_isLoadingLocation) {
+      primaryTitle = 'Detecting Location...';
+      secondarySubtitle = 'Connecting to GPS & Ola Maps...';
+    } else {
+      final commaIndex = rawAddress.indexOf(',');
+      if (commaIndex != -1 && commaIndex < rawAddress.length - 1) {
+        primaryTitle = rawAddress.substring(0, commaIndex).trim();
+        secondarySubtitle = rawAddress.substring(commaIndex + 1).trim();
+      } else {
+        primaryTitle = rawAddress.isNotEmpty ? rawAddress : (hasManual ? 'Selected Location' : 'Current Location');
+        secondarySubtitle = hasManual ? 'Custom pinned location' : 'Near your live coordinates';
+      }
+      if (primaryTitle.isEmpty) {
+        primaryTitle = hasManual ? 'Selected Location' : 'Current Location';
+      }
+    }
+
+    return GestureDetector(
+      onTap: () async {
+        final result = await Navigator.pushNamed(
+          context,
+          RouteConstants.pickLocation,
+          arguments: {
+            'initialLatLng': hasManual ? LocationService.defaultLocation : null,
+            'initialAddress': hasManual ? LocationService.manualAddress : _liveGpsAddress,
+            'isLiveGps': !hasManual,
+          },
+        );
+        if (result is Map<String, dynamic>) {
+          final isGps = result['isGps'] == true;
+          if (isGps) {
+            await HiveService.clearManualLocation();
+            if (result['address'] != null && (result['address'] as String).isNotEmpty) {
+              _liveGpsAddress = result['address'] as String;
+            } else {
+              _liveGpsAddress = await LocationService.getEffectiveAddress();
+            }
+          } else if (result['latLng'] != null && result['address'] != null) {
+            final latLng = result['latLng'] as LatLng;
+            final addr = result['address'] as String;
+            await HiveService.setManualLocation(
+              latitude: latLng.latitude,
+              longitude: latLng.longitude,
+              address: addr,
+            );
+          }
+          if (mounted) setState(() {});
+        }
+      },
+      child: Container(
+        margin: EdgeInsets.only(top: Responsive.h(12)),
+        padding: EdgeInsets.symmetric(
+          horizontal: Responsive.w(14),
+          vertical: Responsive.h(10),
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(Responsive.w(16)),
+          border: Border.all(
+            color: hasManual ? const Color(0xFFFFCC80) : AppColors.outliner,
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // 1. Clean Leading Icon with Soft Rounded Background
+            Container(
+              width: Responsive.w(38),
+              height: Responsive.w(38),
+              decoration: BoxDecoration(
+                color: hasManual
+                    ? const Color(0xFFFFF3E0)
+                    : AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(Responsive.w(12)),
+              ),
+              child: Icon(
+                hasManual ? Icons.edit_location_alt_rounded : Icons.my_location_rounded,
+                color: hasManual ? const Color(0xFFE65100) : AppColors.primary,
+                size: Responsive.w(18),
+              ),
+            ),
+            SizedBox(width: Responsive.w(10)),
+
+            // 2. Main Title (Locality) + Status Tag + Subtitle
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          primaryTitle,
+                          style: TextStyle(
+                            color: AppColors.black,
+                            fontSize: Responsive.sp(13),
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      SizedBox(width: Responsive.w(4)),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 16,
+                        color: AppColors.grayFont,
+                      ),
+                      SizedBox(width: Responsive.w(6)),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: Responsive.w(6),
+                          vertical: Responsive.h(2),
+                        ),
+                        decoration: BoxDecoration(
+                          color: hasManual ? const Color(0xFFFFF3E0) : const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(Responsive.w(6)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (!hasManual) ...[
+                              const Icon(Icons.gps_fixed, size: 9, color: Color(0xFF2E7D32)),
+                              SizedBox(width: Responsive.w(3)),
+                            ],
+                            Text(
+                              hasManual ? 'Manual' : 'Live GPS',
+                              style: TextStyle(
+                                fontSize: Responsive.sp(9),
+                                fontWeight: FontWeight.bold,
+                                color: hasManual ? const Color(0xFFE65100) : const Color(0xFF2E7D32),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: Responsive.h(2)),
+                  Text(
+                    secondarySubtitle,
+                    style: TextStyle(
+                      color: AppColors.grayFont,
+                      fontSize: Responsive.sp(11),
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(width: Responsive.w(8)),
+
+            // 3. Right Action: "Use GPS" quick button (when in manual) OR sleek chevron
+            if (hasManual)
+              GestureDetector(
+                onTap: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  setState(() => _isLoadingLocation = true);
+                  final pos = await LocationService.switchToLiveGps();
+                  if (pos != null) {
+                    _liveGpsAddress = await LocationService.getAddressFromCoordinates(
+                      pos.latitude,
+                      pos.longitude,
+                    );
+                  }
+                  if (mounted) {
+                    setState(() => _isLoadingLocation = false);
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: const Row(
+                          children: [
+                            Icon(Icons.gps_fixed, color: Colors.white, size: 18),
+                            SizedBox(width: 8),
+                            Text('Switched back to Live GPS Location'),
+                          ],
+                        ),
+                        backgroundColor: AppColors.primary,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    );
+                  }
+                },
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: Responsive.w(10),
+                    vertical: Responsive.h(6),
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F5E9),
+                    borderRadius: BorderRadius.circular(Responsive.w(14)),
+                    border: Border.all(color: const Color(0xFFA5D6A7), width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.my_location, size: 12, color: Color(0xFF2E7D32)),
+                      SizedBox(width: Responsive.w(4)),
+                      Text(
+                        'Use GPS',
+                        style: TextStyle(
+                          color: const Color(0xFF2E7D32),
+                          fontSize: Responsive.sp(11),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.06),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 11,
+                  color: AppColors.primary,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

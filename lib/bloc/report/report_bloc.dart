@@ -1,13 +1,32 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../hive/hive_service.dart';
 import 'report_event.dart';
 import 'report_state.dart';
+import '../../service/firebase_service.dart';
 
 class ReportBloc extends Bloc<ReportEvent, ReportState> {
   ReportBloc() : super(ReportState.initial()) {
-    on<LoadReportsEvent>((event, emit) {
-      final stored = HiveService.getMyComplaints();
-      emit(state.copyWith(myReports: stored));
+    on<LoadReportsEvent>((event, emit) async {
+      await emit.forEach(
+        FirebaseService.streamAllComplaints(),
+        onData: (List<Map<String, dynamic>> allComplaints) {
+          final myId = HiveService.citizenId;
+          final myReports = allComplaints.where((c) => c['citizenId'] == myId).toList();
+          final otherReports = allComplaints.where((c) => c['citizenId'] != myId).toList();
+          
+          return state.copyWith(
+            myReports: myReports,
+            otherReports: otherReports,
+          );
+        },
+        onError: (error, stackTrace) {
+          debugPrint('[ReportBloc] Error listening to complaints: $error');
+          // Fallback to local
+          final stored = HiveService.getMyComplaints();
+          return state.copyWith(myReports: stored);
+        },
+      );
     });
 
     on<ClearAllComplaintsEvent>((event, emit) async {
@@ -30,62 +49,21 @@ class ReportBloc extends Bloc<ReportEvent, ReportState> {
       emit(state.copyWith(myReports: updated));
     });
 
-    on<ToggleLikeReportEvent>((event, emit) {
-      List<Map<String, dynamic>> updateList(List<Map<String, dynamic>> list) {
-        return list.map((item) {
-          if (item['id'] == event.reportId) {
-            final map = Map<String, dynamic>.from(item);
-            final bool wasLiked = map['isLiked'] == true;
-            final int currentCount = (map['likesCount'] as num?)?.toInt() ?? 0;
-            map['isLiked'] = !wasLiked;
-            map['likesCount'] = !wasLiked ? currentCount + 1 : (currentCount > 0 ? currentCount - 1 : 0);
-            return map;
-          }
-          return item;
-        }).toList();
+    on<ToggleLikeReportEvent>((event, emit) async {
+      // Find the complaint to see if it's currently liked by us
+      final myId = HiveService.citizenId;
+      final allReports = [...state.myReports, ...state.otherReports];
+      final target = allReports.firstWhere((r) => r['id'] == event.reportId, orElse: () => {});
+      
+      if (target.isNotEmpty) {
+        final likedBy = List<String>.from(target['likedBy'] ?? []);
+        final isCurrentlyLiked = likedBy.contains(myId);
+        await FirebaseService.toggleLike(event.reportId, isCurrentlyLiked);
       }
-
-      final updatedMyReports = updateList(state.myReports);
-      final updatedOtherReports = updateList(state.otherReports);
-
-      HiveService.saveAllComplaints(updatedMyReports);
-
-      emit(state.copyWith(
-        myReports: updatedMyReports,
-        otherReports: updatedOtherReports,
-      ));
     });
 
-    on<AddCommentToReportEvent>((event, emit) {
-      List<Map<String, dynamic>> updateList(List<Map<String, dynamic>> list) {
-        return list.map((item) {
-          if (item['id'] == event.reportId) {
-            final map = Map<String, dynamic>.from(item);
-            final existingComments = List<dynamic>.from(map['comments'] ?? []);
-            final updatedComments = List<Map<String, dynamic>>.from(
-              existingComments.map((e) => Map<String, dynamic>.from(e as Map)),
-            );
-            updatedComments.add({
-              'userName': event.userName,
-              'comment': event.comment,
-              'date': 'Just now',
-            });
-            map['comments'] = updatedComments;
-            return map;
-          }
-          return item;
-        }).toList();
-      }
-
-      final updatedMyReports = updateList(state.myReports);
-      final updatedOtherReports = updateList(state.otherReports);
-
-      HiveService.saveAllComplaints(updatedMyReports);
-
-      emit(state.copyWith(
-        myReports: updatedMyReports,
-        otherReports: updatedOtherReports,
-      ));
+    on<AddCommentToReportEvent>((event, emit) async {
+      await FirebaseService.addComment(event.reportId, event.comment, event.userName);
     });
   }
 }

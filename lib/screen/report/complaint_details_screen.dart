@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../utils/app_colors.dart';
@@ -11,6 +10,7 @@ import '../../bloc/report/report_bloc.dart';
 import '../../bloc/report/report_event.dart';
 import '../../bloc/report/report_state.dart';
 import '../../hive/hive_service.dart';
+import '../../widget/complaint_image_widget.dart';
 
 class ComplaintDetailsScreen extends StatefulWidget {
   final Map<String, dynamic>? report;
@@ -68,18 +68,11 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
   }
 
   Widget _buildHeaderImage(String? imagePath) {
-    if (imagePath != null && imagePath.isNotEmpty) {
-      if (imagePath.startsWith('assets/')) {
-        return Image.asset(imagePath, fit: BoxFit.cover);
-      }
-      final file = File(imagePath);
-      if (file.existsSync()) {
-        return Image.file(file, fit: BoxFit.cover);
-      }
-    }
-    return Image.asset(
-      'assets/images/report1.png',
+    return ComplaintImageWidget(
+      imagePath: imagePath,
       fit: BoxFit.cover,
+      width: double.infinity,
+      height: Responsive.h(280),
     );
   }
 
