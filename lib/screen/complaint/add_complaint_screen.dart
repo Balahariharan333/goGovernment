@@ -299,6 +299,9 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                   Navigator.of(bc).pop();
                   final XFile? image = await picker.pickImage(
                     source: ImageSource.gallery,
+                    maxWidth: 1024,
+                    maxHeight: 1024,
+                    imageQuality: 75,
                   );
                   if (image != null) {
                     if (!context.mounted) return;
@@ -319,6 +322,9 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                   Navigator.of(bc).pop();
                   final XFile? image = await picker.pickImage(
                     source: ImageSource.camera,
+                    maxWidth: 1024,
+                    maxHeight: 1024,
+                    imageQuality: 75,
                   );
                   if (image != null) {
                     if (!context.mounted) return;

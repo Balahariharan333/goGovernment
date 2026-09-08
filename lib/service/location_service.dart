@@ -81,10 +81,16 @@ class LocationService {
 
     // 2. Otherwise query live device GPS
     try {
-      final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        debugPrint('[LocationService] Location services are disabled.');
-        return forceGps ? null : getManualPosition();
+        debugPrint('[LocationService] Location services are disabled on device.');
+        if (requestPermission) {
+          await Geolocator.openLocationSettings();
+          serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        }
+        if (!serviceEnabled) {
+          return forceGps ? null : getManualPosition();
+        }
       }
 
       LocationPermission permission = await Geolocator.checkPermission();
@@ -111,14 +117,35 @@ class LocationService {
         }
       } catch (_) {}
 
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 10),
-        ),
-      );
-      _cachedGpsPosition = pos;
-      return pos;
+      // Try high accuracy with 6s timeout, then fallback to medium (indoor/network)
+      Position? pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 6),
+          ),
+        );
+      } catch (highAccErr) {
+        debugPrint('[LocationService] High accuracy GPS timeout, trying network/medium: $highAccErr');
+        try {
+          pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.medium,
+              timeLimit: Duration(seconds: 5),
+            ),
+          );
+        } catch (_) {}
+      }
+
+      if (pos != null) {
+        _cachedGpsPosition = pos;
+        return pos;
+      }
+      if (_cachedGpsPosition != null) {
+        return _cachedGpsPosition;
+      }
+      return forceGps ? null : getManualPosition();
     } catch (e) {
       debugPrint('[LocationService] Error obtaining current position: $e');
       if (_cachedGpsPosition != null) {

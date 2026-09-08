@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_government/service/location_service.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -84,12 +85,17 @@ class _PermissionScreenState extends State<PermissionScreen> {
       _isLocationGranted = status.isGranted;
     });
     if (status.isGranted) {
+      final isGpsOn = await Geolocator.isLocationServiceEnabled();
+      if (!isGpsOn) {
+        await Geolocator.openLocationSettings();
+      }
       await HiveService.setHasSeenPermissionScreen(true);
       await HiveService.clearManualLocation();
+      await LocationService.switchToLiveGps();
       setState(() {
         _manualAddress = null;
       });
-      final pos = await LocationService.getCurrentPosition(requestPermission: false, forceGps: true);
+      final pos = await LocationService.getCurrentPosition(requestPermission: true, forceGps: true);
       if (pos != null && mounted) {
         final addr = await LocationService.getAddressFromCoordinates(pos.latitude, pos.longitude);
         if (mounted) {
@@ -230,6 +236,11 @@ class _PermissionScreenState extends State<PermissionScreen> {
       if (locStatus.isGranted) {
         _isLocationGranted = true;
         await HiveService.setHasSeenPermissionScreen(true);
+        await HiveService.clearManualLocation();
+        await LocationService.switchToLiveGps();
+        setState(() {
+          _manualAddress = null;
+        });
       }
     }
     if (!_isCameraGranted) {
@@ -428,6 +439,8 @@ class _PermissionScreenState extends State<PermissionScreen> {
     // so on app restart, the permission screen will show again until GPS location is enabled!
     if (_isLocationGranted) {
       await HiveService.setHasSeenPermissionScreen(true);
+      await HiveService.clearManualLocation();
+      await LocationService.switchToLiveGps();
     } else {
       await HiveService.setHasSeenPermissionScreen(false);
     }
@@ -633,8 +646,8 @@ class _PermissionScreenState extends State<PermissionScreen> {
   }
 
   Widget _buildLocationPermissionCard() {
-    final bool isGpsActive = _isLocationGranted;
     final bool hasManual = _manualAddress != null && _manualAddress!.isNotEmpty;
+    final bool isGpsActive = _isLocationGranted && !hasManual;
     final bool isLocationReady = isGpsActive || hasManual;
 
     return Container(

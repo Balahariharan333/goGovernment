@@ -7,9 +7,19 @@ import '../hive/hive_service.dart';
 
 class FirebaseService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static final FirebaseStorage _storage = FirebaseStorage.instance;
+  static FirebaseStorage get _storage {
+    try {
+      return FirebaseStorage.instanceFor(bucket: 'gs://gogovernment.firebasestorage.app');
+    } catch (_) {
+      try {
+        return FirebaseStorage.instanceFor(bucket: 'gogovernment.firebasestorage.app');
+      } catch (_) {
+        return FirebaseStorage.instance;
+      }
+    }
+  }
 
-  // Upload complaint image to Firebase Storage with Base64 fallback
+  // Upload complaint image to Firebase Storage with reliable Base64 fallback
   static Future<String?> uploadComplaintImage(String localPath, String complaintId) async {
     try {
       final file = File(localPath);
@@ -18,25 +28,26 @@ class FirebaseService {
         return localPath;
       }
 
-      // 1. Try Firebase Storage upload
+      // 1. Try Firebase Storage upload (creates https://firebasestorage.googleapis.com/... URL)
       try {
         final storageRef = _storage.ref().child('complaints').child('$complaintId.jpg');
-        final metadata = SettableMetadata(contentType: 'image/jpeg');
+        final metadata = SettableMetadata(
+          contentType: 'image/jpeg',
+          cacheControl: 'public,max-age=31536000',
+        );
         final uploadTask = await storageRef.putFile(file, metadata);
         final downloadUrl = await uploadTask.ref.getDownloadURL();
-        debugPrint('[FirebaseService] Uploaded image to Firebase Storage: $downloadUrl');
+        debugPrint('[FirebaseService] Successfully uploaded to Firebase Storage: $downloadUrl');
         return downloadUrl;
       } catch (storageErr) {
-        debugPrint('[FirebaseService] Firebase Storage upload error ($storageErr), trying Base64 fallback...');
+        debugPrint('[FirebaseService] Firebase Storage upload error: $storageErr');
+        debugPrint('[FirebaseService] If unauthorized, update Firebase Console -> Storage -> Rules to: allow read, write: if true;');
       }
 
-      // 2. Base64 fallback for cross-device visibility
+      // 2. Base64 fallback for cross-device visibility if Firebase Storage rules are locked
       final bytes = await file.readAsBytes();
-      if (bytes.length <= 800 * 1024) {
-        final b64 = base64Encode(bytes);
-        return 'data:image/jpeg;base64,$b64';
-      }
-      return localPath;
+      final b64 = base64Encode(bytes);
+      return 'data:image/jpeg;base64,$b64';
     } catch (e) {
       debugPrint('[FirebaseService] uploadComplaintImage error: $e');
       return localPath;
