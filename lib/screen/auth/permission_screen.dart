@@ -276,16 +276,21 @@ class _PermissionScreenState extends State<PermissionScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (modalCtx) {
-        return Container(
-          padding: EdgeInsets.symmetric(horizontal: Responsive.w(20), vertical: Responsive.h(20)),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(Responsive.w(24))),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+        return SafeArea(
+          top: false,
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: Responsive.w(20), vertical: Responsive.h(16)),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(Responsive.w(24))),
+            ),
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
               Container(
                 width: Responsive.w(40),
                 height: Responsive.h(4),
@@ -403,8 +408,10 @@ class _PermissionScreenState extends State<PermissionScreen> {
               SizedBox(height: Responsive.h(10)),
             ],
           ),
-        );
-      },
+        ),
+      ),
+    );
+  },
     );
   }
 
