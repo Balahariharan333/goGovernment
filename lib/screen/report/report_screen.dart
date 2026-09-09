@@ -9,6 +9,9 @@ import '../../bloc/report/report_event.dart';
 import '../../bloc/report/report_state.dart';
 import '../../hive/hive_service.dart';
 import '../../widget/complaint_image_widget.dart';
+import '../../widget/motion/bouncing_button.dart';
+import '../../widget/motion/fade_slide_transition.dart';
+import '../../widget/motion/sliding_segmented_bar.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -93,67 +96,13 @@ class _ReportScreenState extends State<ReportScreen> {
             ),
             SizedBox(height: Responsive.h(20)),
 
-            // 2. Custom Double-Tab Capsule Bar
-            Container(
-              width: double.infinity,
-              height: Responsive.h(50),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF2EC), // Peach background capsule
-                borderRadius: BorderRadius.circular(Responsive.w(16)),
-              ),
-              padding: EdgeInsets.all(Responsive.w(4)),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        context.read<ReportBloc>().add(ToggleActivityTypeEvent(true));
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isMyActivity ? AppColors.white : Colors.transparent,
-                          borderRadius: BorderRadius.circular(Responsive.w(12)),
-                          border: isMyActivity
-                              ? Border.all(color: AppColors.primary, width: Responsive.w(1.5))
-                              : null,
-                        ),
-                        child: Center(
-                          child: CustomText.title(
-                            'My Activity',
-                            color: isMyActivity ? AppColors.primary : AppColors.grayFont,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        context.read<ReportBloc>().add(ToggleActivityTypeEvent(false));
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: !isMyActivity ? AppColors.white : Colors.transparent,
-                          borderRadius: BorderRadius.circular(Responsive.w(12)),
-                          border: !isMyActivity
-                              ? Border.all(color: AppColors.primary, width: Responsive.w(1.5))
-                              : null,
-                        ),
-                        child: Center(
-                          child: CustomText.title(
-                            'Other Activity',
-                            color: !isMyActivity ? AppColors.primary : AppColors.grayFont,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            // 2. Custom Sliding Segmented Bar with Smooth Pill Motion
+            SlidingSegmentedBar(
+              labels: const ['My Activity', 'Community'],
+              selectedIndex: isMyActivity ? 0 : 1,
+              onTabSelected: (index) {
+                context.read<ReportBloc>().add(ToggleActivityTypeEvent(index == 0));
+              },
             ),
             SizedBox(height: Responsive.h(20)),
 
@@ -175,7 +124,7 @@ class _ReportScreenState extends State<ReportScreen> {
             ),
             SizedBox(height: Responsive.h(20)),
 
-            // 4. List of report cards
+            // 4. Staggered animated report cards
             if (filteredList.isEmpty)
               Center(
                 child: Padding(
@@ -228,9 +177,12 @@ class _ReportScreenState extends State<ReportScreen> {
                 itemCount: filteredList.length,
                 itemBuilder: (context, index) {
                   final report = filteredList[index];
-                  return Padding(
-                    padding: EdgeInsets.only(bottom: Responsive.h(16)),
-                    child: _buildReportCard(context, report),
+                  return FadeSlideTransitionWidget(
+                    index: index,
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: Responsive.h(16)),
+                      child: _buildReportCard(context, report),
+                    ),
                   );
                 },
               ),
@@ -477,16 +429,19 @@ class _ReportScreenState extends State<ReportScreen> {
     final bool isLiked = report['isLiked'] == true;
     final int likesCount = (report['likesCount'] as num?)?.toInt() ?? 0;
     final List<dynamic> comments = List.from(report['comments'] ?? []);
+    final String status = report['status']?.toString() ?? 'Under Review';
+    final Color statusColor = _getStatusColor(report['statusColor'], status);
 
-    return GestureDetector(
+    return BouncingButton(
+      scaleFactor: 0.98,
       onTap: () {
         Navigator.of(context).pushNamed(
           RouteConstants.complaintDetails,
           arguments: {
             'report': report,
             'userName': report['userName'] ?? 'User',
-            'status': report['status'] ?? 'Under Review',
-            'statusColor': _getStatusColor(report['statusColor'], report['status']),
+            'status': status,
+            'statusColor': statusColor,
             'category': report['category'] ?? 'Road Damage',
             'description': report['description'] ?? '',
             'id': reportId,
@@ -500,21 +455,33 @@ class _ReportScreenState extends State<ReportScreen> {
         padding: EdgeInsets.all(Responsive.w(16)),
         decoration: BoxDecoration(
           color: AppColors.white,
-          borderRadius: BorderRadius.circular(Responsive.w(20)),
+          borderRadius: BorderRadius.circular(Responsive.w(22)),
           border: Border.all(
             color: AppColors.outliner,
-            width: Responsive.w(1.5),
+            width: 1.2,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
+            BoxShadow(
+              color: statusColor.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // User info row
+            // User info row + Glowing Status Pill
             Row(
               children: [
                 Container(
-                  width: Responsive.w(38),
-                  height: Responsive.w(38),
+                  width: Responsive.w(40),
+                  height: Responsive.w(40),
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     image: DecorationImage(
@@ -529,16 +496,57 @@ class _ReportScreenState extends State<ReportScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       CustomText.title(
-                        report['userName'] ?? 'User',
-                        fontSize: 13,
+                        report['userName'] ?? 'Citizen',
+                        fontSize: 13.5,
                         fontWeight: FontWeight.bold,
                       ),
                       SizedBox(height: Responsive.h(2)),
                       CustomText.subtitle(
                         report['userAddress'] ?? 'HSR Layout, Bengaluru',
-                        fontSize: 10,
+                        fontSize: 10.5,
                         color: AppColors.grayFont,
                         maxLines: 1,
+                      ),
+                    ],
+                  ),
+                ),
+                // Glowing Status Badge Pill
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: Responsive.w(10),
+                    vertical: Responsive.h(4),
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(Responsive.w(12)),
+                    border: Border.all(color: statusColor.withValues(alpha: 0.35), width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: statusColor,
+                          boxShadow: [
+                            BoxShadow(
+                              color: statusColor.withValues(alpha: 0.6),
+                              blurRadius: 4,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(width: Responsive.w(5)),
+                      Text(
+                        status,
+                        style: TextStyle(
+                          fontSize: Responsive.sp(11),
+                          fontWeight: FontWeight.bold,
+                          color: statusColor,
+                        ),
                       ),
                     ],
                   ),
@@ -553,12 +561,12 @@ class _ReportScreenState extends State<ReportScreen> {
               fontSize: 11,
               color: AppColors.grayFont,
             ),
-            SizedBox(height: Responsive.h(6)),
+            SizedBox(height: Responsive.h(4)),
 
             // Category
             CustomText.title(
               report['category'] ?? 'Road Damage',
-              fontSize: 14,
+              fontSize: 14.5,
               fontWeight: FontWeight.bold,
             ),
             SizedBox(height: Responsive.h(4)),
@@ -566,16 +574,16 @@ class _ReportScreenState extends State<ReportScreen> {
             // Description
             CustomText.body(
               report['description'] ?? '',
-              fontSize: 12,
-              color: Colors.grey.shade600,
+              fontSize: 12.5,
+              color: Colors.grey.shade700,
               maxLines: 2,
             ),
             if (report['imagePath'] != null && report['imagePath'].toString().isNotEmpty) ...[
-              SizedBox(height: Responsive.h(10)),
+              SizedBox(height: Responsive.h(12)),
               ClipRRect(
-                borderRadius: BorderRadius.circular(Responsive.w(14)),
+                borderRadius: BorderRadius.circular(Responsive.w(16)),
                 child: SizedBox(
-                  height: Responsive.h(140),
+                  height: Responsive.h(150),
                   width: double.infinity,
                   child: ComplaintImageWidget(
                     imagePath: report['imagePath']?.toString(),
@@ -584,76 +592,77 @@ class _ReportScreenState extends State<ReportScreen> {
                 ),
               ),
             ],
-            SizedBox(height: Responsive.h(10)),
-
-            // Status line
-            RichText(
-              text: TextSpan(
-                text: 'Status: ',
-                style: TextStyle(
-                  fontSize: Responsive.sp(12),
-                  color: AppColors.black,
-                  fontWeight: FontWeight.w500,
-                ),
-                children: [
-                  TextSpan(
-                    text: report['status'] ?? 'Under Review',
-                    style: TextStyle(
-                      color: _getStatusColor(report['statusColor'], report['status']),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
             SizedBox(height: Responsive.h(12)),
 
             // Divider
-            Divider(color: Colors.grey.shade200, height: 1),
+            Divider(color: Colors.grey.shade100, height: 1),
             SizedBox(height: Responsive.h(10)),
 
-            // Like + Comment row
+            // Like + Comment row with Bouncing Buttons
             Row(
               children: [
-                GestureDetector(
+                BouncingButton(
+                  scaleFactor: 0.88,
                   onTap: () {
                     if (reportId.isNotEmpty) {
                       context.read<ReportBloc>().add(ToggleLikeReportEvent(reportId));
                     }
                   },
-                  child: Row(
-                    children: [
-                      Icon(
-                        isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
-                        size: Responsive.w(16),
-                        color: isLiked ? AppColors.primary : AppColors.grayFont,
-                      ),
-                      SizedBox(width: Responsive.w(4)),
-                      CustomText.subtitle(
-                        '$likesCount',
-                        fontSize: 12,
-                        color: isLiked ? AppColors.primary : AppColors.grayFont,
-                      ),
-                    ],
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: Responsive.w(10),
+                      vertical: Responsive.h(6),
+                    ),
+                    decoration: BoxDecoration(
+                      color: isLiked ? AppColors.primary.withValues(alpha: 0.08) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(Responsive.w(10)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                          size: Responsive.w(16),
+                          color: isLiked ? AppColors.primary : AppColors.grayFont,
+                        ),
+                        SizedBox(width: Responsive.w(6)),
+                        CustomText.subtitle(
+                          '$likesCount',
+                          fontSize: 12,
+                          fontWeight: isLiked ? FontWeight.bold : FontWeight.normal,
+                          color: isLiked ? AppColors.primary : AppColors.grayFont,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                SizedBox(width: Responsive.w(20)),
-                GestureDetector(
+                SizedBox(width: Responsive.w(16)),
+                BouncingButton(
+                  scaleFactor: 0.88,
                   onTap: () => _showCommentsBottomSheet(context, report),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.chat_bubble_outline,
-                        size: Responsive.w(16),
-                        color: AppColors.grayFont,
-                      ),
-                      SizedBox(width: Responsive.w(4)),
-                      CustomText.subtitle(
-                        '${comments.length}',
-                        fontSize: 12,
-                        color: AppColors.grayFont,
-                      ),
-                    ],
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: Responsive.w(10),
+                      vertical: Responsive.h(6),
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(Responsive.w(10)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.chat_bubble_outline,
+                          size: Responsive.w(16),
+                          color: AppColors.grayFont,
+                        ),
+                        SizedBox(width: Responsive.w(6)),
+                        CustomText.subtitle(
+                          '${comments.length}',
+                          fontSize: 12,
+                          color: AppColors.grayFont,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],

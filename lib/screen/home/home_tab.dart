@@ -11,6 +11,8 @@ import '../../bloc/report/report_state.dart';
 import 'package:latlong2/latlong.dart';
 import '../../hive/hive_service.dart';
 import '../../service/location_service.dart';
+import '../../widget/motion/bouncing_button.dart';
+import '../../widget/motion/fade_slide_transition.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -80,186 +82,212 @@ class _HomeTabState extends State<HomeTab> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 1. Custom Header
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CustomText.header(
-                    greetingTitle,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  SizedBox(height: Responsive.h(4)),
-                  CustomText.subtitle(
-                    greetingSubtitle,
-                    fontSize: 14,
-                    color: AppColors.grayFont,
-                  ),
-                ],
+        FadeSlideTransitionWidget(
+          index: 0,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CustomText.header(
+                      greetingTitle,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    SizedBox(height: Responsive.h(4)),
+                    CustomText.subtitle(
+                      greetingSubtitle,
+                      fontSize: 14,
+                      color: AppColors.grayFont,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            SizedBox(width: Responsive.w(12)),
-            _buildNotificationBell(context),
-          ],
+              SizedBox(width: Responsive.w(12)),
+              BouncingButton(
+                onTap: () => Navigator.of(context).pushNamed(RouteConstants.notification),
+                child: _buildNotificationBell(context),
+              ),
+            ],
+          ),
         ),
 
         // 1b. Active Location Chip
-        _buildLocationBanner(context),
+        FadeSlideTransitionWidget(
+          index: 1,
+          child: _buildLocationBanner(context),
+        ),
 
         SizedBox(height: Responsive.h(20)),
 
-        // 2. Action Grid (2x2)
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          crossAxisSpacing: Responsive.w(16),
-          mainAxisSpacing: Responsive.w(16),
-          childAspectRatio: 1.2,
-          children: [
-            GestureDetector(
-              onTap: () {
-                Navigator.of(context).pushNamed(RouteConstants.feedbackSurvey);
-              },
-              child: _buildActionCard(
-                imagePath: 'assets/images/feedback.png',
-                label: 'Near Feedback',
+        // 2. Bento Action Grid (2x2) with Micro-Spring Tactile Feedback
+        FadeSlideTransitionWidget(
+          index: 2,
+          child: GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            crossAxisSpacing: Responsive.w(16),
+            mainAxisSpacing: Responsive.w(16),
+            childAspectRatio: 1.18,
+            children: [
+              BouncingButton(
+                onTap: () {
+                  Navigator.of(context).pushNamed(RouteConstants.feedbackSurvey);
+                },
+                child: _buildActionCard(
+                  imagePath: 'assets/images/feedback.png',
+                  label: 'Near Feedback',
+                  gradientColors: [const Color(0xFFF0F7FF), Colors.white],
+                  iconBg: const Color(0xFFE0F2FE),
+                  borderColor: const Color(0xFFBAE6FD),
+                ),
               ),
-            ),
-            GestureDetector(
-              onTap: () {
-                Navigator.of(context).pushNamed(RouteConstants.nearStores);
-              },
-              child: _buildActionCard(
-                imagePath: 'assets/images/stores.png',
-                label: 'Near Stores',
+              BouncingButton(
+                onTap: () {
+                  Navigator.of(context).pushNamed(RouteConstants.nearStores);
+                },
+                child: _buildActionCard(
+                  imagePath: 'assets/images/stores.png',
+                  label: 'Near Stores',
+                  gradientColors: [const Color(0xFFFFF7ED), Colors.white],
+                  iconBg: const Color(0xFFFFEDD5),
+                  borderColor: const Color(0xFFFED7AA),
+                ),
               ),
-            ),
-            GestureDetector(
-              onTap: () {
-                Navigator.of(context).pushNamed(RouteConstants.nearBusStop);
-              },
-              child: _buildActionCard(
-                imagePath: 'assets/images/Bus.png',
-                label: 'Near Bus Stop',
+              BouncingButton(
+                onTap: () {
+                  Navigator.of(context).pushNamed(RouteConstants.nearBusStop);
+                },
+                child: _buildActionCard(
+                  imagePath: 'assets/images/Bus.png',
+                  label: 'Near Bus Stop',
+                  gradientColors: [const Color(0xFFF5F3FF), Colors.white],
+                  iconBg: const Color(0xFFEDE9FE),
+                  borderColor: const Color(0xFFDDD6FE),
+                ),
               ),
-            ),
-            GestureDetector(
-              onTap: () {
-                Navigator.of(context).pushNamed(RouteConstants.nearToilet);
-              },
-              child: _buildActionCard(
-                imagePath: 'assets/images/toilet.png',
-                label: 'Near Toilet',
+              BouncingButton(
+                onTap: () {
+                  Navigator.of(context).pushNamed(RouteConstants.nearToilet);
+                },
+                child: _buildActionCard(
+                  imagePath: 'assets/images/toilet.png',
+                  label: 'Near Toilet',
+                  gradientColors: [const Color(0xFFF0FDF4), Colors.white],
+                  iconBg: const Color(0xFFDCFCE7),
+                  borderColor: const Color(0xFFBBF7D0),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         SizedBox(height: Responsive.h(28)),
 
         // 3. Active Complaint Section
-        BlocBuilder<ReportBloc, ReportState>(
-          builder: (context, reportState) {
-            final myReports = reportState.myReports;
+        FadeSlideTransitionWidget(
+          index: 3,
+          child: BlocBuilder<ReportBloc, ReportState>(
+            builder: (context, reportState) {
+              final myReports = reportState.myReports;
 
-            // Empty state when user has no reports
-            if (myReports.isEmpty) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CustomText.header(
-                    'Civic Complaints',
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  SizedBox(height: Responsive.h(4)),
-                  CustomText.subtitle(
-                    'Track and resolve neighborhood issues',
-                    fontSize: 13,
-                    color: AppColors.grayFont,
-                  ),
-                  SizedBox(height: Responsive.h(16)),
-                  Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      borderRadius: BorderRadius.circular(Responsive.w(28)),
-                      border: Border.all(
-                        color: AppColors.outliner,
-                        width: Responsive.w(1.5),
+              // Empty state when user has no reports
+              if (myReports.isEmpty) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CustomText.header(
+                      'Civic Complaints',
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    SizedBox(height: Responsive.h(4)),
+                    CustomText.subtitle(
+                      'Track and resolve neighborhood issues',
+                      fontSize: 13,
+                      color: AppColors.grayFont,
+                    ),
+                    SizedBox(height: Responsive.h(16)),
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: AppColors.white,
+                        borderRadius: BorderRadius.circular(Responsive.w(28)),
+                        border: Border.all(
+                          color: AppColors.outliner,
+                          width: Responsive.w(1.5),
+                        ),
+                      ),
+                      padding: EdgeInsets.all(Responsive.w(20)),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: Responsive.w(56),
+                            height: Responsive.w(56),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFFF2EC),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.assignment_turned_in_outlined,
+                              color: AppColors.primary,
+                              size: Responsive.w(28),
+                            ),
+                          ),
+                          SizedBox(height: Responsive.h(12)),
+                          CustomText.title(
+                            'No Active Complaints',
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          SizedBox(height: Responsive.h(6)),
+                          CustomText.body(
+                            'Notice broken streetlights, potholes, or sanitation issues near your home? Submit a report to get it resolved.',
+                            textAlign: TextAlign.center,
+                            color: AppColors.grayFont,
+                            fontSize: 12,
+                          ),
+                          SizedBox(height: Responsive.h(16)),
+                          BouncingButton(
+                            onTap: () {
+                              Navigator.of(context)
+                                  .pushNamed(RouteConstants.addComplaint);
+                            },
+                            child: Container(
+                              width: double.infinity,
+                              height: Responsive.h(48),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius:
+                                    BorderRadius.circular(Responsive.w(24)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.add,
+                                      color: Colors.white,
+                                      size: Responsive.w(20)),
+                                  SizedBox(width: Responsive.w(8)),
+                                  const Text(
+                                    'File a Complaint',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    padding: EdgeInsets.all(Responsive.w(20)),
-                    child: Column(
-                      children: [
-                        Container(
-                          width: Responsive.w(56),
-                          height: Responsive.w(56),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFFFF2EC),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.assignment_turned_in_outlined,
-                            color: AppColors.primary,
-                            size: Responsive.w(28),
-                          ),
-                        ),
-                        SizedBox(height: Responsive.h(12)),
-                        CustomText.title(
-                          'No Active Complaints',
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        SizedBox(height: Responsive.h(6)),
-                        CustomText.body(
-                          'Notice broken streetlights, potholes, or sanitation issues near your home? Submit a report to get it resolved.',
-                          textAlign: TextAlign.center,
-                          color: AppColors.grayFont,
-                          fontSize: 12,
-                        ),
-                        SizedBox(height: Responsive.h(16)),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.of(context)
-                                .pushNamed(RouteConstants.addComplaint);
-                          },
-                          child: Container(
-                            width: double.infinity,
-                            height: Responsive.h(48),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              borderRadius:
-                                  BorderRadius.circular(Responsive.w(24)),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add,
-                                    color: Colors.white,
-                                    size: Responsive.w(20)),
-                                SizedBox(width: Responsive.w(8)),
-                                const Text(
-                                  'File a Complaint',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            }
+                  ],
+                );
+              }
 
             final Map<String, dynamic> latestReport = myReports.first;
             final String category = latestReport['category'] ?? 'Road Damage';
@@ -407,7 +435,7 @@ class _HomeTabState extends State<HomeTab> {
                                   width: Responsive.w(1.5),
                                 ),
                               ),
-                              child: InkWell(
+                              child: BouncingButton(
                                 onTap: () {
                                   Navigator.of(context).pushNamed(
                                     RouteConstants.complaintDetails,
@@ -426,8 +454,6 @@ class _HomeTabState extends State<HomeTab> {
                                     },
                                   );
                                 },
-                                borderRadius:
-                                    BorderRadius.circular(Responsive.w(26)),
                                 child: Center(
                                   child: CustomText.title(
                                     'View Status',
@@ -441,7 +467,7 @@ class _HomeTabState extends State<HomeTab> {
                           ),
                           Positioned(
                             right: 0,
-                            child: GestureDetector(
+                            child: BouncingButton(
                               onTap: () {
                                 Navigator.of(context)
                                     .pushNamed(RouteConstants.addComplaint);
@@ -483,6 +509,7 @@ class _HomeTabState extends State<HomeTab> {
             );
           },
         ),
+      ),
       ],
     );
   }
@@ -511,26 +538,69 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  Widget _buildActionCard({required String imagePath, required String label}) {
+  Widget _buildActionCard({
+    required String imagePath,
+    required String label,
+    Color? iconBg,
+    List<Color>? gradientColors,
+    Color? borderColor,
+  }) {
+    final bgColors = gradientColors ?? [const Color(0xFFFAFAFA), AppColors.white];
+    final border = borderColor ?? AppColors.outliner;
+    final containerBg = iconBg ?? const Color(0xFFFFF2EC);
+
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(Responsive.w(28)),
-        border: Border.all(color: AppColors.outliner, width: Responsive.w(1.5)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: bgColors,
+        ),
+        borderRadius: BorderRadius.circular(Responsive.w(24)),
+        border: Border.all(color: border, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: containerBg.withValues(alpha: 0.08),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Image.asset(
-            imagePath,
-            width: Responsive.w(40),
-            height: Responsive.w(40),
-            fit: BoxFit.contain,
+          Container(
+            width: Responsive.w(50),
+            height: Responsive.w(50),
+            decoration: BoxDecoration(
+              color: containerBg,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Image.asset(
+                imagePath,
+                width: Responsive.w(30),
+                height: Responsive.w(30),
+                fit: BoxFit.contain,
+              ),
+            ),
           ),
-          SizedBox(height: Responsive.h(12)),
+          SizedBox(height: Responsive.h(10)),
           CustomText.title(
             label,
-            fontSize: 14,
+            fontSize: 13.5,
             fontWeight: FontWeight.bold,
           ),
         ],

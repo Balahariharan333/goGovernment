@@ -6,12 +6,15 @@ import 'transaction_state.dart';
 class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
   TransactionBloc() : super(TransactionState.initial()) {
     on<LoadTransactionsEvent>((event, emit) {
-      final saved = HiveService.getMyTransactions();
-      final list = saved.isNotEmpty ? saved : TransactionState.defaultTransactions;
+      final raw = HiveService.getMyTransactions();
+      final clean = raw.where((tx) => !TransactionState.isMock(tx)).toList();
+      if (clean.length != raw.length) {
+        HiveService.saveAllTransactions(clean);
+      }
       final wallet = HiveService.getWalletBalance();
       final coins = HiveService.getCoinsBalance();
       emit(state.copyWith(
-        transactions: list,
+        transactions: clean,
         walletBalance: wallet,
         coinsBalance: coins,
       ));

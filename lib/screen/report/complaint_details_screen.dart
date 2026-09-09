@@ -11,6 +11,7 @@ import '../../bloc/report/report_event.dart';
 import '../../bloc/report/report_state.dart';
 import '../../hive/hive_service.dart';
 import '../../widget/complaint_image_widget.dart';
+import '../../widget/motion/tilt_3d_card.dart';
 
 class ComplaintDetailsScreen extends StatefulWidget {
   final Map<String, dynamic>? report;
@@ -242,18 +243,20 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
                       ),
                       SizedBox(height: Responsive.h(20)),
 
-                      // 2. Complaint details card
-                      Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.all(Responsive.w(16)),
-                        decoration: BoxDecoration(
-                          color: AppColors.white,
-                          borderRadius: BorderRadius.circular(Responsive.w(24)),
-                          border: Border.all(
-                            color: AppColors.outliner,
-                            width: Responsive.w(1.5),
+                      // 2. Complaint details card (Interactive 3D Perspective Tilt Card)
+                      Tilt3DCard(
+                        borderRadius: BorderRadius.circular(Responsive.w(24)),
+                        child: Container(
+                          width: double.infinity,
+                          padding: EdgeInsets.all(Responsive.w(16)),
+                          decoration: BoxDecoration(
+                            color: AppColors.white,
+                            borderRadius: BorderRadius.circular(Responsive.w(24)),
+                            border: Border.all(
+                              color: AppColors.outliner,
+                              width: Responsive.w(1.5),
+                            ),
                           ),
-                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -442,6 +445,7 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
                           ],
                         ),
                       ),
+                    ),
                       SizedBox(height: Responsive.h(20)),
 
                       // 3. Comments heading

@@ -1,163 +1,492 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/custom_text.dart';
 import '../../constants/route_constants.dart';
+import '../../widget/motion/tilt_3d_card.dart';
+import '../../widget/motion/fade_slide_transition.dart';
+
+class ComplaintCategoryData {
+  final String title;
+  final String description;
+  final Color iconBgColor;
+  final Widget icon;
+  final String categoryKey;
+
+  const ComplaintCategoryData({
+    required this.title,
+    required this.description,
+    required this.iconBgColor,
+    required this.icon,
+    required this.categoryKey,
+  });
+}
 
 class ComplaintScreen extends StatelessWidget {
   const ComplaintScreen({super.key});
+
+  static final List<ComplaintCategoryData> _categories = [
+    ComplaintCategoryData(
+      title: 'Roads &\nTransportation',
+      description: 'Report potholes, road\ndamage, traffic issues',
+      iconBgColor: const Color(0xFFFFDDD2),
+      icon: CustomPaint(
+        size: const Size(26, 26),
+        painter: RoadIconPainter(color: const Color(0xFF1E293B)),
+      ),
+      categoryKey: 'Roads & Transportation',
+    ),
+    ComplaintCategoryData(
+      title: 'Garbage & Waste\nManagement',
+      description: 'Report garbage, overflow,\nsegregation issues',
+      iconBgColor: const Color(0xFFDCFCE7),
+      icon: const Icon(
+        Icons.delete_outline_rounded,
+        color: Color(0xFF15803D),
+        size: 26,
+      ),
+      categoryKey: 'Garbage & Waste Management',
+    ),
+    ComplaintCategoryData(
+      title: 'Streetlights &\nElectricity',
+      description: 'Report faulty streetlights,\npower issues',
+      iconBgColor: const Color(0xFFFEF3C7),
+      icon: const Icon(
+        Icons.lightbulb_rounded,
+        color: Color(0xFFD97706),
+        size: 26,
+      ),
+      categoryKey: 'Streetlights & Electricity',
+    ),
+    ComplaintCategoryData(
+      title: 'Water\nSupply',
+      description: 'Report water shortage,\nleakage, low pressure',
+      iconBgColor: const Color(0xFFDBEAFE),
+      icon: const Icon(
+        Icons.water_drop_rounded,
+        color: Color(0xFF2563EB),
+        size: 26,
+      ),
+      categoryKey: 'Water Supply',
+    ),
+    ComplaintCategoryData(
+      title: 'Drainage &\nSewage',
+      description: 'Report blockages,\noverflow, sewer issues',
+      iconBgColor: const Color(0xFFEDE9FE),
+      icon: CustomPaint(
+        size: const Size(26, 26),
+        painter: DrainageIconPainter(color: const Color(0xFF7C3AED)),
+      ),
+      categoryKey: 'Drainage & Sewage',
+    ),
+    ComplaintCategoryData(
+      title: 'Cleanliness &\nSanitation',
+      description: 'Report unclean areas,\npublic hygiene issues',
+      iconBgColor: const Color(0xFFFFE4E6),
+      icon: const Icon(
+        Icons.cleaning_services_rounded,
+        color: Color(0xFFBE123C),
+        size: 26,
+      ),
+      categoryKey: 'Cleanliness & Sanitation',
+    ),
+    ComplaintCategoryData(
+      title: 'Parks &\nPublic Spaces',
+      description: 'Report park issues,\nplaygrounds, amenities',
+      iconBgColor: const Color(0xFFDCFCE7),
+      icon: const Icon(
+        Icons.park_rounded,
+        color: Color(0xFF166534),
+        size: 26,
+      ),
+      categoryKey: 'Parks & Public Spaces',
+    ),
+    ComplaintCategoryData(
+      title: 'Environmental\nIssues',
+      description: 'Report air pollution,\nnoise, greenery concerns',
+      iconBgColor: const Color(0xFFF3E8FF),
+      icon: const Icon(
+        Icons.eco_rounded,
+        color: Color(0xFF9333EA),
+        size: 26,
+      ),
+      categoryKey: 'Environmental Issues',
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        CustomText.header(
-          'Complaints',
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
+        // Top Header Row with Title, Subtitle, and 3D Clipboard Badge
+        FadeSlideTransitionWidget(
+          index: 0,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CustomText.header(
+                      'Complaints',
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: const Color(0xFF0F172A),
+                    ),
+                    SizedBox(height: Responsive.h(6)),
+                    CustomText.body(
+                      'Report civic issues and help us build a better community',
+                      fontSize: 13,
+                      color: const Color(0xFF64748B),
+                      height: 1.35,
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(width: Responsive.w(8)),
+              const _HeaderClipboardIllustration(),
+            ],
+          ),
         ),
-        SizedBox(height: Responsive.h(20)),
-        // 1. Grid of Category Cards
+        SizedBox(height: Responsive.h(22)),
+
+        // 1. Grid of Category Cards (Staggered Entrance Animation)
         GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           crossAxisCount: 2,
-          crossAxisSpacing: Responsive.w(16),
-          mainAxisSpacing: Responsive.w(16),
-          childAspectRatio: 0.9,
-          children: [
-            _buildCategoryCard(
-              context,
-              label: 'Roads &\nTransportation',
-              painter: RoadIconPainter(color: AppColors.black),
-            ),
-            _buildCategoryCard(
-              context,
-              label: 'Garbage & Waste\nManagement',
-              painter: GarbageIconPainter(color: AppColors.black),
-            ),
-            _buildCategoryCard(
-              context,
-              label: 'Streetlights &\nElectricity',
-              painter: LightbulbIconPainter(color: AppColors.black),
-            ),
-            _buildCategoryCard(
-              context,
-              label: 'Water\nSupply',
-              painter: WaterIconPainter(color: AppColors.black),
-            ),
-            _buildCategoryCard(
-              context,
-              label: 'Drainage &\nSewage',
-              painter: DrainageIconPainter(color: AppColors.black),
-            ),
-            _buildCategoryCard(
-              context,
-              label: 'Cleanliness &\nSanitation',
-              painter: CleanlinessIconPainter(color: AppColors.black),
-            ),
-            _buildCategoryCard(
-              context,
-              label: 'Parks &\nPublic Spaces',
-              painter: ParksIconPainter(color: AppColors.black),
-            ),
-            _buildCategoryCard(
-              context,
-              label: 'Environmental\nIssues',
-              painter: EnvironmentalIconPainter(color: AppColors.black),
-            ),
-          ],
+          crossAxisSpacing: Responsive.w(14),
+          mainAxisSpacing: Responsive.w(14),
+          childAspectRatio: 0.76,
+          children: _categories.asMap().entries.map((entry) {
+            final int index = entry.key;
+            final item = entry.value;
+            return FadeSlideTransitionWidget(
+              index: index + 1,
+              child: _buildCategoryCard(context, item),
+            );
+          }).toList(),
         ),
-        SizedBox(height: Responsive.h(28)),
-
-        // 2. Floating Pill Button "+ Complaint"
-        Container(
-          height: Responsive.h(52),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFF6F3), // Light cream/peach fill matching the screenshot
-            borderRadius: BorderRadius.circular(Responsive.w(26)),
-            border: Border.all(
-              color: AppColors.primary,
-              width: Responsive.w(1.5),
-            ),
-          ),
-          child: InkWell(
-            onTap: () {
-              Navigator.of(context).pushNamed(RouteConstants.addComplaint);
-            },
-            borderRadius: BorderRadius.circular(Responsive.w(26)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.add,
-                  color: AppColors.primary,
-                  size: Responsive.w(24),
-                ),
-                SizedBox(width: Responsive.w(6)),
-                CustomText.title(
-                  'Complaint',
-                  color: AppColors.primary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ],
-            ),
-          ),
-        ),
+        SizedBox(height: Responsive.h(20)),
       ],
     );
   }
 
-  Widget _buildCategoryCard(BuildContext context, {required String label, required CustomPainter painter}) {
-    final cleanCategory = label.replaceAll('\n', ' ');
-    return GestureDetector(
+  Widget _buildCategoryCard(BuildContext context, ComplaintCategoryData item) {
+    final radius = BorderRadius.circular(Responsive.w(24));
+
+    return Tilt3DCard(
+      borderRadius: radius,
       onTap: () {
         Navigator.of(context).pushNamed(
           RouteConstants.addComplaint,
-          arguments: cleanCategory,
+          arguments: item.categoryKey,
         );
       },
       child: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(Responsive.w(28)),
-          border: Border.all(
-            color: AppColors.outliner,
-            width: Responsive.w(1.5),
-          ),
-        ),
-        padding: EdgeInsets.symmetric(horizontal: Responsive.w(12), vertical: Responsive.h(16)),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Icon Container circle
-            Container(
-              width: Responsive.w(58),
-              height: Responsive.h(58),
-              decoration: const BoxDecoration(
-                color: Color(0xFFFBF8F6), // Extremely soft gray/cream fill
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: CustomPaint(
-                  size: Size(Responsive.w(28), Responsive.h(28)),
-                  painter: painter,
-                ),
-              ),
+          color: Colors.white,
+          borderRadius: radius,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFF97316).withValues(alpha: 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
             ),
-            SizedBox(height: Responsive.h(14)),
-            // Label text
-            CustomText.title(
-              label,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              textAlign: TextAlign.center,
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: Stack(
+            children: [
+              // Subtle curved accent circle in bottom-right corner
+              Positioned(
+                bottom: -Responsive.w(18),
+                right: -Responsive.w(18),
+                child: Container(
+                  width: Responsive.w(82),
+                  height: Responsive.w(82),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFFF5F0),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+
+              // Circular peach arrow button
+              Positioned(
+                bottom: Responsive.h(12),
+                right: Responsive.w(12),
+                child: Container(
+                  width: Responsive.w(28),
+                  height: Responsive.w(28),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFFECE5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.arrow_forward_rounded,
+                      size: Responsive.w(15),
+                      color: const Color(0xFFEA580C),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Card content column
+              Padding(
+                padding: EdgeInsets.all(Responsive.w(14)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Circular Pastel Icon Badge
+                    Container(
+                      width: Responsive.w(48),
+                      height: Responsive.w(48),
+                      decoration: BoxDecoration(
+                        color: item.iconBgColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(child: item.icon),
+                    ),
+                    SizedBox(height: Responsive.h(12)),
+
+                    // Title
+                    CustomText.header(
+                      item.title,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF0F172A),
+                      height: 1.22,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: Responsive.h(5)),
+
+                    // Subtitle description
+                    CustomText.body(
+                      item.description,
+                      fontSize: 11,
+                      color: const Color(0xFF64748B),
+                      height: 1.3,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// 3D Clipboard Illustration shown in the Header
+class _HeaderClipboardIllustration extends StatelessWidget {
+  const _HeaderClipboardIllustration();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: Responsive.w(86),
+      height: Responsive.h(90),
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          // Sparkle accent ray 1 (top-right)
+          Positioned(
+            top: Responsive.h(6),
+            right: Responsive.w(2),
+            child: Transform.rotate(
+              angle: math.pi / 4,
+              child: Container(
+                width: Responsive.w(8),
+                height: Responsive.h(2.4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF8A65),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ),
+          // Sparkle accent ray 2 (left)
+          Positioned(
+            top: Responsive.h(20),
+            left: -Responsive.w(4),
+            child: Transform.rotate(
+              angle: -math.pi / 5,
+              child: Container(
+                width: Responsive.w(7),
+                height: Responsive.h(2.2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF8A65),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ),
+          // Sparkle accent ray 3 (bottom-right)
+          Positioned(
+            bottom: Responsive.h(12),
+            right: -Responsive.w(2),
+            child: Transform.rotate(
+              angle: -math.pi / 3,
+              child: Container(
+                width: Responsive.w(6),
+                height: Responsive.h(2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF8A65),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ),
+
+          // Main Clipboard rotated ~6 degrees
+          Transform.rotate(
+            angle: 0.10,
+            child: Container(
+              width: Responsive.w(66),
+              height: Responsive.h(78),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFECE5),
+                borderRadius: BorderRadius.circular(Responsive.w(16)),
+                border: Border.all(
+                  color: const Color(0xFFFFCCBD),
+                  width: Responsive.w(1.5),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFF97316).withValues(alpha: 0.12),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Stack(
+                alignment: Alignment.topCenter,
+                children: [
+                  // Clip on top
+                  Positioned(
+                    top: -Responsive.h(5),
+                    child: Container(
+                      width: Responsive.w(24),
+                      height: Responsive.h(11),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF8A65),
+                        borderRadius: BorderRadius.circular(Responsive.w(6)),
+                      ),
+                    ),
+                  ),
+
+                  // Inner Paper
+                  Positioned(
+                    top: Responsive.h(10),
+                    left: Responsive.w(6),
+                    right: Responsive.w(6),
+                    bottom: Responsive.h(6),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: Responsive.w(6),
+                        vertical: Responsive.h(8),
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(Responsive.w(10)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: Responsive.w(30),
+                            height: Responsive.h(3.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFD4C7),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          SizedBox(height: Responsive.h(5)),
+                          Container(
+                            width: Responsive.w(38),
+                            height: Responsive.h(3.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFE0D6),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          SizedBox(height: Responsive.h(5)),
+                          Container(
+                            width: Responsive.w(26),
+                            height: Responsive.h(3.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFE0D6),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          SizedBox(height: Responsive.h(5)),
+                          Container(
+                            width: Responsive.w(18),
+                            height: Responsive.h(3.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFE0D6),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Exclamation Alert Badge on bottom right
+          Positioned(
+            bottom: Responsive.h(2),
+            right: Responsive.w(0),
+            child: Container(
+              width: Responsive.w(26),
+              height: Responsive.w(26),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF5722),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white,
+                  width: Responsive.w(2),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFF5722).withValues(alpha: 0.35),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: CustomText.title(
+                  '!',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

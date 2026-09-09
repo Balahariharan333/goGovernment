@@ -361,7 +361,7 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    isCoins ? Icons.monetization_on : Icons.account_balance_wallet_rounded,
+                    isCoins ? Icons.currency_rupee_rounded : Icons.account_balance_wallet_rounded,
                     color: isCoins ? const Color(0xFFFFB300) : const Color(0xFF43A047),
                     size: Responsive.w(36),
                   ),

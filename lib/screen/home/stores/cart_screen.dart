@@ -330,7 +330,7 @@ class _CartScreenState extends State<CartScreen> {
                                 child: Row(
                                   children: [
                                     Icon(
-                                      Icons.monetization_on,
+                                      Icons.currency_rupee_rounded,
                                       color: const Color(0xFFFFB300),
                                       size: Responsive.w(22),
                                     ),
@@ -1368,7 +1368,7 @@ class _CartScreenState extends State<CartScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.monetization_on, color: Color(0xFFFFB300), size: 14),
+                    const Icon(Icons.currency_rupee_rounded, color: Color(0xFFFFB300), size: 14),
                     SizedBox(width: Responsive.w(6)),
                     CustomText.title('Complaint Coins ($coinsDeducted coins)', fontSize: 12),
                   ],

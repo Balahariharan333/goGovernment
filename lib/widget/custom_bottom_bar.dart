@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/app_colors.dart';
 import '../utils/responsive_helper.dart';
+import 'motion/bouncing_button.dart';
 
 class CustomBottomBar extends StatelessWidget {
   final int currentIndex;
@@ -15,24 +16,33 @@ class CustomBottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: Responsive.h(76),
+      height: Responsive.h(74),
       decoration: BoxDecoration(
-        color: const Color(0xFFFEE5DD), // Light peach background matching the screenshot
-        borderRadius: BorderRadius.circular(Responsive.w(28)),
+        color: const Color(0xFFFEE5DD),
+        borderRadius: BorderRadius.circular(Responsive.w(30)),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.6),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: Responsive.w(15),
-            offset: Offset(0, Responsive.h(5)),
+            color: Colors.black.withValues(alpha: 0.07),
+            blurRadius: Responsive.w(22),
+            offset: Offset(0, Responsive.h(8)),
+          ),
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            blurRadius: Responsive.w(12),
+            offset: Offset(0, Responsive.h(3)),
           ),
         ],
       ),
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: Responsive.w(16.0)),
+        padding: EdgeInsets.symmetric(horizontal: Responsive.w(12.0)),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavItem(0, null), // Home item (custom painted)
+            _buildNavItem(0, null), // Home item
             _buildNavItem(1, Icons.description_outlined), // History/Document item
             _buildNavItem(2, Icons.storefront_outlined), // Store item
             _buildNavItem(3, Icons.account_balance_wallet_outlined), // Wallet item
@@ -46,12 +56,12 @@ class CustomBottomBar extends StatelessWidget {
   Widget _buildNavItem(int index, IconData? icon) {
     final bool isActive = currentIndex == index;
 
-    return GestureDetector(
+    return BouncingButton(
+      scaleFactor: 0.88,
       onTap: () => onTap(index),
-      behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
         width: Responsive.w(52),
         height: Responsive.h(52),
         decoration: BoxDecoration(
@@ -60,21 +70,35 @@ class CustomBottomBar extends StatelessWidget {
           border: isActive
               ? Border.all(color: AppColors.primary, width: Responsive.w(1.8))
               : Border.all(color: Colors.transparent, width: Responsive.w(1.8)),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.16),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : null,
         ),
         child: Center(
-          child: icon == null
-              ? CustomPaint(
-                  size: Size(Responsive.w(24), Responsive.h(24)),
-                  painter: PentagonalHomePainter(
+          child: AnimatedScale(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutBack,
+            scale: isActive ? 1.08 : 1.0,
+            child: icon == null
+                ? CustomPaint(
+                    size: Size(Responsive.w(24), Responsive.h(24)),
+                    painter: PentagonalHomePainter(
+                      color: isActive ? AppColors.primary : AppColors.black.withValues(alpha: 0.85),
+                      strokeWidth: Responsive.w(2.2),
+                    ),
+                  )
+                : Icon(
+                    icon,
                     color: isActive ? AppColors.primary : AppColors.black.withValues(alpha: 0.85),
-                    strokeWidth: Responsive.w(2.2),
+                    size: Responsive.w(26),
                   ),
-                )
-              : Icon(
-                  icon,
-                  color: isActive ? AppColors.primary : AppColors.black.withValues(alpha: 0.85),
-                  size: Responsive.w(26),
-                ),
+          ),
         ),
       ),
     );
