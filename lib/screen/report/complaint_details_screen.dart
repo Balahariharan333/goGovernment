@@ -11,6 +11,7 @@ import '../../bloc/report/report_event.dart';
 import '../../bloc/report/report_state.dart';
 import '../../hive/hive_service.dart';
 import '../../widget/complaint_image_widget.dart';
+import '../../widget/image_preview_dialog.dart';
 import '../../widget/motion/tilt_3d_card.dart';
 
 class ComplaintDetailsScreen extends StatefulWidget {
@@ -132,6 +133,7 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
           final String userName = liveReport['userName']?.toString() ?? widget.userName;
           final String status = liveReport['status']?.toString() ?? widget.status;
           final String category = liveReport['category']?.toString() ?? widget.category;
+          final String title = liveReport['title']?.toString() ?? category;
           final String description = liveReport['description']?.toString() ?? widget.description;
           final String id = liveReport['id']?.toString() ?? widget.id;
           final String? imagePath = liveReport['imagePath']?.toString() ?? widget.imagePath;
@@ -139,7 +141,8 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
               widget.userAddress ??
               'Location not specified';
           final String date = liveReport['date']?.toString() ?? widget.date ?? 'Today';
-          final bool isLiked = liveReport['isLiked'] == true;
+          final likedBy = List<dynamic>.from(liveReport['likedBy'] ?? []);
+          final bool isLiked = liveReport['isLiked'] == true || likedBy.contains(HiveService.citizenId);
           final int likesCount = (liveReport['likesCount'] as num?)?.toInt() ?? 0;
           final List<dynamic> comments = List.from(liveReport['comments'] ?? []);
 
@@ -171,7 +174,17 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              _buildHeaderImage(imagePath),
+                              GestureDetector(
+                                onTap: () {
+                                  ImagePreviewDialog.show(
+                                    context,
+                                    imagePath: imagePath,
+                                    title: title.isNotEmpty ? title : 'Complaint Photo Evidence',
+                                    subtitle: '$category • $userAddress',
+                                  );
+                                },
+                                child: _buildHeaderImage(imagePath),
+                              ),
                               // Dark gradient overlay
                               Positioned.fill(
                                 child: Align(
@@ -187,6 +200,46 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
                                           Colors.black.withValues(alpha: 0.85),
                                         ],
                                       ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // Zoom Preview badge top right
+                              Positioned(
+                                top: Responsive.h(12),
+                                right: Responsive.w(12),
+                                child: GestureDetector(
+                                  onTap: () {
+                                    ImagePreviewDialog.show(
+                                      context,
+                                      imagePath: imagePath,
+                                      title: title.isNotEmpty ? title : 'Complaint Photo Evidence',
+                                      subtitle: '$category • $userAddress',
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: Responsive.w(8),
+                                      vertical: Responsive.h(4),
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.65),
+                                      borderRadius: BorderRadius.circular(Responsive.w(12)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.zoom_in, color: Colors.white, size: Responsive.w(14)),
+                                        SizedBox(width: Responsive.w(4)),
+                                        Text(
+                                          'Preview',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: Responsive.sp(10),
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -409,7 +462,7 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
                                             ? Icons.thumb_up
                                             : Icons.thumb_up_alt_outlined,
                                         color: isLiked
-                                            ? AppColors.primary
+                                            ? const Color(0xFF2E7D32)
                                             : AppColors.black,
                                         size: Responsive.w(20),
                                       ),
@@ -419,7 +472,7 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
                                         color: isLiked
-                                            ? AppColors.primary
+                                            ? const Color(0xFF2E7D32)
                                             : AppColors.black,
                                       ),
                                     ],

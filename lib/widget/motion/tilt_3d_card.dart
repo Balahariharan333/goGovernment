@@ -42,6 +42,8 @@ class _Tilt3DCardState extends State<Tilt3DCard> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
+    _rotXAnimation = const AlwaysStoppedAnimation(0.0);
+    _rotYAnimation = const AlwaysStoppedAnimation(0.0);
     _springController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),

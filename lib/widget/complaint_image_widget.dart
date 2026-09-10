@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 /// Universal widget that renders complaint images from:
@@ -14,6 +15,9 @@ class ComplaintImageWidget extends StatelessWidget {
   final double? width;
   final double? height;
   final BorderRadius? borderRadius;
+
+  // In-memory cache to prevent decoding base64 repeatedly and causing image flickering
+  static final Map<String, Uint8List> _base64Cache = {};
 
   const ComplaintImageWidget({
     super.key,
@@ -30,6 +34,7 @@ class ComplaintImageWidget extends StatelessWidget {
       fit: fit,
       width: width,
       height: height,
+      gaplessPlayback: true,
     );
   }
 
@@ -46,6 +51,7 @@ class ComplaintImageWidget extends StatelessWidget {
         fit: fit,
         width: width,
         height: height,
+        gaplessPlayback: true,
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
           return Container(
@@ -68,14 +74,22 @@ class ComplaintImageWidget extends StatelessWidget {
     // 2. Base64 Data URI
     if (path.startsWith('data:image') || path.contains(';base64,')) {
       try {
-        final commaIndex = path.indexOf(',');
-        final base64String = commaIndex != -1 ? path.substring(commaIndex + 1) : path;
-        final bytes = base64Decode(base64String.trim());
+        Uint8List? bytes = _base64Cache[path];
+        if (bytes == null) {
+          final commaIndex = path.indexOf(',');
+          final base64String = commaIndex != -1 ? path.substring(commaIndex + 1) : path;
+          bytes = base64Decode(base64String.trim());
+          if (_base64Cache.length > 80) {
+            _base64Cache.remove(_base64Cache.keys.first);
+          }
+          _base64Cache[path] = bytes;
+        }
         return Image.memory(
           bytes,
           fit: fit,
           width: width,
           height: height,
+          gaplessPlayback: true,
           errorBuilder: (context, error, stackTrace) => _buildFallback(),
         );
       } catch (_) {
@@ -90,6 +104,7 @@ class ComplaintImageWidget extends StatelessWidget {
         fit: fit,
         width: width,
         height: height,
+        gaplessPlayback: true,
         errorBuilder: (context, error, stackTrace) => _buildFallback(),
       );
     }
@@ -103,6 +118,7 @@ class ComplaintImageWidget extends StatelessWidget {
           fit: fit,
           width: width,
           height: height,
+          gaplessPlayback: true,
           errorBuilder: (context, error, stackTrace) => _buildFallback(),
         );
       }

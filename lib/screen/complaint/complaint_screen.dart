@@ -189,18 +189,26 @@ class ComplaintScreen extends StatelessWidget {
         width: double.infinity,
         height: double.infinity,
         decoration: BoxDecoration(
-          color: Colors.white,
           borderRadius: radius,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white,
+              Color(0xFFFFFDFB),
+              Color(0xFFFFF8F4),
+            ],
+            stops: [0.0, 0.65, 1.0],
+          ),
+          border: Border.all(
+            color: const Color(0xFFFFD9CC),
+            width: 1.3,
+          ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFF97316).withValues(alpha: 0.06),
+              color: const Color(0xFFF97316).withValues(alpha: 0.08),
               blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
+              offset: const Offset(0, 5),
             ),
           ],
         ),
@@ -208,19 +216,43 @@ class ComplaintScreen extends StatelessWidget {
           borderRadius: radius,
           child: Stack(
             children: [
-              // Subtle curved accent circle in bottom-right corner
+              // Top linear gradient accent highlight line
               Positioned(
-                bottom: -Responsive.w(18),
-                right: -Responsive.w(18),
+                top: 0,
+                left: Responsive.w(16),
+                right: Responsive.w(16),
+                height: Responsive.h(3.2),
                 child: Container(
-                  width: Responsive.w(82),
-                  height: Responsive.w(82),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFFFF5F0),
-                    shape: BoxShape.circle,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(Responsive.w(2)),
+                    gradient: const LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Color(0xFFEA580C),
+                        Color(0xFFFFA88E),
+                        Colors.transparent,
+                      ],
+                      stops: [0.0, 0.55, 1.0],
+                    ),
                   ),
                 ),
               ),
+
+              // Category-specific decorative line pattern in top-right
+              Positioned(
+                top: 0,
+                right: 0,
+                width: Responsive.w(100),
+                height: Responsive.h(85),
+                child: CustomPaint(
+                  painter: CategoryLinePatternPainter(
+                    categoryKey: item.categoryKey,
+                    accentColor: const Color(0xFFEA580C),
+                  ),
+                ),
+              ),
+
 
               // Circular peach arrow button
               Positioned(
@@ -229,9 +261,20 @@ class ComplaintScreen extends StatelessWidget {
                 child: Container(
                   width: Responsive.w(28),
                   height: Responsive.w(28),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFFFECE5),
+                  decoration: BoxDecoration(
                     shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFFFFF2EC),
+                        Color(0xFFFFE0D4),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: const Color(0xFFFFCCBA).withValues(alpha: 0.7),
+                      width: 1,
+                    ),
                   ),
                   child: Center(
                     child: Icon(
@@ -835,4 +878,262 @@ class EnvironmentalIconPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// Decorative, elegant vector line art pattern watermark for each complaint category
+class CategoryLinePatternPainter extends CustomPainter {
+  final String categoryKey;
+  final Color accentColor;
+
+  CategoryLinePatternPainter({
+    required this.categoryKey,
+    required this.accentColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width;
+    final double h = size.height;
+
+    final basePaint = Paint()
+      ..color = accentColor.withValues(alpha: 0.40)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.9
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final subtlePaint = Paint()
+      ..color = accentColor.withValues(alpha: 0.24)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+
+    switch (categoryKey) {
+      case 'Roads & Transportation':
+        _paintRoads(canvas, w, h, basePaint, subtlePaint);
+        break;
+      case 'Garbage & Waste Management':
+        _paintGarbage(canvas, w, h, basePaint, subtlePaint);
+        break;
+      case 'Streetlights & Electricity':
+        _paintElectricity(canvas, w, h, basePaint, subtlePaint);
+        break;
+      case 'Water Supply':
+        _paintWater(canvas, w, h, basePaint, subtlePaint);
+        break;
+      case 'Drainage & Sewage':
+        _paintDrainage(canvas, w, h, basePaint, subtlePaint);
+        break;
+      case 'Cleanliness & Sanitation':
+        _paintCleanliness(canvas, w, h, basePaint, subtlePaint);
+        break;
+      case 'Parks & Public Spaces':
+        _paintParks(canvas, w, h, basePaint, subtlePaint);
+        break;
+      case 'Environmental Issues':
+        _paintEnvironment(canvas, w, h, basePaint, subtlePaint);
+        break;
+      default:
+        _paintDefault(canvas, w, h, basePaint);
+        break;
+    }
+  }
+
+  void _paintRoads(Canvas canvas, double w, double h, Paint paint, Paint subtle) {
+    final path1 = Path()
+      ..moveTo(w * 0.35, 0)
+      ..quadraticBezierTo(w * 0.65, h * 0.28, w, h * 0.55);
+    final path2 = Path()
+      ..moveTo(w * 0.58, 0)
+      ..quadraticBezierTo(w * 0.78, h * 0.22, w, h * 0.40);
+    final path3 = Path()
+      ..moveTo(w * 0.12, 0)
+      ..quadraticBezierTo(w * 0.52, h * 0.38, w, h * 0.72);
+
+    canvas.drawPath(path1, paint);
+    canvas.drawPath(path2, subtle);
+    canvas.drawPath(path3, subtle);
+
+    final dashPaint = Paint()
+      ..color = accentColor.withValues(alpha: 0.48)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawLine(Offset(w * 0.50, h * 0.04), Offset(w * 0.58, h * 0.10), dashPaint);
+    canvas.drawLine(Offset(w * 0.66, h * 0.16), Offset(w * 0.74, h * 0.22), dashPaint);
+    canvas.drawLine(Offset(w * 0.82, h * 0.28), Offset(w * 0.90, h * 0.34), dashPaint);
+  }
+
+  void _paintGarbage(Canvas canvas, double w, double h, Paint paint, Paint subtle) {
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(w * 0.82, h * 0.25), radius: w * 0.45),
+      math.pi * 0.4,
+      math.pi * 0.5,
+      false,
+      subtle,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(w * 0.82, h * 0.25), radius: w * 0.30),
+      math.pi * 0.35,
+      math.pi * 0.55,
+      false,
+      paint,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(w * 0.82, h * 0.25), radius: w * 0.16),
+      math.pi * 0.3,
+      math.pi * 0.6,
+      false,
+      paint,
+    );
+
+    final dotPaint = Paint()
+      ..color = accentColor.withValues(alpha: 0.45)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(w * 0.88, h * 0.14), 2.5, dotPaint);
+    canvas.drawCircle(Offset(w * 0.68, h * 0.42), 2.0, dotPaint);
+  }
+
+  void _paintElectricity(Canvas canvas, double w, double h, Paint paint, Paint subtle) {
+    final pulse = Path()
+      ..moveTo(w * 0.25, h * 0.22)
+      ..lineTo(w * 0.48, h * 0.22)
+      ..lineTo(w * 0.58, h * 0.06)
+      ..lineTo(w * 0.68, h * 0.38)
+      ..lineTo(w * 0.77, h * 0.14)
+      ..lineTo(w * 0.86, h * 0.22)
+      ..lineTo(w, h * 0.22);
+    canvas.drawPath(pulse, paint);
+
+    canvas.drawLine(Offset(w * 0.35, h * 0.30), Offset(w * 0.95, h * 0.30), subtle);
+
+    final rayPaint = Paint()
+      ..color = accentColor.withValues(alpha: 0.40)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawLine(Offset(w * 0.88, h * 0.08), Offset(w * 0.96, h * 0.03), rayPaint);
+    canvas.drawLine(Offset(w * 0.88, h * 0.08), Offset(w * 0.98, h * 0.11), rayPaint);
+    canvas.drawLine(Offset(w * 0.88, h * 0.08), Offset(w * 0.92, h * 0.16), rayPaint);
+  }
+
+  void _paintWater(Canvas canvas, double w, double h, Paint paint, Paint subtle) {
+    final center = Offset(w * 0.85, h * 0.18);
+    for (int i = 1; i <= 4; i++) {
+      final r = (i * 13.0);
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: r),
+        math.pi * 0.6,
+        math.pi * 0.8,
+        false,
+        i % 2 == 0 ? paint : subtle,
+      );
+    }
+    final dotPaint = Paint()
+      ..color = accentColor.withValues(alpha: 0.45)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, 3.0, dotPaint);
+  }
+
+  void _paintDrainage(Canvas canvas, double w, double h, Paint paint, Paint subtle) {
+    final pipe1 = Path()
+      ..moveTo(w * 0.40, 0)
+      ..lineTo(w * 0.40, h * 0.24)
+      ..quadraticBezierTo(w * 0.40, h * 0.32, w * 0.48, h * 0.32)
+      ..lineTo(w, h * 0.32);
+
+    final pipe2 = Path()
+      ..moveTo(w * 0.62, 0)
+      ..lineTo(w * 0.62, h * 0.18)
+      ..quadraticBezierTo(w * 0.62, h * 0.24, w * 0.68, h * 0.24)
+      ..lineTo(w, h * 0.24);
+
+    final pipe3 = Path()
+      ..moveTo(w * 0.82, h * 0.32)
+      ..lineTo(w * 0.82, h * 0.52);
+
+    canvas.drawPath(pipe1, paint);
+    canvas.drawPath(pipe2, subtle);
+    canvas.drawPath(pipe3, subtle);
+
+    canvas.drawCircle(Offset(w * 0.48, h * 0.32), 2.2, paint);
+    canvas.drawCircle(Offset(w * 0.82, h * 0.32), 2.6, paint);
+  }
+
+  void _paintCleanliness(Canvas canvas, double w, double h, Paint paint, Paint subtle) {
+    _drawSparkle(canvas, Offset(w * 0.80, h * 0.16), 11.0, paint);
+    _drawSparkle(canvas, Offset(w * 0.62, h * 0.28), 6.5, subtle);
+    _drawSparkle(canvas, Offset(w * 0.88, h * 0.38), 5.0, subtle);
+
+    final swoop = Path()
+      ..moveTo(w * 0.35, 0)
+      ..quadraticBezierTo(w * 0.62, h * 0.26, w, h * 0.30);
+    canvas.drawPath(swoop, subtle);
+  }
+
+  void _paintParks(Canvas canvas, double w, double h, Paint paint, Paint subtle) {
+    final leaf = Path()
+      ..moveTo(w * 0.50, h * 0.38)
+      ..quadraticBezierTo(w * 0.62, h * 0.08, w * 0.90, h * 0.06)
+      ..quadraticBezierTo(w * 0.94, h * 0.30, w * 0.50, h * 0.38);
+    canvas.drawPath(leaf, paint);
+
+    canvas.drawLine(Offset(w * 0.50, h * 0.38), Offset(w * 0.90, h * 0.06), paint);
+    canvas.drawLine(Offset(w * 0.64, h * 0.26), Offset(w * 0.72, h * 0.18), subtle);
+    canvas.drawLine(Offset(w * 0.74, h * 0.18), Offset(w * 0.82, h * 0.12), subtle);
+
+    final hill = Path()
+      ..moveTo(w * 0.28, h * 0.45)
+      ..quadraticBezierTo(w * 0.65, h * 0.35, w, h * 0.44);
+    canvas.drawPath(hill, subtle);
+  }
+
+  void _paintEnvironment(Canvas canvas, double w, double h, Paint paint, Paint subtle) {
+    final stream1 = Path()
+      ..moveTo(w * 0.32, h * 0.14)
+      ..lineTo(w * 0.75, h * 0.14)
+      ..arcToPoint(Offset(w * 0.75, h * 0.06), radius: const Radius.circular(5.0), clockwise: false)
+      ..arcToPoint(Offset(w * 0.68, h * 0.10), radius: const Radius.circular(4.0), clockwise: false);
+
+    final stream2 = Path()
+      ..moveTo(w * 0.45, h * 0.26)
+      ..lineTo(w * 0.88, h * 0.26)
+      ..arcToPoint(Offset(w * 0.88, h * 0.18), radius: const Radius.circular(5.0), clockwise: false)
+      ..arcToPoint(Offset(w * 0.82, h * 0.22), radius: const Radius.circular(4.0), clockwise: false);
+
+    final stream3 = Path()
+      ..moveTo(w * 0.58, h * 0.38)
+      ..lineTo(w * 0.96, h * 0.38);
+
+    canvas.drawPath(stream1, paint);
+    canvas.drawPath(stream2, paint);
+    canvas.drawPath(stream3, subtle);
+  }
+
+  void _paintDefault(Canvas canvas, double w, double h, Paint paint) {
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(w * 0.85, h * 0.18), radius: w * 0.35),
+      math.pi * 0.5,
+      math.pi * 0.7,
+      false,
+      paint,
+    );
+  }
+
+  void _drawSparkle(Canvas canvas, Offset center, double size, Paint paint) {
+    final double half = size / 2;
+    final path = Path()
+      ..moveTo(center.dx, center.dy - half)
+      ..quadraticBezierTo(center.dx, center.dy, center.dx + half, center.dy)
+      ..quadraticBezierTo(center.dx, center.dy, center.dx, center.dy + half)
+      ..quadraticBezierTo(center.dx, center.dy, center.dx - half, center.dy)
+      ..quadraticBezierTo(center.dx, center.dy, center.dx, center.dy - half);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CategoryLinePatternPainter oldDelegate) =>
+      oldDelegate.categoryKey != categoryKey || oldDelegate.accentColor != accentColor;
 }

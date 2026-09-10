@@ -49,6 +49,7 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
   int _currentStepIndex = 0;
   String _currentInstruction = 'Head along route toward destination';
   IconData _currentManeuverIcon = Icons.arrow_upward;
+  String _originAddress = 'Locating origin...';
 
   @override
   void initState() {
@@ -57,10 +58,42 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
     _destinationLatLng = widget.destinationCoords;
     _isWalkMode = widget.initialWalkMode;
 
+    _resolveOriginAddress();
+
     if (_destinationLatLng == null) {
       _geocodeDestination();
     } else {
       _fetchDirections();
+    }
+  }
+
+  Future<void> _resolveOriginAddress() async {
+    final eff = _effectiveOrigin;
+    if (eff != null) {
+      if (LocationService.hasManualLocation &&
+          LocationService.manualAddress != null &&
+          LocationService.manualAddress!.trim().isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _originAddress = LocationService.manualAddress!;
+          });
+        }
+        return;
+      }
+      final addr = await LocationService.getAddressFromCoordinates(eff.latitude, eff.longitude);
+      if (mounted && addr.isNotEmpty) {
+        setState(() {
+          _originAddress = addr;
+        });
+        return;
+      }
+    }
+    // Live GPS fallback
+    final effectiveAddr = await LocationService.getEffectiveAddress();
+    if (mounted && effectiveAddr.isNotEmpty) {
+      setState(() {
+        _originAddress = effectiveAddr;
+      });
     }
   }
 
@@ -204,16 +237,40 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
     }
   }
 
-  void _launchExternalFallback() async {
+  Future<void> _launchGoogleMapsNavigation([OlaRouteResult? route]) async {
     final eff = _effectiveOrigin;
-    await LocationService.launchTurnByTurnNavigation(
+    final destLat = _destinationLatLng?.latitude;
+    final destLng = _destinationLatLng?.longitude;
+    final destAddress = widget.address.trim().isNotEmpty ? widget.address.trim() : widget.title;
+
+    final launched = await LocationService.launchTurnByTurnNavigation(
       originLat: eff?.latitude,
       originLng: eff?.longitude,
-      destLat: _destinationLatLng?.latitude,
-      destLng: _destinationLatLng?.longitude,
-      address: widget.address,
+      originAddress: _originAddress,
+      destLat: destLat,
+      destLng: destLng,
+      address: destAddress,
       isWalking: _isWalkMode,
     );
+
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Could not open Google Maps navigation. Please ensure Google Maps or a browser is available.'),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
   }
 
   void _showArrivalDialog() {
@@ -628,6 +685,7 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header with route title & Ola Maps Polyline indicator
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -665,14 +723,97 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
               ),
             ],
           ),
-          SizedBox(height: Responsive.h(4)),
-          CustomText.subtitle(
-            widget.address,
-            fontSize: 12,
-            color: AppColors.grayFont,
-            maxLines: 2,
+          SizedBox(height: Responsive.h(10)),
+
+          // From -> To Address Overview Box
+          Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: Responsive.w(12),
+              vertical: Responsive.h(10),
+            ),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(Responsive.w(12)),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Origin ("From")
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.radio_button_checked, size: 15, color: Color(0xFF2E7D32)),
+                    SizedBox(width: Responsive.w(8)),
+                    Text(
+                      'From: ',
+                      style: TextStyle(
+                        fontSize: Responsive.sp(11),
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        _originAddress,
+                        style: TextStyle(
+                          fontSize: Responsive.sp(12),
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.black,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding: EdgeInsets.only(left: Responsive.w(6)),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      width: 2,
+                      height: Responsive.h(8),
+                      color: Colors.grey.shade300,
+                    ),
+                  ),
+                ),
+                // Destination ("To")
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.location_on, size: 16, color: Color(0xFFD32F2F)),
+                    SizedBox(width: Responsive.w(8)),
+                    Text(
+                      'To: ',
+                      style: TextStyle(
+                        fontSize: Responsive.sp(11),
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        widget.address.isNotEmpty
+                            ? widget.address
+                            : widget.title,
+                        style: TextStyle(
+                          fontSize: Responsive.sp(12),
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.black,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          SizedBox(height: Responsive.h(14)),
+          SizedBox(height: Responsive.h(12)),
+
+          // Trip Duration / Distance & Main Start Google Maps Navigation Button
           Row(
             children: [
               Expanded(
@@ -699,12 +840,13 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
                 ),
               ),
               SizedBox(width: Responsive.w(12)),
-              // Main In-App Start Navigation Button (Keeps user in-app)
+
+              // Main Start Navigation Button -> Opens straightaway in Google Maps
               GestureDetector(
-                onTap: () => _startInAppNavigation(route),
+                onTap: () => _launchGoogleMapsNavigation(route),
                 child: Container(
                   padding: EdgeInsets.symmetric(
-                    horizontal: Responsive.w(16),
+                    horizontal: Responsive.w(18),
                     vertical: Responsive.h(11),
                   ),
                   decoration: BoxDecoration(
@@ -712,7 +854,7 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
                     borderRadius: BorderRadius.circular(Responsive.w(24)),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.3),
+                        color: AppColors.primary.withValues(alpha: 0.35),
                         blurRadius: 8,
                         offset: const Offset(0, 3),
                       ),
@@ -738,30 +880,47 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
             ],
           ),
           SizedBox(height: Responsive.h(8)),
-          // Discreet secondary option to launch external native maps if citizen desires
-          Align(
-            alignment: Alignment.centerRight,
-            child: GestureDetector(
-              onTap: _launchExternalFallback,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Open in external Google/Apple Maps',
-                      style: TextStyle(
-                        fontSize: Responsive.sp(10),
-                        color: Colors.grey.shade600,
-                        decoration: TextDecoration.underline,
-                      ),
+
+          // Secondary Action Info Bar
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.directions, size: 12, color: Colors.grey.shade600),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Opens Google Maps navigation',
+                    style: TextStyle(
+                      fontSize: Responsive.sp(10),
+                      color: Colors.grey.shade600,
                     ),
-                    const SizedBox(width: 3),
-                    Icon(Icons.open_in_new, size: 11, color: Colors.grey.shade600),
-                  ],
+                  ),
+                ],
+              ),
+              GestureDetector(
+                onTap: () => _startInAppNavigation(route),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'In-App Preview',
+                        style: TextStyle(
+                          fontSize: Responsive.sp(10),
+                          color: Colors.grey.shade600,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      Icon(Icons.play_circle_outline, size: 12, color: Colors.grey.shade600),
+                    ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ],
       ),

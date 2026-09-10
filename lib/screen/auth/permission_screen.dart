@@ -76,7 +76,7 @@ class _PermissionScreenState extends State<PermissionScreen> {
 
   bool get _hasLocation => _isLocationGranted || (_manualAddress != null && _manualAddress!.trim().isNotEmpty);
 
-  bool get _allGranted => _hasLocation && _isCameraGranted && _isStorageGranted;
+  bool get _allGranted => _hasLocation;
 
   Future<void> _requestLocation() async {
     final status = await Permission.location.request();
@@ -194,76 +194,15 @@ class _PermissionScreenState extends State<PermissionScreen> {
     }
   }
 
-  Future<void> _requestCamera() async {
-    final status = await Permission.camera.request();
-    if (!mounted) return;
-    setState(() {
-      _isCameraGranted = status.isGranted;
-    });
-    if (status.isPermanentlyDenied) {
-      _showSettingsNotice('Camera');
-    }
-  }
-
-  Future<void> _requestStorage() async {
-    bool granted = false;
-    if (Platform.isAndroid) {
-      final pStatus = await Permission.photos.request();
-      final sStatus = await Permission.storage.request();
-      granted = pStatus.isGranted || sStatus.isGranted;
-      if (pStatus.isPermanentlyDenied || sStatus.isPermanentlyDenied) {
-        _showSettingsNotice('Storage / Photos');
-      }
-    } else {
-      final pStatus = await Permission.photos.request();
-      granted = pStatus.isGranted;
-      if (pStatus.isPermanentlyDenied) {
-        _showSettingsNotice('Photos');
-      }
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _isStorageGranted = granted;
-    });
-  }
-
-  Future<void> _requestAllPermissions() async {
-    setState(() => _isLoading = true);
-
-    if (!_isLocationGranted) {
-      final locStatus = await Permission.location.request();
-      if (locStatus.isGranted) {
-        _isLocationGranted = true;
-        await HiveService.setHasSeenPermissionScreen(true);
-        await HiveService.clearManualLocation();
-        await LocationService.switchToLiveGps();
-        setState(() {
-          _manualAddress = null;
-        });
-      }
-    }
-    if (!_isCameraGranted) {
-      await Permission.camera.request();
-    }
-    if (!_isStorageGranted) {
-      if (Platform.isAndroid) {
-        await Permission.photos.request();
-        await Permission.storage.request();
-      } else {
-        await Permission.photos.request();
-      }
-    }
-
-    await _checkCurrentPermissions();
-
-    // If location is STILL not provided (neither GPS nor manual)
+  Future<void> _requestLocationAndProceed() async {
     if (!_hasLocation) {
-      _showLocationRequiredBottomSheet();
-      return;
+      await _requestLocation();
     }
-
-    await _proceedToMain();
+    if (_hasLocation) {
+      await _proceedToMain();
+    } else {
+      _showLocationRequiredBottomSheet();
+    }
   }
 
   void _showSettingsNotice(String permissionName) {
@@ -511,7 +450,7 @@ class _PermissionScreenState extends State<PermissionScreen> {
                     Padding(
                       padding: EdgeInsets.symmetric(horizontal: Responsive.w(12)),
                       child: CustomText.subtitle(
-                        'To provide you with seamless civic services, reporting tools, and nearby public amenities, Go Government needs access to the following:',
+                        'Location access is required to show civic amenities and services near you. Camera and media access will only be requested when you use them in the app.',
                         fontSize: 13,
                         color: AppColors.grayFont,
                         textAlign: TextAlign.center,
@@ -526,31 +465,51 @@ class _PermissionScreenState extends State<PermissionScreen> {
                         physics: const BouncingScrollPhysics(),
                         children: [
                           _buildLocationPermissionCard(),
-                          SizedBox(height: Responsive.h(14)),
-                          _buildPermissionCard(
+                          SizedBox(height: Responsive.h(16)),
+
+                          // Section Header for In-App Features
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: Responsive.w(4)),
+                            child: Row(
+                              children: [
+                                Icon(Icons.info_outline, size: 14, color: Colors.grey.shade600),
+                                SizedBox(width: Responsive.w(6)),
+                                Text(
+                                  'IN-APP FEATURES (Requested when used)',
+                                  style: TextStyle(
+                                    fontSize: Responsive.sp(10.5),
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey.shade600,
+                                    letterSpacing: 0.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: Responsive.h(8)),
+
+                          _buildInAppFeatureCard(
                             icon: Icons.camera_alt_rounded,
                             iconColor: const Color(0xFF1565C0),
                             iconBg: const Color(0xFFE3F2FD),
                             title: 'Camera Access',
-                            badgeText: 'Required for Reports',
+                            badgeText: 'Requested on Use',
                             badgeColor: const Color(0xFF1565C0),
                             description:
-                                'Allows capturing live, authentic photo evidence of municipal issues (e.g. potholes, broken street lights) and scanning QR codes for civic payments.',
+                                'Used only when taking live photos for civic grievance reports (e.g. potholes, garbage) or scanning QR codes. Permission is requested only when you use this feature.',
                             isGranted: _isCameraGranted,
-                            onEnable: _requestCamera,
                           ),
-                          SizedBox(height: Responsive.h(14)),
-                          _buildPermissionCard(
+                          SizedBox(height: Responsive.h(12)),
+                          _buildInAppFeatureCard(
                             icon: Icons.photo_library_rounded,
                             iconColor: const Color(0xFF2E7D32),
                             iconBg: const Color(0xFFE8F5E9),
                             title: 'Photos & Media',
-                            badgeText: 'Optional',
+                            badgeText: 'Requested on Use',
                             badgeColor: const Color(0xFF2E7D32),
                             description:
-                                'Enables attaching supporting images, bills, and municipal documents from your gallery to your grievance tickets and profile.',
+                                'Used only when attaching photos, utility bills, or municipal documents from your gallery. Permission is requested only when you choose to upload.',
                             isGranted: _isStorageGranted,
-                            onEnable: _requestStorage,
                           ),
                           SizedBox(height: Responsive.h(12)),
                         ],
@@ -575,22 +534,18 @@ class _PermissionScreenState extends State<PermissionScreen> {
                                   borderRadius: BorderRadius.circular(Responsive.w(16)),
                                 ),
                               ),
-                              onPressed: _allGranted
-                                  ? _onContinue
-                                  : (_hasLocation ? _onContinue : _requestAllPermissions),
+                              onPressed: _hasLocation ? _proceedToMain : _requestLocation,
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(
-                                    _hasLocation ? Icons.arrow_forward_rounded : Icons.lock_open_rounded,
+                                    _hasLocation ? Icons.arrow_forward_rounded : Icons.my_location_rounded,
                                     color: Colors.white,
                                     size: Responsive.w(18),
                                   ),
                                   SizedBox(width: Responsive.w(8)),
                                   CustomText.title(
-                                    _hasLocation
-                                        ? (_allGranted ? 'Continue to App' : 'Continue to App')
-                                        : 'Allow Location to Continue',
+                                    _hasLocation ? 'Continue to App' : 'Enable Location to Continue',
                                     color: Colors.white,
                                     fontSize: 15,
                                     fontWeight: FontWeight.bold,
@@ -601,35 +556,28 @@ class _PermissionScreenState extends State<PermissionScreen> {
                           ),
                           SizedBox(height: Responsive.h(8)),
 
-                          // Secondary Skip CTA
-                          TextButton(
-                            onPressed: _onSkip,
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.symmetric(vertical: Responsive.h(8)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                CustomText.title(
-                                  _hasLocation ? 'Skip other permissions for now' : 'Set location to proceed',
-                                  color: _hasLocation ? AppColors.grayFont : const Color(0xFFE65100),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                if (!_hasLocation) ...[
-                                  SizedBox(width: Responsive.w(4)),
-                                  const Icon(Icons.arrow_forward_ios, size: 11, color: Color(0xFFE65100)),
-                                ],
-                              ],
-                            ),
-                          ),
-                          if (_hasLocation && !_isLocationGranted) ...[
+                          // Secondary action
+                          if (!_hasLocation)
+                            TextButton.icon(
+                              onPressed: _pickManualLocation,
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.symmetric(vertical: Responsive.h(8)),
+                              ),
+                              icon: const Icon(Icons.map_outlined, size: 16, color: AppColors.primary),
+                              label: CustomText.title(
+                                'Or Set Location Manually on Map',
+                                color: AppColors.primary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            )
+                          else if (!_isLocationGranted) ...[
                             SizedBox(height: Responsive.h(2)),
                             Text(
                               'Using manual location • Permission screen will reappear on app restart',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 11,
-                                color: const Color(0xFFE65100),
+                                color: Color(0xFFE65100),
                                 fontWeight: FontWeight.w500,
                               ),
                               textAlign: TextAlign.center,
@@ -900,7 +848,7 @@ class _PermissionScreenState extends State<PermissionScreen> {
     );
   }
 
-  Widget _buildPermissionCard({
+  Widget _buildInAppFeatureCard({
     required IconData icon,
     required Color iconColor,
     required Color iconBg,
@@ -909,7 +857,6 @@ class _PermissionScreenState extends State<PermissionScreen> {
     required Color badgeColor,
     required String description,
     required bool isGranted,
-    required VoidCallback onEnable,
   }) {
     return Container(
       padding: EdgeInsets.all(Responsive.w(16)),
@@ -995,12 +942,12 @@ class _PermissionScreenState extends State<PermissionScreen> {
               ),
               SizedBox(width: Responsive.w(8)),
 
-              // Status / Action Button
+              // Status indicator badge (No action button needed - requested in-app on demand)
               isGranted
                   ? Container(
                       padding: EdgeInsets.symmetric(
-                        horizontal: Responsive.w(10),
-                        vertical: Responsive.h(6),
+                        horizontal: Responsive.w(8),
+                        vertical: Responsive.h(5),
                       ),
                       decoration: BoxDecoration(
                         color: Colors.green.withValues(alpha: 0.1),
@@ -1010,39 +957,43 @@ class _PermissionScreenState extends State<PermissionScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.check_circle, color: Colors.green, size: 14),
+                          const Icon(Icons.check_circle, color: Colors.green, size: 13),
                           SizedBox(width: Responsive.w(4)),
                           const Text(
                             'Allowed',
                             style: TextStyle(
                               color: Colors.green,
-                              fontSize: 11,
+                              fontSize: 10,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
                       ),
                     )
-                  : SizedBox(
-                      height: Responsive.h(32),
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          elevation: 0,
-                          padding: EdgeInsets.symmetric(horizontal: Responsive.w(12)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(Responsive.w(10)),
+                  : Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: Responsive.w(8),
+                        vertical: Responsive.h(5),
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(Responsive.w(12)),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.touch_app_outlined, color: Colors.grey.shade600, size: 13),
+                          SizedBox(width: Responsive.w(4)),
+                          Text(
+                            'On Use',
+                            style: TextStyle(
+                              color: Colors.grey.shade700,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                        onPressed: onEnable,
-                        child: const Text(
-                          'Enable',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        ],
                       ),
                     ),
             ],

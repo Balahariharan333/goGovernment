@@ -178,6 +178,7 @@ class _ReportScreenState extends State<ReportScreen> {
                 itemBuilder: (context, index) {
                   final report = filteredList[index];
                   return FadeSlideTransitionWidget(
+                    key: ValueKey(report['id'] ?? index),
                     index: index,
                     child: Padding(
                       padding: EdgeInsets.only(bottom: Responsive.h(16)),
@@ -426,7 +427,8 @@ class _ReportScreenState extends State<ReportScreen> {
 
   Widget _buildReportCard(BuildContext context, Map<String, dynamic> report) {
     final String reportId = report['id']?.toString() ?? '';
-    final bool isLiked = report['isLiked'] == true;
+    final likedBy = List<dynamic>.from(report['likedBy'] ?? []);
+    final bool isLiked = report['isLiked'] == true || likedBy.contains(HiveService.citizenId);
     final int likesCount = (report['likesCount'] as num?)?.toInt() ?? 0;
     final List<dynamic> comments = List.from(report['comments'] ?? []);
     final String status = report['status']?.toString() ?? 'Under Review';
@@ -583,7 +585,7 @@ class _ReportScreenState extends State<ReportScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(Responsive.w(16)),
                 child: SizedBox(
-                  height: Responsive.h(150),
+                  height: Responsive.h(160),
                   width: double.infinity,
                   child: ComplaintImageWidget(
                     imagePath: report['imagePath']?.toString(),
@@ -614,7 +616,7 @@ class _ReportScreenState extends State<ReportScreen> {
                       vertical: Responsive.h(6),
                     ),
                     decoration: BoxDecoration(
-                      color: isLiked ? AppColors.primary.withValues(alpha: 0.08) : Colors.transparent,
+                      color: isLiked ? const Color(0xFF2E7D32).withValues(alpha: 0.1) : Colors.transparent,
                       borderRadius: BorderRadius.circular(Responsive.w(10)),
                     ),
                     child: Row(
@@ -622,14 +624,14 @@ class _ReportScreenState extends State<ReportScreen> {
                         Icon(
                           isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
                           size: Responsive.w(16),
-                          color: isLiked ? AppColors.primary : AppColors.grayFont,
+                          color: isLiked ? const Color(0xFF2E7D32) : AppColors.grayFont,
                         ),
                         SizedBox(width: Responsive.w(6)),
                         CustomText.subtitle(
                           '$likesCount',
                           fontSize: 12,
                           fontWeight: isLiked ? FontWeight.bold : FontWeight.normal,
-                          color: isLiked ? AppColors.primary : AppColors.grayFont,
+                          color: isLiked ? const Color(0xFF2E7D32) : AppColors.grayFont,
                         ),
                       ],
                     ),

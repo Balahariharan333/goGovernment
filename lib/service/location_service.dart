@@ -365,11 +365,12 @@ class LocationService {
   }
 
   /// Launches native turn-by-turn navigation (Google Maps / Apple Maps) via deep link.
-  /// If [originLat]/[originLng] are provided (manual/picked location), they are used
-  /// as the start point. Otherwise Google Maps uses the device's current GPS location.
+  /// If [originLat]/[originLng] or [originAddress] are provided (manual/picked location or custom origin),
+  /// they are used as the start point ("From"). Otherwise Google Maps uses the device's current GPS location.
   static Future<bool> launchTurnByTurnNavigation({
     double? originLat,
     double? originLng,
+    String? originAddress,
     double? destLat,
     double? destLng,
     String? address,
@@ -386,26 +387,43 @@ class LocationService {
       return false;
     }
 
-    final hasOrigin = originLat != null && originLng != null;
+    final hasOriginCoords = originLat != null && originLng != null;
+    final hasOriginAddress = originAddress != null &&
+        originAddress.trim().isNotEmpty &&
+        !originAddress.toLowerCase().contains('current location');
+    final hasExplicitOrigin = hasOriginCoords || hasOriginAddress;
 
-    // 1. Android native Google Maps navigation intent
-    // If manual origin provided, include it; otherwise let Google Maps use GPS
-    final nativeUriStr = hasOrigin
-        ? 'google.navigation:q=$targetDestination&mode=$mode&origin=$originLat,$originLng'
-        : 'google.navigation:q=$targetDestination&mode=$mode';
-    final nativeUri = Uri.parse(nativeUriStr);
+    final originParam = hasOriginCoords
+        ? '$originLat,$originLng'
+        : (hasOriginAddress ? Uri.encodeComponent(originAddress!) : null);
 
-    // 2. Universal web directions URI with optional origin
-    final webUriStr = hasOrigin
-        ? 'https://www.google.com/maps/dir/?api=1&origin=$originLat,$originLng&destination=$targetDestination&travelmode=$travelMode'
-        : 'https://www.google.com/maps/dir/?api=1&destination=$targetDestination&travelmode=$travelMode';
-    final webUri = Uri.parse(webUriStr);
+    // 1. When an explicit origin is specified ("From" address or coordinates),
+    // launch Google Maps Directions URL with dir_action=navigate.
+    // This pre-fills From and To exactly as requested and activates navigation.
+    if (hasExplicitOrigin && originParam != null) {
+      final directionsUri = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&origin=$originParam&destination=$targetDestination&travelmode=$travelMode&dir_action=navigate',
+      );
+      try {
+        if (await canLaunchUrl(directionsUri)) {
+          return await launchUrl(directionsUri, mode: LaunchMode.externalApplication);
+        }
+      } catch (e) {
+        debugPrint('[LocationService] Google Maps directions launch error: $e');
+      }
+    }
+
+    // 2. Direct Android Turn-by-Turn Navigation Intent from device GPS location
+    final nativeUri = Uri.parse('google.navigation:q=$targetDestination&mode=$mode');
+    final universalUri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$targetDestination&travelmode=$travelMode&dir_action=navigate',
+    );
 
     try {
       if (await canLaunchUrl(nativeUri)) {
         return await launchUrl(nativeUri, mode: LaunchMode.externalApplication);
-      } else if (await canLaunchUrl(webUri)) {
-        return await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      } else if (await canLaunchUrl(universalUri)) {
+        return await launchUrl(universalUri, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
       debugPrint('[LocationService] Navigation launch error: $e');

@@ -18,6 +18,7 @@ import '../../bloc/report/report_bloc.dart';
 import '../../bloc/report/report_event.dart';
 import '../../bloc/transaction/transaction_bloc.dart';
 import '../../bloc/transaction/transaction_event.dart';
+import '../../widget/image_preview_dialog.dart';
 
 class AddComplaintScreen extends StatefulWidget {
   final String? category;
@@ -933,17 +934,32 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                       ),
                       SizedBox(height: Responsive.h(8)),
                       GestureDetector(
-                        onTap: () => _pickImage(context),
+                        onTap: () {
+                          if (imageFile != null) {
+                            ImagePreviewDialog.show(
+                              context,
+                              file: File(imageFile.path),
+                              title: selectedCategory.isNotEmpty
+                                  ? selectedCategory
+                                  : 'Complaint Photo Evidence',
+                              subtitle: _currentAddress.isNotEmpty
+                                  ? _currentAddress
+                                  : 'Tap image to zoom or pan',
+                            );
+                          } else {
+                            _pickImage(context);
+                          }
+                        },
                         child: Container(
-                          height: Responsive.h(120),
+                          height: imageFile != null ? Responsive.h(170) : Responsive.h(120),
                           width: double.infinity,
                           decoration: BoxDecoration(
-                            color: AppColors.white,
+                            color: imageFile != null ? const Color(0xFF0F172A) : AppColors.white,
                             borderRadius: BorderRadius.circular(
                               Responsive.w(16),
                             ),
                             border: Border.all(
-                              color: AppColors.outliner,
+                              color: imageFile != null ? Colors.transparent : AppColors.outliner,
                               width: Responsive.w(1.5),
                             ),
                           ),
@@ -952,10 +968,20 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                               ? Stack(
                                   fit: StackFit.expand,
                                   children: [
-                                    Image.file(
-                                      File(imageFile.path),
-                                      fit: BoxFit.cover,
+                                    Center(
+                                      child: Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          vertical: Responsive.h(10),
+                                          horizontal: Responsive.w(12),
+                                        ),
+                                        child: Image.file(
+                                          File(imageFile.path),
+                                          fit: BoxFit.contain,
+                                          gaplessPlayback: true,
+                                        ),
+                                      ),
                                     ),
+                                    // Top right remove button
                                     Positioned(
                                       top: Responsive.h(8),
                                       right: Responsive.w(8),
@@ -967,16 +993,79 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                         },
                                         child: Container(
                                           padding: EdgeInsets.all(
-                                            Responsive.w(4),
+                                            Responsive.w(6),
                                           ),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.black54,
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withValues(alpha: 0.65),
                                             shape: BoxShape.circle,
                                           ),
                                           child: Icon(
                                             Icons.close,
                                             color: Colors.white,
-                                            size: Responsive.w(18),
+                                            size: Responsive.w(16),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    // Bottom right tap to preview badge
+                                    Positioned(
+                                      bottom: Responsive.h(8),
+                                      right: Responsive.w(8),
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: Responsive.w(8),
+                                          vertical: Responsive.h(4),
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withValues(alpha: 0.65),
+                                          borderRadius: BorderRadius.circular(Responsive.w(12)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.zoom_in, color: Colors.white, size: Responsive.w(14)),
+                                            SizedBox(width: Responsive.w(4)),
+                                            Text(
+                                              'Preview',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: Responsive.sp(10),
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    // Bottom left change photo button
+                                    Positioned(
+                                      bottom: Responsive.h(8),
+                                      left: Responsive.w(8),
+                                      child: GestureDetector(
+                                        onTap: () => _pickImage(context),
+                                        child: Container(
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: Responsive.w(10),
+                                            vertical: Responsive.h(5),
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary,
+                                            borderRadius: BorderRadius.circular(Responsive.w(12)),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.edit, color: Colors.white, size: Responsive.w(13)),
+                                              SizedBox(width: Responsive.w(4)),
+                                              Text(
+                                                'Change',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: Responsive.sp(10.5),
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
