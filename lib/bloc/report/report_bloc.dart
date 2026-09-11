@@ -3,13 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../hive/hive_service.dart';
 import 'report_event.dart';
 import 'report_state.dart';
-import '../../service/firebase_service.dart';
+import '../../network/api_service.dart';
 
 class ReportBloc extends Bloc<ReportEvent, ReportState> {
   ReportBloc() : super(ReportState.initial()) {
     on<LoadReportsEvent>((event, emit) async {
       await emit.forEach(
-        FirebaseService.streamAllComplaints(),
+        ApiService.streamAllComplaints(),
         onData: (List<Map<String, dynamic>> allComplaints) {
           final myId = HiveService.citizenId;
           final processed = allComplaints.map((c) {
@@ -19,8 +19,8 @@ class ReportBloc extends Bloc<ReportEvent, ReportState> {
             return complaintMap;
           }).toList();
 
-          final myReports = processed.where((c) => c['citizenId'] == myId).toList();
-          final otherReports = processed.where((c) => c['citizenId'] != myId).toList();
+          final myReports = processed.where((c) => c['citizenId'] == myId || c['userId'] == myId).toList();
+          final otherReports = processed.where((c) => c['citizenId'] != myId && c['userId'] != myId).toList();
           
           return state.copyWith(
             myReports: myReports,
@@ -92,12 +92,12 @@ class ReportBloc extends Bloc<ReportEvent, ReportState> {
           otherReports: updatedOther,
         ));
 
-        await FirebaseService.toggleLike(event.reportId, isCurrentlyLiked);
+        await ApiService.toggleLike(event.reportId, isCurrentlyLiked);
       }
     });
 
     on<AddCommentToReportEvent>((event, emit) async {
-      await FirebaseService.addComment(event.reportId, event.comment, event.userName);
+      await ApiService.addComment(event.reportId, event.comment, event.userName);
     });
   }
 }

@@ -49,6 +49,14 @@ class _LoginScreenState extends State<LoginScreen> {
               RouteConstants.otp,
               arguments: state.phone,
             );
+          } else if (state is AuthFailure) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.error),
+                backgroundColor: Colors.red.shade700,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
           }
         },
         child: CommonBackground(

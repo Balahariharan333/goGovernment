@@ -2,12 +2,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../hive/hive_service.dart';
 import 'profile_event.dart';
 import 'profile_state.dart';
+import '../../network/api_service.dart';
 
 class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   static final ProfileBloc instance = ProfileBloc._();
 
   ProfileBloc._() : super(ProfileState.initial()) {
-    on<UpdateProfileEvent>((event, emit) {
+    on<UpdateProfileEvent>((event, emit) async {
       HiveService.saveProfile(
         name: event.name,
         email: event.email,
@@ -18,6 +19,22 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         email: event.email,
         imagePath: event.imagePath ?? state.imagePath,
       ));
+
+      String? remoteUrl = event.imagePath;
+      if (event.imagePath != null &&
+          event.imagePath!.isNotEmpty &&
+          !event.imagePath!.startsWith('http') &&
+          !event.imagePath!.startsWith('assets/')) {
+        final uploaded = await ApiService.uploadProfileImage(event.imagePath!);
+        if (uploaded != null) remoteUrl = uploaded;
+      }
+
+      await ApiService.updateProfile(
+        userId: HiveService.citizenId,
+        userName: event.name,
+        email: event.email,
+        profileImage: remoteUrl,
+      );
     });
 
     on<UpdatePhoneEvent>((event, emit) {
@@ -27,11 +44,25 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       ));
     });
 
-    on<UpdateProfileImageEvent>((event, emit) {
+    on<UpdateProfileImageEvent>((event, emit) async {
       HiveService.setUserProfileImage(event.imagePath);
       emit(state.copyWith(
         imagePath: event.imagePath,
       ));
+
+      String? remoteUrl = event.imagePath;
+      if (!event.imagePath.startsWith('http') &&
+          !event.imagePath.startsWith('assets/')) {
+        final uploaded = await ApiService.uploadProfileImage(event.imagePath);
+        if (uploaded != null) remoteUrl = uploaded;
+      }
+
+      await ApiService.updateProfile(
+        userId: HiveService.citizenId,
+        userName: state.name.isNotEmpty ? state.name : HiveService.userName,
+        email: state.email.isNotEmpty ? state.email : HiveService.userEmail,
+        profileImage: remoteUrl,
+      );
     });
   }
 }

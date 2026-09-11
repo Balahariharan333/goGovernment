@@ -68,6 +68,10 @@ class HiveService {
     return newId;
   }
 
+  static Future<void> setCitizenId(String id) async {
+    await _authBox.put('citizenId', id);
+  }
+
   static Future<void> saveProfile({
     required String name,
     required String email,

@@ -2,7 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../hive/hive_service.dart';
 import 'complaint_event.dart';
 import 'complaint_state.dart';
-import '../../service/firebase_service.dart';
+import '../../network/api_service.dart';
 
 class ComplaintBloc extends Bloc<ComplaintEvent, ComplaintState> {
   ComplaintBloc() : super(ComplaintState.initial()) {
@@ -26,7 +26,7 @@ class ComplaintBloc extends Bloc<ComplaintEvent, ComplaintState> {
 
       String? remoteImagePath = rawPath;
       if (rawPath != null && rawPath.isNotEmpty && !rawPath.startsWith('assets/')) {
-        final uploaded = await FirebaseService.uploadComplaintImage(rawPath, complaintId);
+        final uploaded = await ApiService.uploadComplaintImage(rawPath, complaintId);
         if (uploaded != null && uploaded.isNotEmpty) {
           remoteImagePath = uploaded;
         }
@@ -34,6 +34,8 @@ class ComplaintBloc extends Bloc<ComplaintEvent, ComplaintState> {
 
       final newComplaint = {
         'id': complaintId,
+        'complaintId': complaintId,
+        'userId': HiveService.citizenId,
         'userName': HiveService.userName.isNotEmpty ? HiveService.userName : 'Citizen',
         'userAddress': (event.location != null && event.location!.isNotEmpty)
             ? event.location!
@@ -49,11 +51,11 @@ class ComplaintBloc extends Bloc<ComplaintEvent, ComplaintState> {
         'comments': <Map<String, dynamic>>[],
       };
       
-      // Save locally (optional fallback)
+      // Save locally (fallback)
       await HiveService.saveComplaint(newComplaint);
       
-      // Upload to Firebase Firestore in real-time
-      await FirebaseService.submitComplaint(newComplaint);
+      // Upload to Node.js & MongoDB
+      await ApiService.submitComplaint(newComplaint);
 
       emit(state.copyWith(isSubmitting: false, isSubmitted: true));
     });
