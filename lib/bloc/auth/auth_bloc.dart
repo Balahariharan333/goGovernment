@@ -3,6 +3,8 @@ import '../../hive/hive_service.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 import '../../network/api_service.dart';
+import '../profile/profile_bloc.dart';
+import '../profile/profile_event.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   AuthBloc() : super(HiveService.isLoggedIn ? AuthSuccess() : AuthInitial()) {
@@ -43,8 +45,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           }
         }
 
+        final bool isNewUser = result['isNewUser'] == true;
         await HiveService.setLoggedIn(true);
-        emit(AuthSuccess());
+        ProfileBloc.instance.add(ReloadProfileEvent());
+        emit(AuthSuccess(isNewUser: isNewUser));
       } else {
         emit(AuthFailure(result?['message'] ?? 'Invalid OTP code. Please try again.'));
       }
@@ -53,6 +57,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<LogoutEvent>((event, emit) async {
       emit(AuthLoading());
       await HiveService.clearAuth();
+      ProfileBloc.instance.add(ReloadProfileEvent());
       await Future.delayed(const Duration(milliseconds: 300));
       emit(AuthInitial());
     });

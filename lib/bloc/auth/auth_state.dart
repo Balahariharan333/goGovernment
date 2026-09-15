@@ -9,7 +9,10 @@ class OtpSent extends AuthState {
   OtpSent(this.phone);
 }
 
-class AuthSuccess extends AuthState {}
+class AuthSuccess extends AuthState {
+  final bool isNewUser;
+  AuthSuccess({this.isNewUser = false});
+}
 
 class AuthFailure extends AuthState {
   final String error;

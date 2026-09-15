@@ -64,5 +64,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         profileImage: remoteUrl,
       );
     });
+
+    on<ReloadProfileEvent>((event, emit) {
+      emit(ProfileState.initial());
+    });
   }
 }

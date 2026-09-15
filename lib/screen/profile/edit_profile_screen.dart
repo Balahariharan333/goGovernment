@@ -11,6 +11,7 @@ import '../../bloc/profile/profile_bloc.dart';
 import '../../bloc/profile/profile_event.dart';
 import '../../hive/hive_service.dart';
 import '../../constants/route_constants.dart';
+import '../../network/api_client.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final String initialName;
@@ -304,9 +305,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return result ?? false;
   }
 
+  Widget _buildAvatarFallback() {
+    return Center(
+      child: _avatarInitial.isNotEmpty
+          ? Text(
+              _avatarInitial,
+              style: TextStyle(
+                fontSize: Responsive.sp(48),
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                fontFamily: 'Valley Sans',
+              ),
+            )
+          : Icon(
+              Icons.add_a_photo_outlined,
+              size: Responsive.w(42),
+              color: Colors.white,
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bool hasImage = _imagePath.isNotEmpty && File(_imagePath).existsSync();
+    final String normalizedPath = ApiClient.normalizeImageUrl(_imagePath);
+    final bool isNetwork = normalizedPath.startsWith('http://') || normalizedPath.startsWith('https://');
+    final bool isLocalFile = !isNetwork && normalizedPath.isNotEmpty && File(normalizedPath).existsSync();
+    final bool hasImage = isNetwork || isLocalFile;
 
     final scaffold = Scaffold(
       backgroundColor: AppColors.screenColor,
@@ -404,30 +428,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(Responsive.w(25.5)),
-                                  child: hasImage
-                                      ? Image.file(
-                                          File(_imagePath),
+                                  child: isNetwork
+                                      ? Image.network(
+                                          normalizedPath,
                                           width: Responsive.w(120),
                                           height: Responsive.w(120),
                                           fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stack) => _buildAvatarFallback(),
                                         )
-                                      : Center(
-                                          child: _avatarInitial.isNotEmpty
-                                              ? Text(
-                                                  _avatarInitial,
-                                                  style: TextStyle(
-                                                    fontSize: Responsive.sp(48),
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.white,
-                                                    fontFamily: 'Valley Sans',
-                                                  ),
-                                                )
-                                              : Icon(
-                                                  Icons.add_a_photo_outlined,
-                                                  size: Responsive.w(42),
-                                                  color: Colors.white,
-                                                ),
-                                        ),
+                                      : (isLocalFile
+                                          ? Image.file(
+                                              File(normalizedPath),
+                                              width: Responsive.w(120),
+                                              height: Responsive.w(120),
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error, stack) => _buildAvatarFallback(),
+                                            )
+                                          : _buildAvatarFallback()),
                                 ),
                               ),
                               // Camera / Edit badge

@@ -16,3 +16,6 @@ class UpdateProfileImageEvent extends ProfileEvent {
   final String imagePath;
   UpdateProfileImageEvent(this.imagePath);
 }
+
+class ReloadProfileEvent extends ProfileEvent {}
+

@@ -9,6 +9,7 @@ import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
 import '../../constants/route_constants.dart';
+import '../../hive/hive_service.dart';
 
 
 
@@ -77,6 +78,7 @@ class _OtpScreenState extends State<OtpScreen> {
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthSuccess) {
+            if (state.isNewUser) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Verification successful! Please complete your registration.'),
@@ -89,6 +91,23 @@ class _OtpScreenState extends State<OtpScreen> {
                 (route) => false,
                 arguments: {'isRegistration': true},
               );
+            } else {
+              final welcomeName = HiveService.userName.isNotEmpty ? ', ${HiveService.userName}' : '';
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Welcome back$welcomeName!'),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+              final targetRoute = HiveService.hasSeenPermissionScreen
+                  ? RouteConstants.main
+                  : RouteConstants.permission;
+              Navigator.of(context).pushNamedAndRemoveUntil(
+                targetRoute,
+                (route) => false,
+              );
+            }
           } else if (state is AuthFailure) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(

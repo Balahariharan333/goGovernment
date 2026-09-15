@@ -10,6 +10,7 @@ import '../../bloc/auth/auth_event.dart';
 import '../../bloc/profile/profile_bloc.dart';
 import '../../bloc/profile/profile_event.dart';
 import '../../bloc/profile/profile_state.dart';
+import '../../network/api_client.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -490,12 +491,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         // Avatar or First Letter Initial / Guide Icon
                         Builder(
                           builder: (context) {
-                            final bool hasImage = state.imagePath.isNotEmpty &&
-                                File(state.imagePath).existsSync();
+                            final String normalizedPath = ApiClient.normalizeImageUrl(state.imagePath);
+                            final bool isNetwork = normalizedPath.startsWith('http://') ||
+                                normalizedPath.startsWith('https://');
+                            final bool isLocalFile = !isNetwork &&
+                                normalizedPath.isNotEmpty &&
+                                File(normalizedPath).existsSync();
+                            final bool hasImage = isNetwork || isLocalFile;
                             final bool hasName = name.trim().isNotEmpty;
                             final String initialLetter = hasName
                                 ? name.trim()[0].toUpperCase()
                                 : '';
+
+                            Widget fallbackAvatar() => Center(
+                                  child: hasName
+                                      ? Text(
+                                          initialLetter,
+                                          style: TextStyle(
+                                            fontSize: Responsive.sp(32),
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primary,
+                                            fontFamily: 'Valley Sans',
+                                          ),
+                                        )
+                                      : Icon(
+                                          Icons.person_outline_rounded,
+                                          size: Responsive.w(38),
+                                          color: AppColors.primary,
+                                        ),
+                                );
 
                             return Container(
                               width: Responsive.w(80),
@@ -516,30 +540,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ],
                               ),
                               child: ClipOval(
-                                child: hasImage
-                                    ? Image.file(
-                                        File(state.imagePath),
+                                child: isNetwork
+                                    ? Image.network(
+                                        normalizedPath,
                                         width: Responsive.w(80),
                                         height: Responsive.w(80),
                                         fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stack) => fallbackAvatar(),
                                       )
-                                    : Center(
-                                        child: hasName
-                                            ? Text(
-                                                initialLetter,
-                                                style: TextStyle(
-                                                  fontSize: Responsive.sp(32),
-                                                  fontWeight: FontWeight.bold,
-                                                  color: AppColors.primary,
-                                                  fontFamily: 'Valley Sans',
-                                                ),
-                                              )
-                                            : Icon(
-                                                Icons.person_outline_rounded,
-                                                size: Responsive.w(38),
-                                                color: AppColors.primary,
-                                              ),
-                                      ),
+                                    : (isLocalFile
+                                        ? Image.file(
+                                            File(normalizedPath),
+                                            width: Responsive.w(80),
+                                            height: Responsive.w(80),
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (context, error, stack) => fallbackAvatar(),
+                                          )
+                                        : fallbackAvatar()),
                               ),
                             );
                           },
