@@ -399,12 +399,17 @@ class _CartScreenState extends State<CartScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          CustomText.title(
-                            _receiverName != null
-                                ? 'Ordering for $_receiverName ($_receiverPhone)'
-                                : 'Ordering for someone else?',
-                            fontSize: 13,
+                          Expanded(
+                            child: CustomText.title(
+                              _receiverName != null
+                                  ? 'Ordering for $_receiverName ($_receiverPhone)'
+                                  : 'Ordering for someone else?',
+                              fontSize: 13,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
+                          SizedBox(width: Responsive.w(8)),
                           GestureDetector(
                             onTap: () {
                               _showOrderForSomeoneElseSheet(context);
@@ -528,32 +533,43 @@ class _CartScreenState extends State<CartScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       // Pay using source
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.account_balance_wallet_outlined,
-                                color: const Color(0xFFF4511E),
-                                size: Responsive.w(14),
-                              ),
-                              SizedBox(width: Responsive.w(6)),
-                              const Text(
-                                'Pay using',
-                                style: TextStyle(fontSize: 10, color: Colors.grey),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: Responsive.h(4)),
-                          CustomText.title(
-                            'Wallet (₹${walletBalance.toStringAsFixed(0)})',
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ],
+                      Flexible(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.account_balance_wallet_outlined,
+                                  color: const Color(0xFFF4511E),
+                                  size: Responsive.w(14),
+                                ),
+                                SizedBox(width: Responsive.w(4)),
+                                Flexible(
+                                  child: CustomText.subtitle(
+                                    'Pay using',
+                                    fontSize: 10,
+                                    color: Colors.grey,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: Responsive.h(4)),
+                            CustomText.title(
+                              'Wallet (₹${walletBalance.toStringAsFixed(0)})',
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
+                      SizedBox(width: Responsive.w(12)),
 
                       // Solid Checkout CTA button
                       GestureDetector(
@@ -684,7 +700,7 @@ class _CartScreenState extends State<CartScreen> {
                         },
                         child: Container(
                           padding: EdgeInsets.symmetric(
-                            horizontal: Responsive.w(24),
+                            horizontal: Responsive.w(18),
                             vertical: Responsive.h(12),
                           ),
                           decoration: BoxDecoration(
@@ -709,7 +725,7 @@ class _CartScreenState extends State<CartScreen> {
                                   ),
                                 ],
                               ),
-                              SizedBox(width: Responsive.w(16)),
+                              SizedBox(width: Responsive.w(12)),
                               CustomText.title(
                                 'Place order',
                                 color: Colors.white,
@@ -896,7 +912,16 @@ class _CartScreenState extends State<CartScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            CustomText.header('You May Also Like..', fontSize: 14, fontWeight: FontWeight.bold),
+            Expanded(
+              child: CustomText.header(
+                'You May Also Like..',
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            SizedBox(width: Responsive.w(8)),
             GestureDetector(
               onTap: () {
                 final String heading = widget.storeType == 'medical'
@@ -1228,30 +1253,43 @@ class _CartScreenState extends State<CartScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.assignment_outlined, color: Colors.grey, size: Responsive.w(14)),
-                  SizedBox(width: Responsive.w(6)),
-                  CustomText.title('Item total', fontSize: 12),
-                  SizedBox(width: Responsive.w(8)),
-
-                  // You Saved pill label
-                  if (itemSavings > 0)
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: Responsive.w(8), vertical: Responsive.h(3)),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE8EAF6),
-                        borderRadius: BorderRadius.circular(Responsive.w(6)),
-                      ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.assignment_outlined, color: Colors.grey, size: Responsive.w(14)),
+                    SizedBox(width: Responsive.w(6)),
+                    Flexible(
                       child: CustomText.title(
-                        'you saved ₹$itemSavings',
-                        color: Colors.blue.shade800,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
+                        'Item total',
+                        fontSize: 12,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                ],
+                    if (itemSavings > 0) ...[
+                      SizedBox(width: Responsive.w(6)),
+                      Flexible(
+                        child: Container(
+                          padding: EdgeInsets.symmetric(horizontal: Responsive.w(6), vertical: Responsive.h(2)),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8EAF6),
+                            borderRadius: BorderRadius.circular(Responsive.w(6)),
+                          ),
+                          child: CustomText.title(
+                            'you saved ₹$itemSavings',
+                            color: Colors.blue.shade800,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
+              SizedBox(width: Responsive.w(8)),
               Row(
                 children: [
                   Text(
@@ -1282,23 +1320,35 @@ class _CartScreenState extends State<CartScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.motorcycle_outlined, color: Colors.grey, size: Responsive.w(14)),
-                    SizedBox(width: Responsive.w(6)),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        CustomText.title('Delivery Charge', fontSize: 12),
-                        if (!isFreeDelivery)
-                          Text(
-                            'Shop for ₹${99 - itemDiscountedTotal} more to get FREE delivery',
-                            style: const TextStyle(color: Colors.red, fontSize: 8),
-                          ),
-                      ],
-                    ),
-                  ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(Icons.motorcycle_outlined, color: Colors.grey, size: Responsive.w(14)),
+                      SizedBox(width: Responsive.w(6)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CustomText.title(
+                              'Delivery Charge',
+                              fontSize: 12,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (!isFreeDelivery)
+                              Text(
+                                'Shop for ₹${99 - itemDiscountedTotal} more to get FREE delivery',
+                                style: const TextStyle(color: Colors.red, fontSize: 8),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                SizedBox(width: Responsive.w(8)),
                 CustomText.title(
                   deliveryCharge == 0 ? 'Free' : '₹$deliveryCharge',
                   color: deliveryCharge == 0 ? Colors.blue.shade700 : AppColors.black,
@@ -1319,13 +1369,23 @@ class _CartScreenState extends State<CartScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.work_outline, color: Colors.grey, size: Responsive.w(14)),
-                    SizedBox(width: Responsive.w(6)),
-                    CustomText.title('Handling Charge', fontSize: 12),
-                  ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(Icons.work_outline, color: Colors.grey, size: Responsive.w(14)),
+                      SizedBox(width: Responsive.w(6)),
+                      Expanded(
+                        child: CustomText.title(
+                          'Handling Charge',
+                          fontSize: 12,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                SizedBox(width: Responsive.w(8)),
                 CustomText.title(
                   '₹$handlingCharge',
                   fontSize: 12,
@@ -1341,17 +1401,24 @@ class _CartScreenState extends State<CartScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.confirmation_num_outlined, color: Colors.green, size: 14),
-                    SizedBox(width: Responsive.w(6)),
-                    CustomText.title(
-                      couponCode != null ? 'Coupon Discount ($couponCode)' : 'Coupon Discount',
-                      fontSize: 12,
-                      color: Colors.green,
-                    ),
-                  ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.confirmation_num_outlined, color: Colors.green, size: 14),
+                      SizedBox(width: Responsive.w(6)),
+                      Expanded(
+                        child: CustomText.title(
+                          couponCode != null ? 'Coupon Discount ($couponCode)' : 'Coupon Discount',
+                          fontSize: 12,
+                          color: Colors.green,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                SizedBox(width: Responsive.w(8)),
                 CustomText.title(
                   '-₹$couponDiscount',
                   color: Colors.green,
@@ -1366,13 +1433,23 @@ class _CartScreenState extends State<CartScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.currency_rupee_rounded, color: Color(0xFFFFB300), size: 14),
-                    SizedBox(width: Responsive.w(6)),
-                    CustomText.title('Complaint Coins ($coinsDeducted coins)', fontSize: 12),
-                  ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.currency_rupee_rounded, color: Color(0xFFFFB300), size: 14),
+                      SizedBox(width: Responsive.w(6)),
+                      Expanded(
+                        child: CustomText.title(
+                          'Complaint Coins ($coinsDeducted coins)',
+                          fontSize: 12,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                SizedBox(width: Responsive.w(8)),
                 CustomText.title(
                   '-₹$coinsDiscount',
                   color: Colors.green,

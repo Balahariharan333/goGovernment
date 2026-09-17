@@ -28,6 +28,16 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
   String _searchQuery = '';
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<AddressBloc>().add(LoadAddressesEvent());
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();

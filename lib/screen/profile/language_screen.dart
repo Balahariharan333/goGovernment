@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../hive/hive_service.dart';
+import '../../services/translation_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
@@ -18,13 +19,9 @@ class _LanguageScreenState extends State<LanguageScreen> {
   @override
   void initState() {
     super.initState();
-    final savedLang = HiveService.getLanguage();
-    final match = _languages.firstWhere(
-      (l) => l['name']?.toLowerCase() == savedLang.toLowerCase(),
-      orElse: () => _languages.first,
-    );
-    _selectedLanguageCode = match['code'] ?? 'en';
+    _selectedLanguageCode = HiveService.getLanguageCode();
   }
+
 
   final List<Map<String, String>> _languages = [
     {'code': 'en', 'name': 'English', 'nativeName': 'English', 'icon': 'A'},
@@ -177,16 +174,27 @@ class _LanguageScreenState extends State<LanguageScreen> {
                                         ),
                                       ),
                                       const Spacer(),
-                                      CustomText.header(
+                                      Text(
                                         lang['nativeName']!,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
+                                        style: TextStyle(
+                                          fontFamily: 'Valley Sans',
+                                          fontSize: Responsive.sp(16),
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.black,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                       SizedBox(height: Responsive.h(2)),
-                                      CustomText.subtitle(
+                                      Text(
                                         lang['name']!,
-                                        fontSize: 12,
-                                        color: Colors.grey.shade500,
+                                        style: TextStyle(
+                                          fontFamily: 'Valley Sans',
+                                          fontSize: Responsive.sp(12),
+                                          color: Colors.grey.shade500,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ],
                                   ),
@@ -207,7 +215,7 @@ class _LanguageScreenState extends State<LanguageScreen> {
                       child: GestureDetector(
                         onTap: () {
                           final selectedLang = _languages.firstWhere((l) => l['code'] == _selectedLanguageCode);
-                          HiveService.setLanguage(selectedLang['name'] ?? 'English');
+                          TranslationService.setLanguage(selectedLang['code']!, selectedLang['name'] ?? 'English');
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Language changed to ${selectedLang['name']} successfully!'),
@@ -279,11 +287,15 @@ class _LanguageScreenState extends State<LanguageScreen> {
                         ),
                       ),
                       SizedBox(width: Responsive.w(12)),
-                      CustomText.header(
-                        'Select Language',
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.black,
+                      Expanded(
+                        child: CustomText.header(
+                          'Select Language',
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.black,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),

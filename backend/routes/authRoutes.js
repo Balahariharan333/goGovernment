@@ -137,4 +137,125 @@ router.get('/profile/:userId', async (req, res) => {
   }
 });
 
+// 5. SEND PHONE UPDATE OTP
+router.post('/send-phone-update-otp', async (req, res) => {
+  try {
+    const { userId, newPhone, currentPhone } = req.body;
+
+    if (!newPhone) {
+      return res.status(400).json({ error: 'newPhone is required' });
+    }
+
+    const cleanNewPhone = newPhone.toString().trim().replace(/[^0-9]/g, '').slice(-10);
+    const cleanCurrentPhone = currentPhone
+      ? currentPhone.toString().trim().replace(/[^0-9]/g, '').slice(-10)
+      : null;
+
+    // Find user by userId OR current registered phone
+    const userQuery = [];
+    if (userId) userQuery.push({ userId });
+    if (cleanCurrentPhone) userQuery.push({ phone: cleanCurrentPhone });
+
+    if (userQuery.length === 0) {
+      return res.status(400).json({ error: 'userId or currentPhone is required to identify the user' });
+    }
+
+    const user = await User.findOne({ $or: userQuery });
+    if (!user) {
+      return res.status(404).json({ error: 'User account not found' });
+    }
+
+    // Check if new phone is already registered by another user
+    const existing = await User.findOne({
+      phone: cleanNewPhone,
+      userId: { $ne: user.userId },
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        error: 'This phone number is already registered with another account.',
+      });
+    }
+
+    // Generate random 4-digit OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    const otpExpires = new Date(Date.now() + 5 * 60 * 1000);
+
+    user.pendingPhone = cleanNewPhone;
+    user.pendingPhoneOtp = otp;
+    user.pendingPhoneOtpExpires = otpExpires;
+    await user.save();
+
+    console.log(`📲 [SMS Gateway] Phone Update OTP for ${cleanNewPhone}: ${otp}`);
+
+    res.status(200).json({
+      success: true,
+      message: `OTP sent successfully to ${cleanNewPhone}`,
+      otp: otp, // Returned for testing
+    });
+  } catch (error) {
+    console.error('Error sending phone update OTP:', error);
+    res.status(500).json({ error: 'Failed to send OTP', details: error.message });
+  }
+});
+
+// 6. VERIFY PHONE UPDATE OTP & UPDATE PHONE
+router.post('/verify-phone-update-otp', async (req, res) => {
+  try {
+    const { userId, newPhone, currentPhone, otp } = req.body;
+
+    if (!newPhone || !otp) {
+      return res.status(400).json({ error: 'newPhone and otp are required' });
+    }
+
+    const cleanNewPhone = newPhone.toString().trim().replace(/[^0-9]/g, '').slice(-10);
+    const cleanCurrentPhone = currentPhone
+      ? currentPhone.toString().trim().replace(/[^0-9]/g, '').slice(-10)
+      : null;
+
+    const userQuery = [];
+    if (userId) userQuery.push({ userId });
+    if (cleanCurrentPhone) userQuery.push({ phone: cleanCurrentPhone });
+
+    const user = await User.findOne({ $or: userQuery });
+    if (!user) {
+      return res.status(404).json({ error: 'User account not found' });
+    }
+
+    // Check pending phone match
+    if (user.pendingPhone !== cleanNewPhone) {
+      return res.status(400).json({ error: 'Phone number mismatch. Please request OTP again.' });
+    }
+
+    // Check expiry
+    if (user.pendingPhoneOtpExpires && new Date() > user.pendingPhoneOtpExpires) {
+      return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Verify OTP
+    if (user.pendingPhoneOtp !== otp.toString().trim()) {
+      return res.status(400).json({ error: 'Invalid OTP code. Please enter the correct OTP.' });
+    }
+
+    // Update phone number
+    user.phone = cleanNewPhone;
+    user.pendingPhone = '';
+    user.pendingPhoneOtp = '';
+    user.pendingPhoneOtpExpires = null;
+    await user.save();
+
+    console.log(`✅ Phone number updated successfully for user ${user.userId} to ${cleanNewPhone}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Phone number updated successfully',
+      phone: cleanNewPhone,
+      user: user,
+    });
+  } catch (error) {
+    console.error('Error verifying phone update OTP:', error);
+    res.status(500).json({ error: 'Failed to update phone number', details: error.message });
+  }
+});
+
 module.exports = router;

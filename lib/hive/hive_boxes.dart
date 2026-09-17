@@ -36,6 +36,8 @@ class HiveKeys {
 
   // Settings
   static const String selectedLanguage = 'selected_language';
+  static const String selectedLanguageCode = 'selected_language_code';
   static const String isDarkMode = 'is_dark_mode';
   static const String hasSeenPermissionScreen = 'has_seen_permission_screen';
 }
+

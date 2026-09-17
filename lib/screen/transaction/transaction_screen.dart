@@ -934,11 +934,16 @@ class TransactionScreen extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    CustomText.header(
-                      'Transactions',
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: CustomText.header(
+                        'Transactions',
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
+                    SizedBox(width: Responsive.w(8)),
                     BouncingButton(
                       scaleFactor: 0.92,
                       onTap: () {

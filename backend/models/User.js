@@ -9,6 +9,9 @@ const UserSchema = new mongoose.Schema(
     profileImage: { type: String, default: '' },
     otp: { type: String, default: '' },
     otpExpires: { type: Date },
+    pendingPhone: { type: String, default: '' },
+    pendingPhoneOtp: { type: String, default: '' },
+    pendingPhoneOtpExpires: { type: Date },
   },
   {
     timestamps: true,
@@ -22,6 +25,8 @@ UserSchema.set('toJSON', {
     delete ret._id;
     delete ret.otp; // Never expose OTP in response
     delete ret.otpExpires;
+    delete ret.pendingPhoneOtp;
+    delete ret.pendingPhoneOtpExpires;
   },
 });
 

@@ -339,13 +339,11 @@ class _HomeTabState extends State<HomeTab> {
                           color: statusColor.withValues(alpha: 0.3),
                         ),
                       ),
-                      child: Text(
+                      child: CustomText.body(
                         status,
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        color: statusColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],

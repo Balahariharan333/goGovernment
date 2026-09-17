@@ -1,10 +1,13 @@
 export 'api_client.dart';
 export 'auth_api_service.dart';
 export 'complaint_api_service.dart';
+export 'address_api_service.dart';
 
+import '../model/address_model.dart';
 import 'api_client.dart';
 import 'auth_api_service.dart';
 import 'complaint_api_service.dart';
+import 'address_api_service.dart';
 
 /// Facade for backward compatibility.
 /// You can also use [AuthApiService] and [ComplaintApiService] directly.
@@ -19,6 +22,30 @@ class ApiService {
 
   static Future<Map<String, dynamic>?> verifyOtp(String phone, String otp) =>
       AuthApiService.verifyOtp(phone, otp);
+
+  static Future<Map<String, dynamic>?> sendPhoneUpdateOtp({
+    required String userId,
+    required String newPhone,
+    String? currentPhone,
+  }) =>
+      AuthApiService.sendPhoneUpdateOtp(
+        userId: userId,
+        newPhone: newPhone,
+        currentPhone: currentPhone,
+      );
+
+  static Future<Map<String, dynamic>?> verifyPhoneUpdateOtp({
+    required String userId,
+    required String newPhone,
+    required String otp,
+    String? currentPhone,
+  }) =>
+      AuthApiService.verifyPhoneUpdateOtp(
+        userId: userId,
+        newPhone: newPhone,
+        otp: otp,
+        currentPhone: currentPhone,
+      );
 
   static Future<bool> updateProfile({
     required String userId,
@@ -59,4 +86,17 @@ class ApiService {
 
   static Future<void> addComment(String complaintId, String comment, String userName) =>
       ComplaintApiService.addComment(complaintId, comment, userName);
+
+  // Addresses
+  static Future<List<AddressModel>> fetchAddresses([String? userId]) =>
+      AddressApiService.fetchAddresses(userId);
+
+  static Future<AddressModel?> addAddress(AddressModel address, {String? userId}) =>
+      AddressApiService.addAddress(address, userId: userId);
+
+  static Future<AddressModel?> updateAddress(String addressId, AddressModel address) =>
+      AddressApiService.updateAddress(addressId, address);
+
+  static Future<bool> deleteAddress(String addressId) =>
+      AddressApiService.deleteAddress(addressId);
 }

@@ -75,22 +75,25 @@ class _ReportScreenState extends State<ReportScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CustomText.header(
-                      'Reports',
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    SizedBox(height: Responsive.h(4)),
-                    CustomText.subtitle(
-                      'Track and review citizen filings',
-                      fontSize: 14,
-                      color: AppColors.grayFont,
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CustomText.header(
+                        'Reports',
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      SizedBox(height: Responsive.h(4)),
+                      CustomText.subtitle(
+                        'Track and review citizen filings',
+                        fontSize: 14,
+                        color: AppColors.grayFont,
+                      ),
+                    ],
+                  ),
                 ),
+                SizedBox(width: Responsive.w(12)),
                 _buildNotificationBell(),
               ],
             ),

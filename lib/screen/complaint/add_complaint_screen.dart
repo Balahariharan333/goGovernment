@@ -19,6 +19,7 @@ import '../../bloc/report/report_event.dart';
 import '../../bloc/transaction/transaction_bloc.dart';
 import '../../bloc/transaction/transaction_event.dart';
 import '../../widget/image_preview_dialog.dart';
+import '../../services/translation_service.dart';
 
 class AddComplaintScreen extends StatefulWidget {
   final String? category;
@@ -204,17 +205,18 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            CustomText.body(
               'Add specific landmark, building, street, or gate to help the inspection team locate it quickly:',
-              style: TextStyle(fontSize: 12, color: Colors.black54),
+              fontSize: 12,
+              color: Colors.black54,
             ),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
               maxLines: 3,
               decoration: InputDecoration(
-                hintText:
-                    'e.g. Near Pillar 45, Opposite City Hospital, Main Gate',
+                hintText: TranslationService.translateSync(
+                    'e.g. Near Pillar 45, Opposite City Hospital, Main Gate'),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -233,7 +235,7 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            child: CustomText.body('Cancel', color: Colors.grey),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -252,12 +254,10 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
               }
               Navigator.pop(ctx);
             },
-            child: const Text(
+            child: CustomText.title(
               'Save Address',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],
@@ -513,13 +513,11 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                       size: 14,
                                     ),
                                     SizedBox(width: Responsive.w(4)),
-                                    const Text(
+                                    CustomText.body(
                                       'Tap map to set location',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ],
                                 ),
@@ -797,13 +795,11 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                             color: AppColors.primary,
                                           ),
                                           SizedBox(width: Responsive.w(4)),
-                                          const Text(
+                                          CustomText.body(
                                             'Reset to Current GPS',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: AppColors.primary,
-                                              fontWeight: FontWeight.bold,
-                                            ),
+                                            fontSize: 10,
+                                            color: AppColors.primary,
+                                            fontWeight: FontWeight.bold,
                                           ),
                                         ],
                                       ),
@@ -888,7 +884,7 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                         decoration: InputDecoration(
                           filled: true,
                           fillColor: AppColors.white,
-                          hintText: 'Enter details about the issue...',
+                          hintText: TranslationService.translateSync('Enter details about the issue...'),
                           hintStyle: TextStyle(
                             color: Colors.grey.shade400,
                             fontSize: Responsive.sp(14),
@@ -1025,13 +1021,11 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                           children: [
                                             Icon(Icons.zoom_in, color: Colors.white, size: Responsive.w(14)),
                                             SizedBox(width: Responsive.w(4)),
-                                            Text(
+                                            CustomText.body(
                                               'Preview',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: Responsive.sp(10),
-                                                fontWeight: FontWeight.bold,
-                                              ),
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
                                             ),
                                           ],
                                         ),
@@ -1057,13 +1051,11 @@ class _AddComplaintScreenState extends State<AddComplaintScreen> {
                                             children: [
                                               Icon(Icons.edit, color: Colors.white, size: Responsive.w(13)),
                                               SizedBox(width: Responsive.w(4)),
-                                              Text(
+                                              CustomText.body(
                                                 'Change',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: Responsive.sp(10.5),
-                                                  fontWeight: FontWeight.bold,
-                                                ),
+                                                color: Colors.white,
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.bold,
                                               ),
                                             ],
                                           ),

@@ -248,6 +248,9 @@ class _OtpScreenState extends State<OtpScreen> {
                       ? GestureDetector(
                           onTap: () {
                             _startTimer();
+                            context
+                                .read<AuthBloc>()
+                                .add(SendOtpEvent(widget.phoneNumber));
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text('OTP resent successfully!'),

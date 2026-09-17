@@ -21,6 +21,8 @@ import 'bloc/rider_chat/rider_chat_bloc.dart';
 import 'bloc/address/address_bloc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'services/notification_service.dart';
+import 'services/translation_service.dart';
 import 'hive/hive_service.dart';
 import 'constants/route_constants.dart';
 import 'routes/app_router.dart';
@@ -28,6 +30,9 @@ import 'routes/app_router.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // Initialize local notifications (for OTP test alerts without Firebase)
+  await NotificationService.initialize();
+
   // Initialize Firebase
   try {
     await Firebase.initializeApp();
@@ -37,6 +42,8 @@ void main() async {
   }
 
   await HiveService.init();
+  TranslationService.init();
+
 
   // If citizen is logged in and device GPS permission is already active (granted in-app or in OS settings),
   // ensure hasSeenPermissionScreen is marked true so the permission screen is never shown on restart!

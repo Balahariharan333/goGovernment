@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../utils/app_colors.dart';
 import '../utils/responsive_helper.dart';
+import '../services/translation_service.dart';
  
 class CustomText extends StatelessWidget {
+
   final String text;
   final TextStyle style;
   final TextAlign? textAlign;
@@ -130,15 +132,22 @@ class CustomText extends StatelessWidget {
  
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: style.copyWith(
-        fontFamily: 'Valley Sans',
-        fontSize: style.fontSize != null ? Responsive.sp(style.fontSize!) : null,
-      ),
-      textAlign: textAlign,
-      maxLines: maxLines,
-      overflow: overflow,
+    return ValueListenableBuilder<String>(
+      valueListenable: TranslationService.languageNotifier,
+      builder: (context, langCode, _) {
+        final displayText = TranslationService.translateSync(text);
+        return Text(
+          displayText,
+          style: style.copyWith(
+            fontFamily: 'Valley Sans',
+            fontSize: style.fontSize != null ? Responsive.sp(style.fontSize!) : null,
+          ),
+          textAlign: textAlign,
+          maxLines: maxLines,
+          overflow: overflow,
+        );
+      },
     );
   }
 }
+

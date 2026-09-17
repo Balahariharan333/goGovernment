@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../services/notification_service.dart';
+import '../../hive/hive_service.dart';
+import '../../network/api_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
@@ -69,7 +72,7 @@ class _EditPhoneScreenState extends State<EditPhoneScreen> {
 
   bool get _isValidPhone {
     final text = _phoneController.text.trim();
-    return text.length == 10 && RegExp(r'^[6-9]\d{9}$').hasMatch(text);
+    return text.length == 10 && RegExp(r'^\d{10}$').hasMatch(text);
   }
 
   bool get _isSameAsCurrent {
@@ -83,6 +86,46 @@ class _EditPhoneScreenState extends State<EditPhoneScreen> {
 
   String get _otpCode => _otpControllers.map((c) => c.text).join();
   bool get _isOtpComplete => _otpCode.length == 4;
+
+  void _handleGetOtpPress() {
+    if (_isSendingOtp) return;
+
+    final text = _phoneController.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your new mobile number'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (!_isValidPhone) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid 10-digit mobile number'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (_isSameAsCurrent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a new number (different from your current number)'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    _sendOtp();
+  }
 
   void _startTimer() {
     _timer?.cancel();
@@ -107,41 +150,69 @@ class _EditPhoneScreenState extends State<EditPhoneScreen> {
   }
 
   Future<void> _sendOtp() async {
-    if (!_canSendOtp) return;
-
     setState(() {
       _isSendingOtp = true;
     });
 
-    // Simulate OTP network dispatch
-    await Future.delayed(const Duration(milliseconds: 700));
+    final newPhone = _phoneController.text.trim();
+    final userId = HiveService.citizenId;
+    final currentPhone = widget.initialPhone.isNotEmpty
+        ? widget.initialPhone
+        : HiveService.userPhone;
+
+    final result = await ApiService.sendPhoneUpdateOtp(
+      userId: userId,
+      newPhone: newPhone,
+      currentPhone: currentPhone,
+    );
 
     if (!mounted) return;
 
     setState(() {
       _isSendingOtp = false;
-      _step = 2;
     });
 
-    _startTimer();
+    if (result != null && result['success'] == true) {
+      setState(() {
+        _step = 2;
+      });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('OTP sent to +91 ${_phoneController.text.trim()}'),
-        backgroundColor: AppColors.success,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(Responsive.w(12)),
-        ),
-      ),
-    );
+      _startTimer();
 
-    // Auto focus first OTP box
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _otpFocusNodes.isNotEmpty) {
-        _otpFocusNodes[0].requestFocus();
+      final otp = result['otp']?.toString();
+      if (otp != null && otp.isNotEmpty) {
+        NotificationService.showOtpNotification(otp: otp);
       }
-    });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('OTP sent to +91 $newPhone'),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Responsive.w(12)),
+          ),
+        ),
+      );
+
+      // Auto focus first OTP box
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _otpFocusNodes.isNotEmpty) {
+          _otpFocusNodes[0].requestFocus();
+        }
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result?['message'] ?? 'Failed to send OTP. Please try again.'),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Responsive.w(12)),
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _verifyOtp() async {
@@ -151,8 +222,18 @@ class _EditPhoneScreenState extends State<EditPhoneScreen> {
       _isVerifyingOtp = true;
     });
 
-    // Simulate verification
-    await Future.delayed(const Duration(milliseconds: 800));
+    final newPhone = _phoneController.text.trim();
+    final userId = HiveService.citizenId;
+    final currentPhone = widget.initialPhone.isNotEmpty
+        ? widget.initialPhone
+        : HiveService.userPhone;
+
+    final result = await ApiService.verifyPhoneUpdateOtp(
+      userId: userId,
+      newPhone: newPhone,
+      otp: _otpCode,
+      currentPhone: currentPhone,
+    );
 
     if (!mounted) return;
 
@@ -160,11 +241,22 @@ class _EditPhoneScreenState extends State<EditPhoneScreen> {
       _isVerifyingOtp = false;
     });
 
-    final phoneDigits = _phoneController.text.trim();
-    final formattedPhone =
-        '+91 ${phoneDigits.substring(0, 5)} ${phoneDigits.substring(5)}';
-
-    Navigator.pop(context, formattedPhone);
+    if (result != null && result['success'] == true) {
+      final formattedPhone =
+          '+91 ${newPhone.substring(0, 5)} ${newPhone.substring(5)}';
+      Navigator.pop(context, formattedPhone);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result?['message'] ?? 'Invalid OTP code. Please try again.'),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Responsive.w(12)),
+          ),
+        ),
+      );
+    }
   }
 
   void _backToPhoneInput() {
@@ -443,7 +535,7 @@ class _EditPhoneScreenState extends State<EditPhoneScreen> {
 
         // Send OTP CTA Button
         GestureDetector(
-          onTap: _canSendOtp ? _sendOtp : null,
+          onTap: _handleGetOtpPress,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             width: double.infinity,
@@ -631,18 +723,46 @@ class _EditPhoneScreenState extends State<EditPhoneScreen> {
                 Center(
                   child: _canResend
                       ? GestureDetector(
-                          onTap: () {
+                          onTap: () async {
                             _startTimer();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('OTP resent successfully!'),
-                                backgroundColor: AppColors.success,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(Responsive.w(12)),
-                                ),
-                              ),
+                            final newPhone = _phoneController.text.trim();
+                            final userId = HiveService.citizenId;
+                            final currentPhone = widget.initialPhone.isNotEmpty
+                                ? widget.initialPhone
+                                : HiveService.userPhone;
+
+                            final result = await ApiService.sendPhoneUpdateOtp(
+                              userId: userId,
+                              newPhone: newPhone,
+                              currentPhone: currentPhone,
                             );
+
+                            if (!mounted) return;
+
+                            if (result != null && result['success'] == true) {
+                              final otp = result['otp']?.toString();
+                              if (otp != null && otp.isNotEmpty) {
+                                NotificationService.showOtpNotification(otp: otp);
+                              }
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Text('OTP resent successfully!'),
+                                  backgroundColor: AppColors.success,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(Responsive.w(12)),
+                                  ),
+                                ),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(result?['message'] ?? 'Failed to resend OTP.'),
+                                  backgroundColor: Colors.red.shade700,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
                           },
                           child: Text(
                             'Resend OTP',

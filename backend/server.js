@@ -8,6 +8,7 @@ const path = require('path');
 const complaintRoutes = require('./routes/complaintRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const authRoutes = require('./routes/authRoutes');
+const addressRoutes = require('./routes/addressRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -34,6 +35,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/addresses', addressRoutes);
 
 // Connect to MongoDB & Start Server
 const MONGO_URI = process.env.MONGO_URI;
@@ -43,6 +45,8 @@ if (!MONGO_URI) {
   process.exit(1);
 }
 
+const os = require('os');
+
 mongoose
   .connect(MONGO_URI)
   .then(() => {
@@ -50,7 +54,16 @@ mongoose
     app.listen(PORT, '0.0.0.0', () => {
       console.log(` Server is running!`);
       console.log(` Laptop URL: http://localhost:${PORT}/api/health`);
-     console.log(` Mobile URL: http://192.168.1.10:${PORT}/api/health`);
+      
+      // Auto-detect local Wi-Fi IP
+      const nets = os.networkInterfaces();
+      for (const name of Object.keys(nets)) {
+        for (const net of nets[name]) {
+          if (net.family === 'IPv4' && !net.internal) {
+            console.log(` Mobile URL (${name}): http://${net.address}:${PORT}/api/health`);
+          }
+        }
+      }
     });
   })
   .catch((err) => {

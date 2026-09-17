@@ -269,52 +269,65 @@ class _NearBusStopScreenState extends State<NearBusStopScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            children: [
-                              GestureDetector(
-                                onTap: () {
-                                  if (flowState == BusStopFlowState.directions) {
-                                    context.read<BusStopBloc>().add(ChangeBusStopFlowStateEvent(BusStopFlowState.list));
-                                  } else {
-                                    Navigator.pop(context);
-                                  }
-                                },
-                                child: Container(
-                                  width: Responsive.w(44),
-                                  height: Responsive.w(44),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.white,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: AppColors.outliner,
-                                      width: Responsive.w(1.5),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                GestureDetector(
+                                  onTap: () {
+                                    if (flowState == BusStopFlowState.directions) {
+                                      context.read<BusStopBloc>().add(ChangeBusStopFlowStateEvent(BusStopFlowState.list));
+                                    } else {
+                                      Navigator.pop(context);
+                                    }
+                                  },
+                                  child: Container(
+                                    width: Responsive.w(44),
+                                    height: Responsive.w(44),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.white,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: AppColors.outliner,
+                                        width: Responsive.w(1.5),
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      Icons.chevron_left,
+                                      color: AppColors.black,
+                                      size: Responsive.w(24),
                                     ),
                                   ),
-                                  child: Icon(
-                                    Icons.chevron_left,
-                                    color: AppColors.black,
-                                    size: Responsive.w(24),
+                                ),
+                                SizedBox(width: Responsive.w(12)),
+                                if (flowState == BusStopFlowState.list)
+                                  Expanded(
+                                    child: CustomText.header(
+                                      'Near Bus Stop',
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.black,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                ),
-                              ),
-                              SizedBox(width: Responsive.w(12)),
-                              if (flowState == BusStopFlowState.list)
-                                CustomText.header(
-                                  'Near Bus Stop',
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.black,
-                                ),
-                              if (flowState == BusStopFlowState.directions)
-                                CustomText.header(
-                                  'Directions',
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.black,
-                                ),
-                            ],
+                                if (flowState == BusStopFlowState.directions)
+                                  Expanded(
+                                    child: CustomText.header(
+                                      'Directions',
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.black,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                          if (flowState == BusStopFlowState.list) _buildLocationPickerBadge(),
+                          if (flowState == BusStopFlowState.list) ...[
+                            SizedBox(width: Responsive.w(8)),
+                            _buildLocationPickerBadge(),
+                          ],
                         ],
                       ),
                     ),

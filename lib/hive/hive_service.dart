@@ -94,6 +94,13 @@ class HiveService {
     await _authBox.delete(HiveKeys.userName);
     await _authBox.delete(HiveKeys.userEmail);
     await _authBox.delete(HiveKeys.userProfileImage);
+    await _authBox.delete('citizenId');
+    await clearAddresses();
+  }
+
+  static Future<void> clearAddresses() async {
+    await _addressBox.delete(HiveKeys.savedAddresses);
+    await _addressBox.delete(HiveKeys.selectedAddressIndex);
   }
 
   // ----------------------------------------------------
@@ -324,6 +331,31 @@ class HiveService {
     await _settingsBox.put(HiveKeys.selectedLanguage, lang);
   }
 
+  static String getLanguageCode() {
+    try {
+      final code = _settingsBox.get(HiveKeys.selectedLanguageCode);
+      if (code != null && (code as String).isNotEmpty) return code;
+      final lang = getLanguage();
+      const map = {
+        'English': 'en',
+        'Kannada': 'kn',
+        'Hindi': 'hi',
+        'Telugu': 'te',
+        'Tamil': 'ta',
+        'Malayalam': 'ml',
+        'Marathi': 'mr',
+        'Bengali': 'bn',
+      };
+      return map[lang] ?? 'en';
+    } catch (_) {
+      return 'en';
+    }
+  }
+
+  static Future<void> setLanguageCode(String code) async {
+    await _settingsBox.put(HiveKeys.selectedLanguageCode, code);
+  }
+
   static bool get hasSeenPermissionScreen =>
       _settingsBox.get(HiveKeys.hasSeenPermissionScreen, defaultValue: false) as bool;
 
@@ -331,3 +363,4 @@ class HiveService {
     await _settingsBox.put(HiveKeys.hasSeenPermissionScreen, value);
   }
 }
+

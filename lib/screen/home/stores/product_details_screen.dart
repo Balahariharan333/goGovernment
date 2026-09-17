@@ -223,41 +223,45 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              CustomText.subtitle(
-                                'Selected Quantity: 1 Units',
-                                fontSize: 11,
-                                color: AppColors.grayFont,
-                              ),
-                              SizedBox(height: Responsive.h(8)),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade900,
-                                  borderRadius: BorderRadius.circular(Responsive.w(12)),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                CustomText.subtitle(
+                                  'Selected Quantity: 1 Units',
+                                  fontSize: 11,
+                                  color: AppColors.grayFont,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: Responsive.w(16),
-                                  vertical: Responsive.h(8),
+                                SizedBox(height: Responsive.h(8)),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade900,
+                                    borderRadius: BorderRadius.circular(Responsive.w(12)),
+                                  ),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: Responsive.w(16),
+                                    vertical: Responsive.h(8),
+                                  ),
+                                  child: CustomText.title(
+                                    '1 Units',
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                                child: CustomText.title(
-                                  '1 Units',
-                                  color: Colors.white,
-                                  fontSize: 12,
+                                SizedBox(height: Responsive.h(4)),
+                                CustomText.title(
+                                  '3 left',
+                                  color: AppColors.primary,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                 ),
-                              ),
-                              SizedBox(height: Responsive.h(4)),
-                              CustomText.title(
-                                '3 left',
-                                color: AppColors.primary,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-
+                          SizedBox(width: Responsive.w(8)),
                           // Common Cart Badge on the right
                           CommonCartBadge(
                             itemCount: _cartCount,
@@ -309,39 +313,46 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.pop(context);
-                            },
-                            child: Container(
-                              width: Responsive.w(44),
-                              height: Responsive.w(44),
-                              decoration: BoxDecoration(
-                                color: AppColors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: AppColors.outliner,
-                                  width: Responsive.w(1.5),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.pop(context);
+                              },
+                              child: Container(
+                                width: Responsive.w(44),
+                                height: Responsive.w(44),
+                                decoration: BoxDecoration(
+                                  color: AppColors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: AppColors.outliner,
+                                    width: Responsive.w(1.5),
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.chevron_left,
+                                  color: AppColors.black,
+                                  size: Responsive.w(24),
                                 ),
                               ),
-                              child: Icon(
-                                Icons.chevron_left,
+                            ),
+                            SizedBox(width: Responsive.w(12)),
+                            Expanded(
+                              child: CustomText.header(
+                                'Near Stores',
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
                                 color: AppColors.black,
-                                size: Responsive.w(24),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                          ),
-                          SizedBox(width: Responsive.w(12)),
-                          CustomText.header(
-                            'Near Stores',
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.black,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      SizedBox(width: Responsive.w(8)),
                       Row(
                         children: [
                           CommonWishlistButton(
@@ -758,7 +769,16 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            CustomText.header(heading, fontSize: 15, fontWeight: FontWeight.bold),
+            Expanded(
+              child: CustomText.header(
+                heading,
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            SizedBox(width: Responsive.w(8)),
             GestureDetector(
               onTap: () {
                 Navigator.of(context).pushNamed(

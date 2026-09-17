@@ -376,11 +376,16 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  CustomText.title(
-                                    _statusTitles[currentStep],
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
+                                  Expanded(
+                                    child: CustomText.title(
+                                      _statusTitles[currentStep],
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
+                                  SizedBox(width: Responsive.w(8)),
                                   CustomText.title(
                                     '10:14 pm',
                                     fontSize: 13,
@@ -513,12 +518,20 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
                   ),
                 ),
               ),
-              CustomText.title(
-                _statusTitles[_currentStep],
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+              SizedBox(width: Responsive.w(8)),
+              Expanded(
+                child: Center(
+                  child: CustomText.title(
+                    _statusTitles[_currentStep],
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
+              SizedBox(width: Responsive.w(8)),
               Container(
                 width: Responsive.w(36),
                 height: Responsive.w(36),
@@ -903,21 +916,28 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.receipt_long_outlined,
-                  color: AppColors.primary,
-                  size: Responsive.w(18),
-                ),
-                SizedBox(width: Responsive.w(8)),
-                CustomText.title(
-                  'Order #$_orderId',
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ],
+            Expanded(
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.receipt_long_outlined,
+                    color: AppColors.primary,
+                    size: Responsive.w(18),
+                  ),
+                  SizedBox(width: Responsive.w(8)),
+                  Expanded(
+                    child: CustomText.title(
+                      'Order #$_orderId',
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
+            SizedBox(width: Responsive.w(8)),
             Row(
               children: [
                 CustomText.subtitle(
@@ -1061,22 +1081,29 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        CustomText.header(
-                          'Order Help & Support',
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        SizedBox(height: Responsive.h(2)),
-                        CustomText.subtitle(
-                          '$storeName · #$_orderId',
-                          fontSize: 12,
-                          color: AppColors.grayFont,
-                        ),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CustomText.header(
+                            'Order Help & Support',
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          SizedBox(height: Responsive.h(2)),
+                          CustomText.subtitle(
+                            '$storeName · #$_orderId',
+                            fontSize: 12,
+                            color: AppColors.grayFont,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
+                    SizedBox(width: Responsive.w(8)),
                     IconButton(
                       icon: const Icon(Icons.close),
                       onPressed: () => Navigator.pop(sheetCtx),

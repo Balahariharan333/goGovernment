@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 class ApiClient {
   static String? _resolvedBaseUrl;
 
+  // Currently connected to PG Wi-Fi (192.168.1.8); Office Wi-Fi was (192.168.1.10)
   static String get defaultBaseUrl => 'http://192.168.1.10:5000/api';
 
   static String get baseUrl => _resolvedBaseUrl ?? defaultBaseUrl;
@@ -17,10 +18,12 @@ class ApiClient {
     'Content-Type': 'application/json',
   };
 
+  /// Auto-candidate hosts for seamless switching between PG, Office, Emulator & Localhost
   static List<String> get candidateHosts => [
-    'http://192.168.1.10:5000/api',
-    'http://127.0.0.1:5000/api',
-    if (!kIsWeb && Platform.isAndroid) 'http://10.0.2.2:5000/api',
+    'http://192.168.1.8:5000/api',   // PG / Home Wi-Fi
+    'http://192.168.1.10:5000/api',  // Office Wi-Fi
+    'http://127.0.0.1:5000/api',     // Localhost / Web / Desktop
+    if (!kIsWeb && Platform.isAndroid) 'http://10.0.2.2:5000/api', // Android Emulator
   ];
 
   /// Normalizes image URLs so localhost/127.0.0.1 URLs from the database
@@ -30,10 +33,11 @@ class ApiClient {
     final trimmed = url.trim();
     if (trimmed.startsWith('http://127.0.0.1:5000') ||
         trimmed.startsWith('http://localhost:5000') ||
-        trimmed.startsWith('http://10.0.2.2:5000')) {
+        trimmed.startsWith('http://10.0.2.2:5000') ||
+        RegExp(r'^http:\/\/192\.168\.\d+\.\d+:5000').hasMatch(trimmed)) {
       final serverOrigin = baseUrl.replaceAll('/api', '');
       return trimmed.replaceFirst(
-        RegExp(r'^http:\/\/(127\.0\.0\.1|localhost|10\.0\.2\.2):5000'),
+        RegExp(r'^http:\/\/(127\.0\.0\.1|localhost|10\.0\.2\.2|192\.168\.\d+\.\d+):5000'),
         serverOrigin,
       );
     }

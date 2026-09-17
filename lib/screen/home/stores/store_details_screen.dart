@@ -14,6 +14,7 @@ import '../../../constants/route_constants.dart';
 import '../../../service/cart_manager.dart';
 import '../../../widget/common_wishlist_button.dart';
 import '../../../widget/common_directions_button.dart';
+import '../../../services/translation_service.dart';
 
 class StoreDetailsScreen extends StatefulWidget {
   final String storeId;
@@ -149,9 +150,9 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
                                     _searchQuery = val;
                                   });
                                 },
-                                decoration: const InputDecoration(
-                                  hintText: 'Search item',
-                                  hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                                decoration: InputDecoration(
+                                  hintText: TranslationService.translateSync('Search item'),
+                                  hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
                                   border: InputBorder.none,
                                   isDense: true,
                                 ),
@@ -222,11 +223,16 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          CustomText.header(
-                            'All Items',
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                          Expanded(
+                            child: CustomText.header(
+                              'All Items',
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
+                          SizedBox(width: Responsive.w(8)),
                           GestureDetector(
                             onTap: () {
                               Navigator.of(context).pushNamed(

@@ -176,11 +176,15 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
                         ),
                       ),
                       SizedBox(width: Responsive.w(12)),
-                      CustomText.header(
-                        widget.title,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.black,
+                      Expanded(
+                        child: CustomText.header(
+                          widget.title,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.black,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),

@@ -76,7 +76,7 @@ class AuthApiService {
       'userId': userId,
       'userName': userName,
       'email': email,
-      if (profileImage != null) 'profileImage': profileImage,
+      'profileImage': ?profileImage,
     });
 
     try {
@@ -126,5 +126,83 @@ class AuthApiService {
       ApiClient.logError('MULTIPART POST', url, e);
     }
     return localPath;
+  }
+
+  // 5. Send Phone Update OTP
+  static Future<Map<String, dynamic>?> sendPhoneUpdateOtp({
+    required String userId,
+    required String newPhone,
+    String? currentPhone,
+  }) async {
+    final url = '${ApiClient.baseUrl}/auth/send-phone-update-otp';
+    final payload = jsonEncode({
+      'userId': userId,
+      'newPhone': newPhone,
+      if (currentPhone != null && currentPhone.isNotEmpty) 'currentPhone': currentPhone,
+    });
+
+    try {
+      ApiClient.logRequest('POST', url, body: payload);
+
+      final response = await http
+          .post(
+            Uri.parse(url),
+            headers: ApiClient.defaultHeaders,
+            body: payload,
+          )
+          .timeout(const Duration(seconds: 8));
+
+      ApiClient.logResponse('POST', url, response.statusCode, response.body);
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return data as Map<String, dynamic>;
+      } else {
+        return {'success': false, 'message': data['error'] ?? data['message'] ?? 'Failed to send OTP'};
+      }
+    } catch (e) {
+      ApiClient.logError('POST', url, e);
+      return {'success': false, 'message': 'Connection error. Please try again.'};
+    }
+  }
+
+  // 6. Verify Phone Update OTP & Save
+  static Future<Map<String, dynamic>?> verifyPhoneUpdateOtp({
+    required String userId,
+    required String newPhone,
+    required String otp,
+    String? currentPhone,
+  }) async {
+    final url = '${ApiClient.baseUrl}/auth/verify-phone-update-otp';
+    final payload = jsonEncode({
+      'userId': userId,
+      'newPhone': newPhone,
+      'otp': otp,
+      if (currentPhone != null && currentPhone.isNotEmpty) 'currentPhone': currentPhone,
+    });
+
+    try {
+      ApiClient.logRequest('POST', url, body: payload);
+
+      final response = await http
+          .post(
+            Uri.parse(url),
+            headers: ApiClient.defaultHeaders,
+            body: payload,
+          )
+          .timeout(const Duration(seconds: 8));
+
+      ApiClient.logResponse('POST', url, response.statusCode, response.body);
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return data as Map<String, dynamic>;
+      } else {
+        return {'success': false, 'message': data['error'] ?? data['message'] ?? 'Failed to verify OTP'};
+      }
+    } catch (e) {
+      ApiClient.logError('POST', url, e);
+      return {'success': false, 'message': 'Connection error. Please try again.'};
+    }
   }
 }

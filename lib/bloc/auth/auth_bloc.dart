@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../services/notification_service.dart';
 import '../../hive/hive_service.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
@@ -14,6 +15,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
       final result = await ApiService.sendOtp(event.phone);
       if (result != null && result['success'] == true) {
+        final otp = result['otp']?.toString();
+        if (otp != null && otp.isNotEmpty) {
+          await NotificationService.showOtpNotification(otp: otp);
+        }
         emit(OtpSent(event.phone));
       } else {
         emit(AuthFailure(result?['message'] ?? 'Failed to send OTP. Please try again.'));
