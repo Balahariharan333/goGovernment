@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import '../../../utils/app_colors.dart';
 import '../../../utils/responsive_helper.dart';
 import '../../../widget/common_background.dart';
@@ -12,6 +14,7 @@ import '../../../constants/route_constants.dart';
 import '../../../service/cart_manager.dart';
 import '../../../service/location_service.dart';
 import '../../../hive/hive_service.dart';
+import '../../../network/api_client.dart';
 
 class NearStoresScreen extends StatefulWidget {
   const NearStoresScreen({super.key});
@@ -111,6 +114,47 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
 
   Future<void> _loadRealStores() async {
     final basePos = _userPos ?? LocationService.defaultLocation;
+
+    // 1. Fetch live approved stores from our GoGovernment backend
+    final approvedBackendStores = <Map<String, dynamic>>[];
+    try {
+      final res = await http
+          .get(Uri.parse('${ApiClient.baseUrl}/stores/approved'))
+          .timeout(const Duration(seconds: 3));
+
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        final list = body['stores'] as List? ?? [];
+        for (final s in list) {
+          final lat = (s['location']?['lat'] as num?)?.toDouble() ?? (basePos.latitude + 0.001);
+          final lng = (s['location']?['lng'] as num?)?.toDouble() ?? (basePos.longitude + 0.001);
+          final dist = LocationService.calculateDistance(basePos.latitude, basePos.longitude, lat, lng);
+          final category = (s['category'] ?? 'general').toString().toLowerCase();
+
+          String img = 'assets/images/vegstore.png';
+          String type = 'vegstore';
+          if (category == 'medical') {
+            img = 'assets/images/medical.png';
+            type = 'medical';
+          }
+
+          approvedBackendStores.add({
+            'id': s['storeId'] ?? s['_id'] ?? 'STORE_${approvedBackendStores.length + 1}',
+            'title': s['name'] ?? 'Approved Store',
+            'address': s['address'] ?? '',
+            'image': img,
+            'type': type,
+            'lat': lat,
+            'lng': lng,
+            'distance': LocationService.formatDistance(dist),
+            'isGovApproved': true,
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[NearStores] Backend approved stores fetch fallback: $e');
+    }
+
     final realPharmacies = await LocationService.fetchRealNearbyFacilities(
       keyword: 'pharmacy',
       center: basePos,
@@ -125,7 +169,7 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
       limit: 2,
     );
 
-    final combined = <Map<String, dynamic>>[];
+    final combined = <Map<String, dynamic>>[...approvedBackendStores];
     int counter = 1;
     for (final p in realPharmacies) {
       combined.add({

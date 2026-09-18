@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const morgan = require('morgan');
@@ -9,8 +11,29 @@ const complaintRoutes = require('./routes/complaintRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const authRoutes = require('./routes/authRoutes');
 const addressRoutes = require('./routes/addressRoutes');
+const storeRoutes = require('./routes/storeRoutes');
+const feedbackRoutes = require('./routes/feedbackRoutes');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+  },
+});
+
+// Expose io instance to route handlers via req.app.get('io')
+app.set('io', io);
+
+io.on('connection', (socket) => {
+  console.log(`⚡ [Socket.io] Client connected: ${socket.id}`);
+
+  socket.on('disconnect', () => {
+    console.log(`⚡ [Socket.io] Client disconnected: ${socket.id}`);
+  });
+});
+
 const PORT = process.env.PORT || 5000;
 
 // Middleware
@@ -36,6 +59,8 @@ app.use('/api/complaints', complaintRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/addresses', addressRoutes);
+app.use('/api/stores', storeRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // Connect to MongoDB & Start Server
 const MONGO_URI = process.env.MONGO_URI;
@@ -51,7 +76,7 @@ mongoose
   .connect(MONGO_URI)
   .then(() => {
     console.log(' MongoDB Atlas Connected Successfully!');
-    app.listen(PORT, '0.0.0.0', () => {
+    server.listen(PORT, '0.0.0.0', () => {
       console.log(` Server is running!`);
       console.log(` Laptop URL: http://localhost:${PORT}/api/health`);
       

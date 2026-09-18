@@ -23,6 +23,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'services/notification_service.dart';
 import 'services/translation_service.dart';
+import 'service/socket_service.dart';
 import 'hive/hive_service.dart';
 import 'constants/route_constants.dart';
 import 'routes/app_router.dart';
@@ -43,6 +44,9 @@ void main() async {
 
   await HiveService.init();
   TranslationService.init();
+
+  // Initialize real-time WebSocket connection to backend
+  SocketService().init();
 
 
   // If citizen is logged in and device GPS permission is already active (granted in-app or in OS settings),

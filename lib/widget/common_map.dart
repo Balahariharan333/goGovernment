@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
+import '../config/google_config.dart';
 import '../utils/app_colors.dart';
 import '../utils/responsive_helper.dart';
 import '../service/location_service.dart';
@@ -154,9 +155,12 @@ class _CommonMapState extends State<CommonMap> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                // Google Maps roadmap tiles — higher quality labels & road detail
+                urlTemplate: GoogleConfig.googleTileUrl,
+                subdomains: GoogleConfig.googleTileSubdomains,
+                maxZoom: 20,
+                // Fallback user-agent in case of non-Google tile source
                 userAgentPackageName: 'com.hikizo.gogovernment',
-                maxZoom: 19,
               ),
               if (widget.polylines != null && widget.polylines!.isNotEmpty)
                 PolylineLayer(polylines: widget.polylines!),

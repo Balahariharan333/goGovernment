@@ -1,0 +1,87 @@
+import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
+import '../constants/route_constants.dart';
+import '../hive/hive_service.dart';
+import '../model/store_model.dart';
+import '../screen/auth/login_screen.dart';
+import '../screen/auth/otp_screen.dart';
+import '../screen/store/register_store_screen.dart';
+import '../screen/store/application_status_screen.dart';
+import '../screen/store/store_dashboard_screen.dart';
+import '../screen/location/pick_store_location_screen.dart';
+
+class AppRouter {
+  AppRouter._();
+
+  static Route<dynamic> generateRoute(RouteSettings settings) {
+    switch (settings.name) {
+      case RouteConstants.initial:
+        if (HiveService.isLoggedIn) {
+          final cachedData = HiveService.cachedStoreData;
+          if (cachedData != null) {
+            final store = StoreModel.fromJson(cachedData);
+            if (store.status == 'approved') {
+              return MaterialPageRoute(builder: (_) => StoreDashboardScreen(store: store));
+            } else {
+              return MaterialPageRoute(builder: (_) => ApplicationStatusScreen(store: store));
+            }
+          }
+        }
+        return MaterialPageRoute(builder: (_) => const LoginScreen());
+
+      case RouteConstants.login:
+        return MaterialPageRoute(builder: (_) => const LoginScreen());
+
+      case RouteConstants.otp:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        final phone = args['phone']?.toString() ?? '';
+        final testOtp = args['testOtp']?.toString();
+        return MaterialPageRoute(
+          builder: (_) => OtpScreen(phone: phone, testOtp: testOtp),
+        );
+
+      case RouteConstants.registerStore:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        final phone = args['initialPhone']?.toString() ?? HiveService.userPhone;
+        final ownerId = args['ownerId']?.toString() ?? HiveService.userId;
+        return MaterialPageRoute(
+          builder: (_) => RegisterStoreScreen(initialPhone: phone, ownerId: ownerId),
+        );
+
+      case RouteConstants.applicationStatus:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        final store = args['store'] as StoreModel? ?? StoreModel();
+        final justSubmitted = args['justSubmitted'] == true;
+        return MaterialPageRoute(
+          builder: (_) => ApplicationStatusScreen(store: store, justSubmitted: justSubmitted),
+        );
+
+      case RouteConstants.storeDashboard:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        final store = args['store'] as StoreModel? ?? StoreModel();
+        return MaterialPageRoute(
+          builder: (_) => StoreDashboardScreen(store: store),
+        );
+
+      case RouteConstants.pickLocation:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        final initialLocation = args['initialLocation'] as LatLng?;
+        final initialAddress = args['initialAddress']?.toString();
+        return MaterialPageRoute(
+          builder: (_) => PickStoreLocationScreen(
+            initialLocation: initialLocation,
+            initialAddress: initialAddress,
+          ),
+        );
+
+      default:
+        return MaterialPageRoute(
+          builder: (_) => Scaffold(
+            body: Center(
+              child: Text('No route defined for ${settings.name}'),
+            ),
+          ),
+        );
+    }
+  }
+}

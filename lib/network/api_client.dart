@@ -5,7 +5,7 @@ class ApiClient {
   static String? _resolvedBaseUrl;
 
   // Currently connected to PG Wi-Fi (192.168.1.8); Office Wi-Fi was (192.168.1.10)
-  static String get defaultBaseUrl => 'http://192.168.1.10:5000/api';
+  static String get defaultBaseUrl => 'http://192.168.1.11:5000/api';
 
   static String get baseUrl => _resolvedBaseUrl ?? defaultBaseUrl;
 
@@ -21,26 +21,33 @@ class ApiClient {
   /// Auto-candidate hosts for seamless switching between PG, Office, Emulator & Localhost
   static List<String> get candidateHosts => [
     'http://192.168.1.8:5000/api',   // PG / Home Wi-Fi
-    'http://192.168.1.10:5000/api',  // Office Wi-Fi
+    'http://192.168.1.11:5000/api',  // Office Wi-Fi
     'http://127.0.0.1:5000/api',     // Localhost / Web / Desktop
     if (!kIsWeb && Platform.isAndroid) 'http://10.0.2.2:5000/api', // Android Emulator
   ];
 
   /// Normalizes image URLs so localhost/127.0.0.1 URLs from the database
   /// resolve to the currently reachable backend baseUrl (e.g. 192.168.1.10:5000)
+  /// Normalizes image URLs so any /uploads/ paths (whether localhost, old LAN IP, or relative)
+  /// resolve to the currently reachable backend serverOrigin (e.g. http://192.168.1.11:5000)
   static String normalizeImageUrl(String? url) {
     if (url == null || url.trim().isEmpty) return '';
     final trimmed = url.trim();
-    if (trimmed.startsWith('http://127.0.0.1:5000') ||
-        trimmed.startsWith('http://localhost:5000') ||
-        trimmed.startsWith('http://10.0.2.2:5000') ||
-        RegExp(r'^http:\/\/192\.168\.\d+\.\d+:5000').hasMatch(trimmed)) {
+
+    // 1. Relative /uploads/... or uploads/...
+    if (trimmed.startsWith('/uploads/') || trimmed.startsWith('uploads/')) {
+      final cleanPath = trimmed.startsWith('/') ? trimmed : '/$trimmed';
       final serverOrigin = baseUrl.replaceAll('/api', '');
-      return trimmed.replaceFirst(
-        RegExp(r'^http:\/\/(127\.0\.0\.1|localhost|10\.0\.2\.2|192\.168\.\d+\.\d+):5000'),
-        serverOrigin,
-      );
+      return '$serverOrigin$cleanPath';
     }
+
+    // 2. Full URL containing /uploads/ (replace old IP/localhost with active server origin)
+    if (trimmed.contains('/uploads/')) {
+      final serverOrigin = baseUrl.replaceAll('/api', '');
+      final uploadsIndex = trimmed.indexOf('/uploads/');
+      return '$serverOrigin${trimmed.substring(uploadsIndex)}';
+    }
+
     return trimmed;
   }
 

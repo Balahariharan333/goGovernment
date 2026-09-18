@@ -11,6 +11,8 @@ import '../../bloc/profile/profile_bloc.dart';
 import '../../bloc/profile/profile_event.dart';
 import '../../bloc/profile/profile_state.dart';
 import '../../network/api_client.dart';
+import '../../network/feedback_api_service.dart';
+import '../../hive/hive_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -151,6 +153,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Expanded(
                           child: GestureDetector(
                             onTap: () {
+                              final text = feedbackController.text.trim();
+                              FeedbackApiService.submitFeedback(
+                                userId: HiveService.userId.isNotEmpty ? HiveService.userId : 'USER_GUEST',
+                                userName: HiveService.userName.isNotEmpty ? HiveService.userName : 'Citizen',
+                                phone: HiveService.userPhone,
+                                type: 'app_rating',
+                                rating: selectedRating.toDouble(),
+                                comments: text,
+                              );
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(

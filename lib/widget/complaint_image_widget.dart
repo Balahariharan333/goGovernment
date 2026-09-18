@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../network/api_client.dart';
 
 /// Universal widget that renders complaint images from:
-/// 1. Firebase Cloud Storage (https://...)
+/// 1. Remote Network URL / Node.js Backend uploads (http://...)
 /// 2. Base64 data URI (data:image/...;base64,...)
 /// 3. Local filesystem cache (/data/user/0/... or File path)
 /// 4. App asset bundle (assets/...)
@@ -39,12 +40,14 @@ class ComplaintImageWidget extends StatelessWidget {
   }
 
   Widget _buildImageContent() {
-    final path = imagePath?.trim();
-    if (path == null || path.isEmpty) {
+    final raw = imagePath?.trim();
+    if (raw == null || raw.isEmpty) {
       return _buildFallback();
     }
 
-    // 1. Firebase Storage or Remote Network URL
+    final path = ApiClient.normalizeImageUrl(raw);
+
+    // 1. Remote Network URL (Node backend /uploads/ or cloud storage)
     if (path.startsWith('http://') || path.startsWith('https://')) {
       return Image.network(
         path,

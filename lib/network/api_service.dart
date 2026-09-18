@@ -2,6 +2,7 @@ export 'api_client.dart';
 export 'auth_api_service.dart';
 export 'complaint_api_service.dart';
 export 'address_api_service.dart';
+export 'feedback_api_service.dart';
 
 import '../model/address_model.dart';
 import 'api_client.dart';
@@ -76,10 +77,8 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> fetchMyComplaints([String? userId]) =>
       ComplaintApiService.fetchMyComplaints(userId);
 
-  static Stream<List<Map<String, dynamic>>> streamAllComplaints({
-    Duration interval = const Duration(seconds: 4),
-  }) =>
-      ComplaintApiService.streamAllComplaints(interval: interval);
+  static Stream<List<Map<String, dynamic>>> streamAllComplaints() =>
+      ComplaintApiService.streamAllComplaints();
 
   static Future<void> toggleLike(String complaintId, bool isCurrentlyLiked) =>
       ComplaintApiService.toggleLike(complaintId, isCurrentlyLiked);

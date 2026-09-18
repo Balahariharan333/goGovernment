@@ -67,6 +67,9 @@ router.post('/verify-otp', async (req, res) => {
 
     // Clear OTP after successful verification
     user.otp = '';
+    if (req.body.role && ['citizen', 'store_owner', 'admin', 'rider', 'field_worker'].includes(req.body.role)) {
+      user.role = req.body.role;
+    }
     await user.save();
 
     // Existing user: Has filled their userName previously
@@ -78,6 +81,7 @@ router.post('/verify-otp', async (req, res) => {
       message: isNewUser ? 'New user! Please setup profile.' : 'Welcome back!',
       isNewUser: isNewUser,
       userId: user.userId,
+      role: user.role || 'citizen',
       user: user,
     });
   } catch (error) {

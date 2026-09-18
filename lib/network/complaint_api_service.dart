@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../hive/hive_service.dart';
+import '../service/socket_service.dart';
 import 'api_client.dart';
 
 class ComplaintApiService {
@@ -104,16 +105,24 @@ class ComplaintApiService {
     return [];
   }
 
-  // 5. Stream Complaints (Periodic auto-refresh)
-  static Stream<List<Map<String, dynamic>>> streamAllComplaints({
-    Duration interval = const Duration(seconds: 4),
-  }) async* {
-    while (true) {
-      final complaints = await fetchComplaints();
-      if (complaints.isNotEmpty) {
-        yield complaints;
+  // 5. Stream Complaints (Real-Time WebSocket Push via Socket.io - ZERO POLLING)
+  static Stream<List<Map<String, dynamic>>> streamAllComplaints() async* {
+    // 1. Initialize WebSocket connection
+    final socketService = SocketService();
+    socketService.init();
+
+    // 2. Fetch initial data once
+    final initialComplaints = await fetchComplaints();
+    if (initialComplaints.isNotEmpty) {
+      yield initialComplaints;
+    }
+
+    // 3. Listen to real-time events pushed by the server (No periodic polling!)
+    await for (final _ in socketService.onComplaintsChanged) {
+      final updatedComplaints = await fetchComplaints();
+      if (updatedComplaints.isNotEmpty) {
+        yield updatedComplaints;
       }
-      await Future.delayed(interval);
     }
   }
 

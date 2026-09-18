@@ -2,11 +2,63 @@ const express = require('express');
 const router = express.Router();
 const Complaint = require('../models/Complaint');
 
-// 1. GET ALL COMPLAINTS (Sorted by newest first)
+const STATUS_COLORS = {
+  'Under Review': 0xffff5252,
+  'In Progress': 0xffff9100,
+  'Resolved': 0xff4caf50,
+  'Rejected': 0xff757575,
+};
+
+function formatComplaint(doc, req) {
+  if (!doc) return null;
+  const obj = doc.toObject ? doc.toObject() : { ...doc };
+  if (obj.imagePath && typeof obj.imagePath === 'string') {
+    const trimmed = obj.imagePath.trim();
+    if (trimmed.includes('/uploads/')) {
+      const uploadPart = trimmed.substring(trimmed.indexOf('/uploads/'));
+      const host = req.get('host') || 'localhost:5000';
+      const protocol = req.protocol || 'http';
+      obj.imagePath = `${protocol}://${host}${uploadPart}`;
+    }
+  }
+  return obj;
+}
+
+// 0. GET COMPLAINT STATS (For Admin Web Dashboard)
+router.get('/meta/stats', async (req, res) => {
+  try {
+    const total = await Complaint.countDocuments();
+    const underReview = await Complaint.countDocuments({ status: { $regex: /^under review$/i } });
+    const inProgress = await Complaint.countDocuments({ status: { $regex: /^in progress$/i } });
+    const resolved = await Complaint.countDocuments({ status: { $regex: /^resolved$/i } });
+    const rejected = await Complaint.countDocuments({ status: { $regex: /^rejected$/i } });
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        total,
+        underReview,
+        inProgress,
+        resolved,
+        rejected,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching complaint stats:', error);
+    res.status(500).json({ error: 'Failed to fetch complaint stats' });
+  }
+});
+
+// 1. GET ALL COMPLAINTS (Sorted by newest first, optional ?status= filter)
 router.get('/', async (req, res) => {
   try {
-    const complaints = await Complaint.find().sort({ createdAt: -1 });
-    res.status(200).json(complaints);
+    const { status } = req.query;
+    const filter = {};
+    if (status && status !== 'all') {
+      filter.status = new RegExp('^' + status.replace(/_/g, ' ') + '$', 'i');
+    }
+    const complaints = await Complaint.find(filter).sort({ createdAt: -1 });
+    res.status(200).json(complaints.map((c) => formatComplaint(c, req)));
   } catch (error) {
     console.error('Error fetching complaints:', error);
     res.status(500).json({ error: 'Failed to fetch complaints' });
@@ -20,7 +72,7 @@ router.get('/:complaintId', async (req, res) => {
     if (!complaint) {
       return res.status(404).json({ error: 'Complaint not found' });
     }
-    res.status(200).json(complaint);
+    res.status(200).json(formatComplaint(complaint, req));
   } catch (error) {
     console.error('Error fetching complaint:', error);
     res.status(500).json({ error: 'Failed to fetch complaint' });
@@ -31,7 +83,7 @@ router.get('/:complaintId', async (req, res) => {
 router.get('/user/:userId', async (req, res) => {
   try {
     const userComplaints = await Complaint.find({ userId: req.params.userId }).sort({ createdAt: -1 });
-    res.status(200).json(userComplaints);
+    res.status(200).json(userComplaints.map((c) => formatComplaint(c, req)));
   } catch (error) {
     console.error('Error fetching user complaints:', error);
     res.status(500).json({ error: 'Failed to fetch user complaints' });
@@ -65,7 +117,16 @@ router.post('/', async (req, res) => {
       { new: true, upsert: true }
     );
 
-    res.status(201).json({ success: true, complaint });
+    const formattedComplaint = formatComplaint(complaint, req);
+
+    // ⚡ Socket.io Real-Time Push: New Complaint Created
+    const ioCreate = req.app.get('io');
+    if (ioCreate) {
+      ioCreate.emit('complaint_created', formattedComplaint);
+      ioCreate.emit('complaints_changed', { action: 'create', complaintId: data.complaintId });
+    }
+
+    res.status(201).json({ success: true, complaint: formattedComplaint });
   } catch (error) {
     console.error('Error submitting complaint:', error);
     res.status(500).json({ error: 'Failed to submit complaint', details: error.message });
@@ -99,6 +160,17 @@ router.post('/:complaintId/like', async (req, res) => {
     }
 
     await complaint.save();
+
+    // ⚡ Socket.io Real-Time Push: Like Toggled
+    const ioLike = req.app.get('io');
+    if (ioLike) {
+      ioLike.emit('complaint_liked', {
+        complaintId: complaint.complaintId,
+        likesCount: complaint.likesCount,
+        likedBy: complaint.likedBy,
+      });
+    }
+
     res.status(200).json({
       success: true,
       message: isCurrentlyLiked ? 'Unliked successfully' : 'Liked successfully 👍',
@@ -148,6 +220,16 @@ router.post('/:complaintId/comment', async (req, res) => {
       return res.status(404).json({ error: 'Complaint not found' });
     }
 
+    // ⚡ Socket.io Real-Time Push: Comment Added
+    const ioComment = req.app.get('io');
+    if (ioComment) {
+      ioComment.emit('complaint_comment_added', {
+        complaintId: updated.complaintId,
+        comment: newComment,
+        comments: updated.comments,
+      });
+    }
+
     res.status(200).json({
       success: true,
       message: 'Comment added successfully 💬',
@@ -161,4 +243,80 @@ router.post('/:complaintId/comment', async (req, res) => {
   }
 });
 
+// 7. UPDATE COMPLAINT STATUS (Admin Web Status Selection)
+const updateStatusHandler = async (req, res) => {
+  try {
+    const { complaintId } = req.params;
+    const { status, adminNotes, updatedBy } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+
+    const color = STATUS_COLORS[status] || 0xffff9100;
+
+    const now = new Date();
+    const formattedDate =
+      now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) +
+      ', ' +
+      now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    const adminComment = {
+      userName: updatedBy || 'Municipal Administration',
+      comment: adminNotes
+        ? `Status updated to '${status}': ${adminNotes}`
+        : `Official complaint status updated to '${status}'`,
+      userId: 'ADMIN',
+      date: formattedDate,
+      timestamp: Date.now(),
+    };
+
+    const updated = await Complaint.findOneAndUpdate(
+      { complaintId },
+      {
+        $set: {
+          status,
+          statusColor: color,
+        },
+        $push: { comments: adminComment },
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Complaint not found' });
+    }
+
+    const formattedComplaint = formatComplaint(updated, req);
+
+    // ⚡ Socket.io Real-Time Push: Status Changed
+    const ioStatus = req.app.get('io');
+    if (ioStatus) {
+      ioStatus.emit('complaint_status_changed', {
+        complaintId,
+        status,
+        statusColor: color,
+        complaint: formattedComplaint,
+        comment: adminComment,
+      });
+      ioStatus.emit('complaints_changed', { action: 'status_changed', complaintId, status });
+    }
+
+    console.log(`📋 [Complaint Status Updated] ${complaintId} -> ${status} by ${updatedBy || 'Municipal Admin'}`);
+
+    res.status(200).json({
+      success: true,
+      message: `Complaint status updated to '${status}' successfully!`,
+      complaint: formattedComplaint,
+    });
+  } catch (error) {
+    console.error('Error updating complaint status:', error);
+    res.status(500).json({ error: 'Failed to update complaint status', details: error.message });
+  }
+};
+
+router.patch('/:complaintId/status', updateStatusHandler);
+router.put('/:complaintId/status', updateStatusHandler);
+
 module.exports = router;
+

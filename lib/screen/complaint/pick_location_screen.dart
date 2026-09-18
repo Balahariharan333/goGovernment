@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
+import '../../config/google_config.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
@@ -349,9 +350,10 @@ class _PickLocationScreenState extends State<PickLocationScreen> {
                   ),
                   children: [
                     TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      urlTemplate: GoogleConfig.googleTileUrl,
+                      subdomains: GoogleConfig.googleTileSubdomains,
+                      maxZoom: 20,
                       userAgentPackageName: 'com.hikizo.gogovernment',
-                      maxZoom: 19,
                     ),
                     // Live user GPS location dot if available
                     if (_userGpsLocation != null)

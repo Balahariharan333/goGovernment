@@ -70,5 +70,12 @@
 	<string>This app requires access to your camera to take a photo of the complaint.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app requires access to your photo library to select a photo of the complaint.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app uses your location to show nearby government services and file location-tagged complaints.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app uses your location to show nearby government services and file location-tagged complaints.</string>
+	<!-- Google Maps API Key -->
+	<key>GMSApiKey</key>
+	<string>AIzaSyA2AfzS1DtTjVTbK6hwm050Ylmr9tIJ780</string>
 </dict>
 </plist>
