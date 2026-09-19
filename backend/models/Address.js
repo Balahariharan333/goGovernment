@@ -13,6 +13,8 @@ const AddressSchema = new mongoose.Schema(
     imagePath: { type: String, default: null },
     isDefault: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null },
   },
   {
     timestamps: true,

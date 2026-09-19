@@ -8,6 +8,10 @@ import '../screen/auth/otp_screen.dart';
 import '../screen/store/register_store_screen.dart';
 import '../screen/store/application_status_screen.dart';
 import '../screen/store/store_dashboard_screen.dart';
+import '../screen/store/store_details_screen.dart';
+import '../screen/store/manage_products_screen.dart';
+import '../screen/store/add_product_screen.dart';
+import '../screen/store/store_orders_queue_screen.dart';
 import '../screen/location/pick_store_location_screen.dart';
 
 class AppRouter {
@@ -72,6 +76,38 @@ class AppRouter {
             initialLocation: initialLocation,
             initialAddress: initialAddress,
           ),
+        );
+
+      case RouteConstants.storeDetails:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        final store = args['store'] as StoreModel? ?? StoreModel();
+        return MaterialPageRoute(
+          builder: (_) => StoreDetailsScreen(store: store),
+        );
+
+      case RouteConstants.manageProducts:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        final store = args['store'] as StoreModel? ?? StoreModel();
+        return MaterialPageRoute(
+          builder: (_) => ManageProductsScreen(store: store),
+        );
+
+      case RouteConstants.addProduct:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        final storeId = args['storeId']?.toString() ?? '';
+        final storeCategory = args['storeCategory']?.toString() ?? 'general';
+        return MaterialPageRoute(
+          builder: (_) => AddProductScreen(
+            storeId: storeId,
+            storeCategory: storeCategory,
+          ),
+        );
+
+      case RouteConstants.orderQueue:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        final store = args['store'] as StoreModel? ?? StoreModel();
+        return MaterialPageRoute(
+          builder: (_) => StoreOrdersQueueScreen(store: store),
         );
 
       default:

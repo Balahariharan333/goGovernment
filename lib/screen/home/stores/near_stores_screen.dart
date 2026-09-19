@@ -15,6 +15,7 @@ import '../../../service/cart_manager.dart';
 import '../../../service/location_service.dart';
 import '../../../hive/hive_service.dart';
 import '../../../network/api_client.dart';
+import '../../../utils/call_launcher.dart';
 
 class NearStoresScreen extends StatefulWidget {
   const NearStoresScreen({super.key});
@@ -27,6 +28,7 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
   late final VoidCallback _cartListener;
   LatLng? _userPos;
 
+  bool _isLoadingStores = true;
   late List<Map<String, dynamic>> _stores;
 
   @override
@@ -52,156 +54,78 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
   }
 
   void _initStores() {
-    final basePos = _userPos ?? LocationService.defaultLocation;
-    _stores = [
-      {
-        'id': '1',
-        'title': 'Pharmacy (Locating...)',
-        'address': 'Searching nearby medical stores...',
-        'image': 'assets/images/medical.png',
-        'type': 'medical',
-        'lat': basePos.latitude + 0.0028,
-        'lng': basePos.longitude + 0.0022,
-        'distance': '...',
-      },
-      {
-        'id': '2',
-        'title': 'Grocery & Veggies (Locating...)',
-        'address': 'Searching nearby vegetable stores...',
-        'image': 'assets/images/vegstore.png',
-        'type': 'vegstore',
-        'lat': basePos.latitude - 0.0035,
-        'lng': basePos.longitude + 0.0028,
-        'distance': '...',
-      },
-      {
-        'id': '3',
-        'title': 'Pharmacy (Locating...)',
-        'address': 'Searching nearby medical stores...',
-        'image': 'assets/images/medical.png',
-        'type': 'medical',
-        'lat': basePos.latitude + 0.0055,
-        'lng': basePos.longitude - 0.0042,
-        'distance': '...',
-      },
-      {
-        'id': '4',
-        'title': 'Grocery & Veggies (Locating...)',
-        'address': 'Searching nearby vegetable stores...',
-        'image': 'assets/images/vegstore.png',
-        'type': 'vegstore',
-        'lat': basePos.latitude - 0.0075,
-        'lng': basePos.longitude - 0.0065,
-        'distance': '...',
-      },
-    ];
-
-    _updateRealtimeDistances();
+    _stores = [];
   }
 
   void _updateRealtimeDistances() {
     final basePos = _userPos ?? LocationService.defaultLocation;
     for (var store in _stores) {
+      final lat = (store['lat'] as num?)?.toDouble() ?? basePos.latitude;
+      final lng = (store['lng'] as num?)?.toDouble() ?? basePos.longitude;
       final dist = LocationService.calculateDistance(
         basePos.latitude,
         basePos.longitude,
-        store['lat'] as double,
-        store['lng'] as double,
+        lat,
+        lng,
       );
       store['distance'] = LocationService.formatDistance(dist);
     }
   }
 
   Future<void> _loadRealStores() async {
+    if (mounted) setState(() => _isLoadingStores = true);
     final basePos = _userPos ?? LocationService.defaultLocation;
 
-    // 1. Fetch live approved stores from our GoGovernment backend
+    // Fetch live approved stores from our GoGovernment database ONLY
     final approvedBackendStores = <Map<String, dynamic>>[];
     try {
       final res = await http
           .get(Uri.parse('${ApiClient.baseUrl}/stores/approved'))
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 5));
 
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
         final list = body['stores'] as List? ?? [];
         for (final s in list) {
+          // Skip offline stores - only online stores should be visible to citizens
+          if (s['isOnline'] == false) continue;
+
           final lat = (s['location']?['lat'] as num?)?.toDouble() ?? (basePos.latitude + 0.001);
           final lng = (s['location']?['lng'] as num?)?.toDouble() ?? (basePos.longitude + 0.001);
           final dist = LocationService.calculateDistance(basePos.latitude, basePos.longitude, lat, lng);
           final category = (s['category'] ?? 'general').toString().toLowerCase();
 
-          String img = 'assets/images/vegstore.png';
-          String type = 'vegstore';
-          if (category == 'medical') {
-            img = 'assets/images/medical.png';
-            type = 'medical';
-          }
+          final bool isMedical = category == 'medical';
+          final fallbackImg = isMedical ? 'assets/images/medical.png' : 'assets/images/vegstore.png';
+          final rawImg = (s['storeImage'] ?? '').toString().trim();
+          final storeImg = rawImg.isNotEmpty ? rawImg : fallbackImg;
 
           approvedBackendStores.add({
             'id': s['storeId'] ?? s['_id'] ?? 'STORE_${approvedBackendStores.length + 1}',
             'title': s['name'] ?? 'Approved Store',
             'address': s['address'] ?? '',
-            'image': img,
-            'type': type,
+            'image': storeImg,
+            'type': isMedical ? 'medical' : 'vegstore',
+            'category': category,
             'lat': lat,
             'lng': lng,
             'distance': LocationService.formatDistance(dist),
             'isGovApproved': true,
+            'isOnline': s['isOnline'] ?? true,
+            'phone': (s['phone'] ?? '').toString(),
+            'ownerName': (s['ownerName'] ?? '').toString(),
           });
         }
       }
     } catch (e) {
-      debugPrint('[NearStores] Backend approved stores fetch fallback: $e');
-    }
-
-    final realPharmacies = await LocationService.fetchRealNearbyFacilities(
-      keyword: 'pharmacy',
-      center: basePos,
-      fallbackCategory: 'Pharmacy',
-      limit: 2,
-    );
-
-    final realGroceries = await LocationService.fetchRealNearbyFacilities(
-      keyword: 'supermarket',
-      center: basePos,
-      fallbackCategory: 'Grocery & Veggies',
-      limit: 2,
-    );
-
-    final combined = <Map<String, dynamic>>[...approvedBackendStores];
-    int counter = 1;
-    for (final p in realPharmacies) {
-      combined.add({
-        'id': '${counter++}',
-        'title': p['title'],
-        'address': p['address'],
-        'image': 'assets/images/medical.png',
-        'type': 'medical',
-        'lat': p['lat'],
-        'lng': p['lng'],
-        'distance': p['distance'],
-      });
-    }
-    for (final g in realGroceries) {
-      combined.add({
-        'id': '${counter++}',
-        'title': g['title'],
-        'address': g['address'],
-        'image': 'assets/images/vegstore.png',
-        'type': 'vegstore',
-        'lat': g['lat'],
-        'lng': g['lng'],
-        'distance': g['distance'],
-      });
+      debugPrint('[NearStores] Backend approved stores fetch error: $e');
     }
 
     if (!mounted) return;
-    if (combined.isNotEmpty) {
-      setState(() {
-        _stores = combined;
-      });
-    }
+    setState(() {
+      _stores = approvedBackendStores;
+      _isLoadingStores = false;
+    });
   }
 
   Future<void> _detectLocation() async {
@@ -268,6 +192,8 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
                                     'storeAddress': store['address'],
                                     'storeImage': store['image'],
                                     'storeType': store['type'],
+                                    'storePhone': store['phone'] ?? '',
+                                    'ownerName': store['ownerName'] ?? '',
                                   },
                                 );
                               },
@@ -358,21 +284,68 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
                 right: 0,
                 bottom: 0,
                 top: Responsive.h(290),
-                child: ListView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: Responsive.w(20),
-                    vertical: Responsive.h(12),
-                  ),
-                  itemCount: _stores.length,
-                  itemBuilder: (context, index) {
-                    final store = _stores[index];
-                    return Padding(
-                      padding: EdgeInsets.only(bottom: Responsive.h(16)),
-                      child: _buildStoreCard(store),
-                    );
-                  },
-                ),
+                child: _isLoadingStores
+                    ? const Center(
+                        child: CircularProgressIndicator(color: AppColors.primary),
+                      )
+                    : _stores.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(horizontal: Responsive.w(30)),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.store_mall_directory_outlined,
+                                    size: Responsive.w(56),
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  SizedBox(height: Responsive.h(12)),
+                                  CustomText.title(
+                                    'No Stores Available',
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                  SizedBox(height: Responsive.h(6)),
+                                  CustomText.body(
+                                    'There are no approved government stores in this area yet.',
+                                    fontSize: 12,
+                                    color: AppColors.grayFont,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  SizedBox(height: Responsive.h(16)),
+                                  ElevatedButton.icon(
+                                    onPressed: _loadRealStores,
+                                    icon: const Icon(Icons.refresh, size: 16),
+                                    label: const Text('Refresh'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primary,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(Responsive.w(20)),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            physics: const BouncingScrollPhysics(),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: Responsive.w(20),
+                              vertical: Responsive.h(12),
+                            ),
+                            itemCount: _stores.length,
+                            itemBuilder: (context, index) {
+                              final store = _stores[index];
+                              return Padding(
+                                padding: EdgeInsets.only(bottom: Responsive.h(16)),
+                                child: _buildStoreCard(store),
+                              );
+                            },
+                          ),
               ),
 
               Positioned(
@@ -403,7 +376,67 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
     );
   }
 
+  Widget _buildStorefrontImage(String? imagePath, String? type) {
+    final fallbackAsset = type == 'medical'
+        ? 'assets/images/medical.png'
+        : 'assets/images/vegstore.png';
+
+    if (imagePath == null || imagePath.isEmpty) {
+      return Image.asset(
+        fallbackAsset,
+        width: double.infinity,
+        height: Responsive.h(120),
+        fit: BoxFit.cover,
+      );
+    }
+
+    final normalized = ApiClient.normalizeImageUrl(imagePath);
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      return Image.network(
+        normalized,
+        width: double.infinity,
+        height: Responsive.h(120),
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Image.asset(
+          fallbackAsset,
+          width: double.infinity,
+          height: Responsive.h(120),
+          fit: BoxFit.cover,
+        ),
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return Container(
+            width: double.infinity,
+            height: Responsive.h(120),
+            color: Colors.grey.shade100,
+            child: const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    return Image.asset(
+      imagePath,
+      width: double.infinity,
+      height: Responsive.h(120),
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => Image.asset(
+        fallbackAsset,
+        width: double.infinity,
+        height: Responsive.h(120),
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+
   Widget _buildStoreCard(Map<String, dynamic> store) {
+    final rawPhone = (store['phone'] ?? '').toString().trim();
     return GestureDetector(
       onTap: () {
         Navigator.of(context).pushNamed(
@@ -414,6 +447,8 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
             'storeAddress': store['address'],
             'storeImage': store['image'],
             'storeType': store['type'],
+            'storePhone': rawPhone,
+            'ownerName': store['ownerName'] ?? '',
           },
         );
       },
@@ -430,15 +465,64 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Store Title & Distance Pill
+            // Store Title, Call Icon & Distance Pill
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: CustomText.title(
-                    store['title'],
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: CustomText.title(
+                          store['title'],
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (rawPhone.isNotEmpty) ...[
+                        SizedBox(width: Responsive.w(8)),
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              debugPrint('[NearStores] Tapped call for ${store['title']} -> $rawPhone');
+                              CallLauncher.launchCall(
+                                context,
+                                phone: rawPhone,
+                                name: store['title'],
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(Responsive.w(20)),
+                            child: Padding(
+                              padding: EdgeInsets.all(Responsive.w(4)),
+                              child: Container(
+                                width: Responsive.w(34),
+                                height: Responsive.w(34),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE8F5E9),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.green.shade400, width: 1.2),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.green.withValues(alpha: 0.15),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.phone,
+                                  size: 16,
+                                  color: Color(0xFF2E7D32),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 if (store['distance'] != null)
@@ -479,12 +563,7 @@ class _NearStoresScreenState extends State<NearStoresScreen> {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(Responsive.w(12)),
-                  child: Image.asset(
-                    store['image'],
-                    width: double.infinity,
-                    height: Responsive.h(120),
-                    fit: BoxFit.cover,
-                  ),
+                  child: _buildStorefrontImage(store['image'], store['type']),
                 ),
                 if (store['hasCart'] == true)
                   Positioned(

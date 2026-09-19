@@ -7,18 +7,7 @@ class RiderChatState {
 
   factory RiderChatState.initial() {
     return RiderChatState(
-      messages: [
-        {
-          'text': "I'm on the way!",
-          'time': '10:00 pm',
-          'isMe': false,
-        },
-        {
-          'text': "Come fast bro.",
-          'time': '10:00 pm',
-          'isMe': true,
-        },
-      ],
+      messages: [],
     );
   }
 

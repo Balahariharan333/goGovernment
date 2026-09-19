@@ -9,4 +9,8 @@ class RouteConstants {
   static const String applicationStatus = '/application-status';
   static const String storeDashboard = '/store-dashboard';
   static const String pickLocation = '/pick-location';
+  static const String storeDetails = '/store-details';
+  static const String manageProducts = '/manage-products';
+  static const String addProduct = '/add-product';
+  static const String orderQueue = '/order-queue';
 }

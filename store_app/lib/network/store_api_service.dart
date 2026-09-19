@@ -46,7 +46,7 @@ class StoreApiService {
   }
 
   static Future<Map<String, dynamic>?> updateOnlineStatus(String storeId, bool isOnline) async {
-    final url = '${ApiClient.baseUrl}/stores/$storeId/status';
+    final url = '${ApiClient.baseUrl}/stores/$storeId/online';
     final body = jsonEncode({'isOnline': isOnline});
 
     try {
@@ -64,7 +64,30 @@ class StoreApiService {
   }
 
   static Future<String?> uploadStoreImage(String localPath) async {
-    final url = '${ApiClient.baseUrl}/upload';
+    final url = '${ApiClient.baseUrl}/upload/store';
+    try {
+      ApiClient.logRequest('MULTIPART POST', url, body: 'File: $localPath');
+
+      final request = http.MultipartRequest('POST', Uri.parse(url));
+      request.files.add(await http.MultipartFile.fromPath('image', localPath));
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+
+      ApiClient.logResponse('MULTIPART POST', url, response.statusCode, response.body);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['imageUrl'] as String?;
+      }
+    } catch (e) {
+      ApiClient.logError('MULTIPART POST', url, e);
+    }
+    return null;
+  }
+
+  static Future<String?> uploadProductImage(String localPath) async {
+    final url = '${ApiClient.baseUrl}/upload/product';
     try {
       ApiClient.logRequest('MULTIPART POST', url, body: 'File: $localPath');
 

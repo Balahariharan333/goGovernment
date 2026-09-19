@@ -24,6 +24,14 @@ class SocketService {
   final StreamController<void> _complaintsChangedController =
       StreamController<void>.broadcast();
 
+  // Order & Chat Stream Controllers
+  final StreamController<Map<String, dynamic>> _orderStatusController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _chatMessageController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _riderLocationController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
   // Public Streams
   Stream<Map<String, dynamic>> get onComplaintCreated =>
       _complaintCreatedController.stream;
@@ -34,6 +42,39 @@ class SocketService {
   Stream<Map<String, dynamic>> get onComplaintCommentAdded =>
       _complaintCommentController.stream;
   Stream<void> get onComplaintsChanged => _complaintsChangedController.stream;
+
+  Stream<Map<String, dynamic>> get onOrderStatusUpdate =>
+      _orderStatusController.stream;
+  Stream<Map<String, dynamic>> get onChatMessage =>
+      _chatMessageController.stream;
+  Stream<Map<String, dynamic>> get onRiderLocation =>
+      _riderLocationController.stream;
+
+  /// Send chat message to rider via WebSocket
+  void sendChatMessage(Map<String, dynamic> message) {
+    _socket?.emit('chat:send', message);
+  }
+
+  /// Listen to a specific order status update
+  void subscribeToOrder(String orderId) {
+    _socket?.on('order:$orderId:status_update', (data) {
+      debugPrint('⚡ [Socket.io] Order $orderId status update received: $data');
+      if (data is Map) {
+        _orderStatusController.add(Map<String, dynamic>.from(data));
+      }
+    });
+    _socket?.on('order:$orderId:rider_location', (data) {
+      if (data is Map) {
+        _riderLocationController.add(Map<String, dynamic>.from(data));
+      }
+    });
+    _socket?.on('chat:$orderId', (data) {
+      debugPrint('⚡ [Socket.io] Chat message received for order $orderId');
+      if (data is Map) {
+        _chatMessageController.add(Map<String, dynamic>.from(data));
+      }
+    });
+  }
 
   /// Initialize and connect to the backend WebSocket server
   void init() {
@@ -106,6 +147,14 @@ class SocketService {
       // 5. General Complaints Changed
       _socket?.on('complaints_changed', (_) {
         _complaintsChangedController.add(null);
+      });
+
+      // 6. Global Order Status Update
+      _socket?.on('order:status_update', (data) {
+        debugPrint('⚡ [Socket.io] Global order:status_update received');
+        if (data is Map) {
+          _orderStatusController.add(Map<String, dynamic>.from(data));
+        }
       });
     } catch (e) {
       debugPrint('⚠️ [SocketService] Exception initializing socket: $e');

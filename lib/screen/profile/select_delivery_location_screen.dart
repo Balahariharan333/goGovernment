@@ -88,6 +88,9 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
       _phoneController.text = addr.phone;
       _landmarkController.text = addr.landmark ?? '';
       _existingImagePath = addr.imagePath;
+      if (addr.latitude != null && addr.longitude != null) {
+        _currentMapCenter = LatLng(addr.latitude!, addr.longitude!);
+      }
     } else {
       if (HiveService.userName.isNotEmpty) {
         _nameController.text = HiveService.userName;
@@ -649,6 +652,7 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
                 addressParts.isNotEmpty ? addressParts.join(', ') : _addressText;
 
             final newAddr = AddressModel(
+              id: widget.editAddress?.id,
               type: _selectedType,
               description: fullDescription,
               name: _nameController.text.trim(),
@@ -656,6 +660,9 @@ class _SelectDeliveryLocationScreenState extends State<SelectDeliveryLocationScr
               phone: _phoneController.text.trim(),
               landmark: _landmarkController.text.trim(),
               imagePath: _landmarkImage?.path ?? _existingImagePath,
+              isDefault: widget.editAddress?.isDefault ?? false,
+              latitude: _currentMapCenter.latitude,
+              longitude: _currentMapCenter.longitude,
             );
 
             final nav = Navigator.of(context);

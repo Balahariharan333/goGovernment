@@ -8,6 +8,8 @@ class AddressModel {
   String? landmark;
   String? imagePath;
   bool isDefault;
+  double? latitude;
+  double? longitude;
 
   AddressModel({
     this.id,
@@ -19,6 +21,8 @@ class AddressModel {
     this.landmark,
     this.imagePath,
     this.isDefault = false,
+    this.latitude,
+    this.longitude,
   });
 
   Map<String, dynamic> toMap() {
@@ -32,6 +36,8 @@ class AddressModel {
       'landmark': landmark,
       'imagePath': imagePath,
       'isDefault': isDefault,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
     };
   }
 
@@ -46,6 +52,8 @@ class AddressModel {
       landmark: map['landmark']?.toString(),
       imagePath: map['imagePath']?.toString(),
       isDefault: map['isDefault'] == true,
+      latitude: map['latitude'] != null ? (map['latitude'] as num).toDouble() : null,
+      longitude: map['longitude'] != null ? (map['longitude'] as num).toDouble() : null,
     );
   }
 }

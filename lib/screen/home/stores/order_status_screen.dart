@@ -1,12 +1,18 @@
-// ignore_for_file: no_leading_underscores_for_local_identifiers, unused_element
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../network/order_api_service.dart';
+import '../../../service/socket_service.dart';
 import '../../../utils/app_colors.dart';
 import '../../../utils/responsive_helper.dart';
 import '../../../widget/common_background.dart';
 import '../../../widget/custom_text.dart';
 import '../../../widget/common_map.dart';
+import '../../../utils/call_launcher.dart';
 import '../../../constants/route_constants.dart';
 import '../../../model/address_model.dart';
 import '../../../bloc/order_tracking/order_tracking_bloc.dart';
@@ -42,6 +48,11 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
   String _receiverPhone = '';
   String _deliveryAddress = '';
   late String _orderId;
+  Map<String, dynamic>? _serverOrderData;
+  StreamSubscription? _socketSub;
+  StreamSubscription? _riderLocationSub;
+  double? _riderLat;
+  double? _riderLng;
 
   @override
   void initState() {
@@ -68,16 +79,236 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
     if (widget.transaction != null) {
       context.read<OrderTrackingBloc>().add(SetTrackingOrderEvent(widget.transaction!));
     }
+
+    // Fetch initial order details once
+    _fetchInitialOrder();
+
+    // Subscribe to real-time Socket.io events for this order (zero polling, zero battery drain)
+    SocketService().subscribeToOrder(_orderId);
+    _socketSub = SocketService().onOrderStatusUpdate.listen((orderData) {
+      if (!mounted) return;
+      final incomingId = orderData['orderId']?.toString() ?? orderData['id']?.toString();
+      if (incomingId == _orderId) {
+        _applyOrderUpdate(orderData);
+      }
+    });
+
+    _riderLocationSub = SocketService().onRiderLocation.listen((locData) {
+      if (!mounted) return;
+      final incomingId = locData['orderId']?.toString();
+      if (incomingId == _orderId) {
+        setState(() {
+          _riderLat = (locData['latitude'] as num?)?.toDouble();
+          _riderLng = (locData['longitude'] as num?)?.toDouble();
+        });
+      }
+    });
   }
 
+  @override
+  void dispose() {
+    _socketSub?.cancel();
+    _riderLocationSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchInitialOrder() async {
+    if (_orderId.isEmpty) return;
+    try {
+      final order = await OrderApiService.fetchOrderDetails(_orderId);
+      if (order != null && mounted) {
+        _applyOrderUpdate(order);
+      }
+    } catch (_) {}
+  }
+
+  void _applyOrderUpdate(Map<String, dynamic> order) {
+    setState(() {
+      _serverOrderData = order;
+
+      final addr = order['deliveryAddress'];
+      if (addr is Map) {
+        if (addr['address'] != null && addr['address'].toString().isNotEmpty) {
+          _deliveryAddress = addr['address'].toString();
+        }
+        if (addr['receiverName'] != null && addr['receiverName'].toString().isNotEmpty) {
+          _receiverName = addr['receiverName'].toString();
+        }
+        if (addr['receiverPhone'] != null && addr['receiverPhone'].toString().isNotEmpty) {
+          _receiverPhone = addr['receiverPhone'].toString();
+        }
+      }
+    });
+
+    final status = order['status']?.toString();
+    int step = 0;
+    if (status == 'placed') {
+      step = 0;
+    } else if (status == 'preparing') {
+      step = 1;
+    } else if (status == 'ready_for_pickup') {
+      step = 2;
+    } else if (status == 'out_for_delivery') {
+      step = 3;
+    } else if (status == 'delivered') {
+      step = 4;
+    }
+
+    final current = context.read<OrderTrackingBloc>().state.currentStep;
+    if (step != current) {
+      context.read<OrderTrackingBloc>().add(UpdateTrackingStepEvent(step));
+      if (step == 4) {
+        context.read<TransactionBloc>().add(
+          UpdateOrderStatusEvent(orderId: _orderId, status: 'Delivered'),
+        );
+      }
+    }
+  }
 
   final List<String> _statusTitles = [
     'Arriving on time!',
     'Preparing your order',
     'Packing with care',
     'Rider on the way',
-    'Ready for pickup'
+    'Order Delivered 🎉'
   ];
+
+  String _getEstimatedTimeDisplay() {
+    final createdAt = _serverOrderData?['createdAt']?.toString();
+    if (createdAt != null && createdAt.isNotEmpty) {
+      final dt = DateTime.tryParse(createdAt)?.toLocal();
+      if (dt != null) {
+        final est = dt.add(const Duration(minutes: 30));
+        final h = est.hour > 12 ? est.hour - 12 : (est.hour == 0 ? 12 : est.hour);
+        final m = est.minute.toString().padLeft(2, '0');
+        final ampm = est.hour >= 12 ? 'pm' : 'am';
+        return 'Est: $h:$m $ampm';
+      }
+    }
+    return 'Est: ~25 mins';
+  }
+
+  Widget _buildTrackingMap(int currentStep) {
+    final storeDetails = _serverOrderData?['storeDetails'] as Map<String, dynamic>?;
+    final deliveryAddr = _serverOrderData?['deliveryAddress'] as Map<String, dynamic>?;
+    final deliveryAgent = _serverOrderData?['deliveryAgent'] as Map<String, dynamic>?;
+
+    final storeLat = (storeDetails?['latitude'] as num?)?.toDouble() ?? 12.9716;
+    final storeLng = (storeDetails?['longitude'] as num?)?.toDouble() ?? 77.5946;
+    final storePoint = LatLng(storeLat, storeLng);
+
+    final dropLat = (deliveryAddr?['latitude'] as num?)?.toDouble() ?? 12.9780;
+    final dropLng = (deliveryAddr?['longitude'] as num?)?.toDouble() ?? 77.6000;
+    final dropPoint = LatLng(dropLat, dropLng);
+
+    final agentLoc = deliveryAgent?['currentLocation'] as Map<String, dynamic>?;
+    final dynamicRiderLat = _riderLat ??
+        (agentLoc?['latitude'] as num?)?.toDouble() ??
+        (storeLat + (dropLat - storeLat) * (currentStep >= 3 ? 0.65 : 0.15));
+    final dynamicRiderLng = _riderLng ??
+        (agentLoc?['longitude'] as num?)?.toDouble() ??
+        (storeLng + (dropLng - storeLng) * (currentStep >= 3 ? 0.65 : 0.15));
+    final riderPoint = LatLng(dynamicRiderLat, dynamicRiderLng);
+
+    final markers = <Marker>[
+      Marker(
+        point: storePoint,
+        width: 36,
+        height: 36,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 6,
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(6),
+          child: const Icon(
+            Icons.storefront_rounded,
+            color: AppColors.primary,
+            size: 20,
+          ),
+        ),
+      ),
+      Marker(
+        point: dropPoint,
+        width: 36,
+        height: 36,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 6,
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(6),
+          child: const Icon(
+            Icons.person_pin_circle_rounded,
+            color: Colors.blueAccent,
+            size: 20,
+          ),
+        ),
+      ),
+    ];
+
+    if (currentStep >= 2 && currentStep <= 3) {
+      markers.add(
+        Marker(
+          point: riderPoint,
+          width: 38,
+          height: 38,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.green.shade600,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.green.withValues(alpha: 0.4),
+                  blurRadius: 8,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(6),
+            child: const Icon(
+              Icons.motorcycle_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final polylines = <Polyline>[
+      Polyline(
+        points: [storePoint, dropPoint],
+        strokeWidth: 3.5,
+        color: AppColors.primary.withValues(alpha: 0.7),
+      ),
+    ];
+
+    final centerPoint = currentStep >= 3 ? riderPoint : storePoint;
+
+    return CommonMap(
+      key: ValueKey('map_${currentStep}_${riderPoint.latitude}_${riderPoint.longitude}'),
+      center: centerPoint,
+      zoom: 14.5,
+      markers: markers,
+      polylines: polylines,
+      showUserLocation: false,
+      mapState: currentStep == 4 ? MapState.navigation : MapState.directions,
+      isWalkMode: false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -114,147 +345,6 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Manual step & completion tester (for manual testing before API binding)
-                        Container(
-                          height: Responsive.h(36),
-                          margin: EdgeInsets.only(bottom: Responsive.h(10)),
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            physics: const BouncingScrollPhysics(),
-                            itemCount: 5,
-                            itemBuilder: (context, index) {
-                              final bool isActive = currentStep == index;
-                              final List<String> stageLabels = [
-                                'Placed',
-                                'Confirmed',
-                                'Packed',
-                                'On the Way',
-                                'Delivered',
-                              ];
-                              return Padding(
-                                padding: EdgeInsets.only(right: Responsive.w(8)),
-                                child: GestureDetector(
-                                  onTap: () {
-                                    context.read<OrderTrackingBloc>().add(UpdateTrackingStepEvent(index));
-                                    if (index == 4) {
-                                      context.read<TransactionBloc>().add(
-                                        UpdateOrderStatusEvent(orderId: _orderId, status: 'Delivered'),
-                                      );
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: EdgeInsets.symmetric(horizontal: Responsive.w(12)),
-                                    decoration: BoxDecoration(
-                                      color: isActive ? AppColors.primary : Colors.grey.shade200,
-                                      borderRadius: BorderRadius.circular(Responsive.w(18)),
-                                      border: Border.all(
-                                        color: isActive ? AppColors.primary : Colors.grey.shade300,
-                                        width: 1.0,
-                                      ),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        'Stage ${index + 1}: ${stageLabels[index]}',
-                                        style: TextStyle(
-                                          color: isActive ? Colors.white : Colors.grey.shade700,
-                                          fontSize: Responsive.sp(11),
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-
-                        // Manual Test: Complete Order Quick Action Bar
-                        Container(
-                          margin: EdgeInsets.only(bottom: Responsive.h(16)),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: Responsive.w(14),
-                            vertical: Responsive.h(10),
-                          ),
-                          decoration: BoxDecoration(
-                            color: currentStep == 4 ? const Color(0xFFE8F5E9) : const Color(0xFFFFF8E1),
-                            borderRadius: BorderRadius.circular(Responsive.w(16)),
-                            border: Border.all(
-                              color: currentStep == 4 ? const Color(0xFF81C784) : const Color(0xFFFFD54F),
-                              width: 1.2,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                currentStep == 4 ? Icons.check_circle : Icons.science_outlined,
-                                color: currentStep == 4 ? const Color(0xFF2E7D32) : const Color(0xFFF57F17),
-                                size: Responsive.w(20),
-                              ),
-                              SizedBox(width: Responsive.w(10)),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    CustomText.title(
-                                      currentStep == 4 ? 'Order Completed (Test Mode)' : 'Order Complete Test',
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: currentStep == 4 ? const Color(0xFF2E7D32) : const Color(0xFFE65100),
-                                    ),
-                                    CustomText.subtitle(
-                                      currentStep == 4
-                                          ? 'Status saved as Delivered in order history'
-                                          : 'Mark as Delivered to test completion flow',
-                                      fontSize: 10,
-                                      color: AppColors.grayFont,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (currentStep != 4)
-                                GestureDetector(
-                                  onTap: () {
-                                    context.read<OrderTrackingBloc>().add(UpdateTrackingStepEvent(4));
-                                    context.read<TransactionBloc>().add(
-                                      UpdateOrderStatusEvent(orderId: _orderId, status: 'Delivered'),
-                                    );
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Order marked as Completed!'),
-                                        backgroundColor: Color(0xFF2E7D32),
-                                        duration: Duration(seconds: 2),
-                                      ),
-                                    );
-                                  },
-                                  child: Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: Responsive.w(12),
-                                      vertical: Responsive.h(6),
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF2E7D32),
-                                      borderRadius: BorderRadius.circular(Responsive.w(14)),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(Icons.check, color: Colors.white, size: 14),
-                                        SizedBox(width: Responsive.w(4)),
-                                        CustomText.title(
-                                          'Complete',
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-
                         // 1. Shopping bag (step 0) or Map (steps 1–4)
                         if (!isMapVisible) ...[
                           Center(
@@ -277,82 +367,7 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(Responsive.w(18)),
-                              child: Stack(
-                                children: [
-                                  Positioned.fill(
-                                    child: CommonMap(
-                                      mapState: currentStep == 4
-                                          ? MapState.navigation
-                                          : MapState.directions,
-                                      isWalkMode: false,
-                                    ),
-                                  ),
-                                  // Store marker
-                                  Positioned(
-                                    top: Responsive.h(40),
-                                    left: Responsive.w(80),
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: AppColors.white,
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withValues(alpha: 0.1),
-                                            blurRadius: 6,
-                                          ),
-                                        ],
-                                      ),
-                                      padding: EdgeInsets.all(Responsive.w(6)),
-                                      child: Icon(
-                                        Icons.store,
-                                        color: AppColors.primary,
-                                        size: Responsive.w(18),
-                                      ),
-                                    ),
-                                  ),
-                                  // Destination marker
-                                  Positioned(
-                                    bottom: Responsive.h(40),
-                                    right: Responsive.w(80),
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: AppColors.white,
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withValues(alpha: 0.1),
-                                            blurRadius: 6,
-                                          ),
-                                        ],
-                                      ),
-                                      padding: EdgeInsets.all(Responsive.w(6)),
-                                      child: Icon(
-                                        Icons.person_pin_circle,
-                                        color: Colors.blue.shade800,
-                                        size: Responsive.w(18),
-                                      ),
-                                    ),
-                                  ),
-                                  // Rider moving icon
-                                  if (currentStep >= 2 && currentStep <= 3)
-                                    Positioned(
-                                      top: currentStep == 2 ? Responsive.h(90) : Responsive.h(130),
-                                      left: currentStep == 2 ? Responsive.w(120) : Responsive.w(180),
-                                      child: Container(
-                                        padding: EdgeInsets.all(Responsive.w(4)),
-                                        decoration: const BoxDecoration(
-                                          color: Colors.green,
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          Icons.motorcycle,
-                                          color: Colors.white,
-                                          size: Responsive.w(14),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
+                              child: _buildTrackingMap(currentStep),
                             ),
                           ),
                         ],
@@ -387,7 +402,7 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
                                   ),
                                   SizedBox(width: Responsive.w(8)),
                                   CustomText.title(
-                                    '10:14 pm',
+                                    _getEstimatedTimeDisplay(),
                                     fontSize: 13,
                                     color: AppColors.grayFont,
                                   ),
@@ -444,6 +459,10 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
                           _buildDriverDetailCard(),
                           SizedBox(height: Responsive.h(20)),
                         ],
+
+                        // Store contact & details card
+                        _buildStoreDetailCard(),
+                        SizedBox(height: Responsive.h(20)),
 
                         // 4. Delivery details
                         _buildDeliveryDetailsCard(),
@@ -583,7 +602,143 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
     );
   }
 
+  Widget _buildStoreDetailCard() {
+    final storeDetails = _serverOrderData?['storeDetails'] as Map<String, dynamic>? ??
+        widget.transaction?['storeDetails'] as Map<String, dynamic>?;
+    final storeName = (storeDetails != null && storeDetails['name'] != null && storeDetails['name'].toString().trim().isNotEmpty)
+        ? storeDetails['name'].toString()
+        : (widget.transaction?['title']?.toString() ?? 'Government Store');
+    final storePhone = storeDetails?['phone']?.toString() ??
+        widget.transaction?['storePhone']?.toString() ?? '';
+    final storeAddress = storeDetails?['address']?.toString() ??
+        widget.transaction?['storeAddress']?.toString() ?? '';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(Responsive.w(20)),
+        border: Border.all(color: AppColors.outliner, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.all(Responsive.w(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: Responsive.w(38),
+                height: Responsive.w(38),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF2EC),
+                  borderRadius: BorderRadius.circular(Responsive.w(12)),
+                ),
+                child: Icon(
+                  Icons.storefront,
+                  color: AppColors.primary,
+                  size: Responsive.w(20),
+                ),
+              ),
+              SizedBox(width: Responsive.w(12)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CustomText.title(
+                      storeName,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    CustomText.subtitle(
+                      storeAddress.isNotEmpty ? storeAddress : 'Partner Merchant Store',
+                      fontSize: 10,
+                      color: AppColors.grayFont,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (storePhone.isNotEmpty) ...[
+            SizedBox(height: Responsive.h(12)),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: Responsive.w(12), vertical: Responsive.h(8)),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE8F5E9),
+                borderRadius: BorderRadius.circular(Responsive.w(12)),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.phone, size: 14, color: Color(0xFF2E7D32)),
+                      SizedBox(width: Responsive.w(6)),
+                      Text(
+                        storePhone,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1B5E20),
+                        ),
+                      ),
+                    ],
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      CallLauncher.launchCall(context, phone: storePhone, name: storeName);
+                    },
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: Responsive.w(12), vertical: Responsive.h(6)),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2E7D32),
+                        borderRadius: BorderRadius.circular(Responsive.w(16)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.call, size: 12, color: Colors.white),
+                          SizedBox(width: 4),
+                          Text(
+                            'Call Store',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildDriverDetailCard() {
+    final agent = _serverOrderData?['deliveryAgent'] as Map<String, dynamic>?;
+    final driverName = (agent != null && agent['name'] != null && agent['name'].toString().trim().isNotEmpty)
+        ? agent['name'].toString()
+        : 'Assigned Express Rider';
+    final driverPhone = agent?['phone']?.toString() ?? '';
+    final vehicleNumber = agent?['vehicleNumber']?.toString() ?? '';
+    final rating = agent?['rating']?.toString() ?? '4.9';
+
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -617,12 +772,14 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     CustomText.title(
-                      'Akram Ali',
+                      driverName,
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                     ),
                     CustomText.subtitle(
-                      '20k+ orders delivered',
+                      vehicleNumber.isNotEmpty
+                          ? '$vehicleNumber · ★ $rating Rating'
+                          : '★ $rating Rating · Express Delivery',
                       fontSize: 10,
                       color: Colors.green.shade800,
                     ),
@@ -641,7 +798,7 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
                   onTap: () {
                     Navigator.of(context).pushNamed(
                       RouteConstants.riderChat,
-                      arguments: 'Akram Ali',
+                      arguments: driverName,
                     );
                   },
                   child: Container(
@@ -674,14 +831,25 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
               SizedBox(width: Responsive.w(12)),
               Expanded(
                 child: GestureDetector(
-                  onTap: () {
-                    // Show a Dial pop-up trigger
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Dialing Akram Ali (+91 98765 12345)...'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
+                  onTap: () async {
+                    if (driverPhone.isNotEmpty) {
+                      final cleaned = driverPhone.replaceAll(RegExp(r'[^\d+]'), '');
+                      final uri = Uri.parse('tel:$cleaned');
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri);
+                        return;
+                      }
+                    }
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(driverPhone.isNotEmpty
+                              ? 'Contacting $driverName at $driverPhone...'
+                              : 'Connecting to $driverName...'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
                   },
                   child: Container(
                     height: Responsive.h(38),
@@ -854,6 +1022,34 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
   }
 
   Map<String, dynamic> _getResolvedTransaction() {
+    if (_serverOrderData != null) {
+      final items = _serverOrderData!['items'] as List? ?? [];
+      final grandTotal = _serverOrderData!['grandTotal']?.toString() ?? '0';
+      final storeName = _serverOrderData!['storeDetails']?['name']?.toString() ??
+          (widget.storeType == 'food'
+              ? 'Burger King & Cafe'
+              : (widget.storeType == 'grocery' ? 'Fresh Mart Grocery' : 'Apollo Pharmacy'));
+      return {
+        'id': _orderId,
+        'title': storeName,
+        'subtitle': 'Order placed · Processing',
+        'amount': '-₹$grandTotal',
+        'isPositive': false,
+        'status': _statusTitles[_currentStep.clamp(0, _statusTitles.length - 1)],
+        'date': 'Today',
+        'items': items.map((i) => {
+          'title': i['name'] ?? i['title'] ?? 'Item',
+          'price': '₹${i['price'] ?? 0}',
+          'qty': i['quantity'] ?? i['qty'] ?? 1,
+          'image': i['imageUrl'] ?? i['image'] ?? 'assets/images/product1.png',
+        }).toList(),
+        'address': _deliveryAddress,
+        'listingPrice': '₹$grandTotal',
+        'sellingPrice': '₹$grandTotal',
+        'grandTotal': '₹$grandTotal',
+        'paid': '₹$grandTotal',
+      };
+    }
     if (widget.transaction != null) {
       return Map<String, dynamic>.from(widget.transaction!);
     }
@@ -1292,32 +1488,37 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
   Widget _buildFaqTile({required String question, required String answer}) {
     return Container(
       margin: EdgeInsets.only(bottom: Responsive.h(8)),
-      decoration: BoxDecoration(
+      child: Material(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(Responsive.w(12)),
-        border: Border.all(color: AppColors.outliner, width: 1.0),
-      ),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.symmetric(horizontal: Responsive.w(12)),
-        childrenPadding: EdgeInsets.fromLTRB(
-          Responsive.w(12),
-          0,
-          Responsive.w(12),
-          Responsive.h(10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Responsive.w(12)),
+          side: const BorderSide(color: AppColors.outliner, width: 1.0),
         ),
-        title: CustomText.title(
-          question,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
-        children: [
-          CustomText.subtitle(
-            answer,
-            fontSize: 11,
-            color: AppColors.grayFont,
-            height: 1.4,
+        clipBehavior: Clip.antiAlias,
+        child: ExpansionTile(
+          shape: const RoundedRectangleBorder(side: BorderSide.none),
+          collapsedShape: const RoundedRectangleBorder(side: BorderSide.none),
+          tilePadding: EdgeInsets.symmetric(horizontal: Responsive.w(12)),
+          childrenPadding: EdgeInsets.fromLTRB(
+            Responsive.w(12),
+            0,
+            Responsive.w(12),
+            Responsive.h(10),
           ),
-        ],
+          title: CustomText.title(
+            question,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+          children: [
+            CustomText.subtitle(
+              answer,
+              fontSize: 11,
+              color: AppColors.grayFont,
+              height: 1.4,
+            ),
+          ],
+        ),
       ),
     );
   }

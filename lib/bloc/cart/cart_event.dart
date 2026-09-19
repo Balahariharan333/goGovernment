@@ -25,3 +25,9 @@ class ToggleFavoriteEvent extends CartEvent {
   final Map<String, dynamic> details;
   ToggleFavoriteEvent(this.productId, this.details);
 }
+
+class FetchCartAndWishlistEvent extends CartEvent {}
+
+class ResetCartAndWishlistEvent extends CartEvent {}
+
+

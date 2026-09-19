@@ -61,7 +61,7 @@ class AppRouter {
     switch (settings.name) {
       // Root / Auth
       case RouteConstants.initial:
-        if (HiveService.isLoggedIn) {
+        if (HiveService.isLoggedIn && HiveService.userName.trim().isNotEmpty) {
           if (!HiveService.hasSeenPermissionScreen) {
             return _buildSmoothRoute(const PermissionScreen(), settings);
           }
@@ -122,6 +122,8 @@ class AppRouter {
             storeAddress: args['storeAddress'] as String? ?? '',
             storeImage: args['storeImage'] as String? ?? '',
             storeType: args['storeType'] as String? ?? 'medical',
+            storePhone: args['storePhone'] as String? ?? args['phone'] as String? ?? '',
+            ownerName: args['ownerName'] as String? ?? '',
           ),
           settings,
         );

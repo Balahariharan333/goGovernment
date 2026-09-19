@@ -7,6 +7,7 @@ import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
 import '../../widget/common_wishlist_button.dart';
 import '../../widget/common_cart_badge.dart';
+import '../../network/api_client.dart';
 import '../../bloc/cart/cart_bloc.dart';
 import '../../bloc/cart/cart_event.dart';
 import '../../bloc/cart/cart_state.dart';
@@ -19,6 +20,12 @@ class WishlistScreen extends StatefulWidget {
 }
 
 class _WishlistScreenState extends State<WishlistScreen> {
+  @override
+  void initState() {
+    super.initState();
+    CartBloc.instance.add(FetchCartAndWishlistEvent());
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -208,9 +215,79 @@ class _WishlistScreenState extends State<WishlistScreen> {
     );
   }
 
+  Widget _buildWishlistImage(String? imagePath) {
+    Widget buildPlaceholder() {
+      return Container(
+        height: Responsive.h(90),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(Responsive.w(10)),
+          border: Border.all(color: Colors.grey.shade200, width: 0.8),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.image_not_supported_outlined,
+                size: Responsive.w(26),
+                color: Colors.grey.shade400,
+              ),
+              SizedBox(height: Responsive.h(2)),
+              Text(
+                'No image',
+                style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (imagePath == null || imagePath.trim().isEmpty) {
+      return buildPlaceholder();
+    }
+
+    final normalized = ApiClient.normalizeImageUrl(imagePath);
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      return Image.network(
+        normalized,
+        height: Responsive.h(90),
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => buildPlaceholder(),
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return SizedBox(
+            height: Responsive.h(90),
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    return Image.asset(
+      imagePath,
+      height: Responsive.h(90),
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) => buildPlaceholder(),
+    );
+  }
+
   Widget _buildProductCard(BuildContext context, CartState state, Map<String, dynamic> product) {
     final String id = product['id']?.toString() ?? '';
     final int qty = state.cartItems[id] ?? 0;
+
+    final double price = (product['price'] as num?)?.toDouble() ?? 0.0;
+    final double origPrice = (product['originalPrice'] as num?)?.toDouble() ?? price;
+    final int discount = (product['discountPercentage'] as num?)?.toInt() ?? 0;
 
     return Container(
       decoration: BoxDecoration(
@@ -276,7 +353,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                   children: [
                     SizedBox(height: Responsive.h(12)),
                     Center(
-                      child: Image.asset(product['image'] ?? 'assets/images/product1.png', height: Responsive.h(90), fit: BoxFit.contain),
+                      child: _buildWishlistImage(product['image']),
                     ),
                     SizedBox(height: Responsive.h(8)),
                     CustomText.title(product['title'] ?? 'Product', fontSize: 12, fontWeight: FontWeight.bold, maxLines: 1),
@@ -286,10 +363,12 @@ class _WishlistScreenState extends State<WishlistScreen> {
               const Spacer(),
               Row(
                 children: [
-                  const Icon(Icons.arrow_downward, color: Color(0xFF4CAF50), size: 10),
-                  const Text('68% ', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 10, fontWeight: FontWeight.bold)),
-                  Text('₹307 ', style: TextStyle(fontSize: 10, decoration: TextDecoration.lineThrough, color: Colors.grey)),
-                  const Text('₹99', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  if (discount > 0) ...[
+                    const Icon(Icons.arrow_downward, color: Color(0xFF4CAF50), size: 10),
+                    Text('$discount% ', style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 10, fontWeight: FontWeight.bold)),
+                    Text('₹${origPrice.toStringAsFixed(0)} ', style: const TextStyle(fontSize: 10, decoration: TextDecoration.lineThrough, color: Colors.grey)),
+                  ],
+                  Text('₹${price.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ],
               ),
               SizedBox(height: Responsive.h(8)),

@@ -7,6 +7,7 @@ import '../../../widget/common_cart_badge.dart';
 import '../../../constants/route_constants.dart';
 import '../../../service/cart_manager.dart';
 import '../../../widget/common_wishlist_button.dart';
+import '../../../network/api_client.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> product;
@@ -121,10 +122,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
                       // Centered Product Hero Image
                       Center(
-                        child: Image.asset(
+                        child: _buildProductHeroImage(
                           widget.product['image'],
-                          height: Responsive.h(220),
-                          fit: BoxFit.contain,
+                          widget.storeType,
                         ),
                       ),
                       SizedBox(height: Responsive.h(12)),
@@ -149,6 +149,41 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       // Add to Cart Button (white button with orange border or quantity dial)
                       _buildCartActionButton(),
                       SizedBox(height: Responsive.h(20)),
+
+                      // Subsidized Badge (if applicable)
+                      if (widget.product['isSubsidized'] == true) ...[
+                        Container(
+                          margin: EdgeInsets.only(bottom: Responsive.h(8)),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: Responsive.w(10),
+                            vertical: Responsive.h(5),
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F5E9),
+                            borderRadius: BorderRadius.circular(Responsive.w(8)),
+                            border: Border.all(color: const Color(0xFF81C784)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.verified, size: 14, color: Color(0xFF2E7D32)),
+                              SizedBox(width: Responsive.w(4)),
+                              Flexible(
+                                child: Text(
+                                  'Govt Subsidized Rate${(widget.product['subsidyLimit'] != null && widget.product['subsidyLimit'].toString().trim().isNotEmpty) ? ' (Limit: ${widget.product['subsidyLimit']})' : ''}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF2E7D32),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
 
                       // Stock alert if low
                       if (stock <= 3) ...[
@@ -186,37 +221,45 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
                       // Product Title
                       CustomText.header(
-                        '${widget.product['title']} ( 1 Units)',
+                        '${widget.product['title']} (${widget.product['unit'] ?? '1 Units'})',
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                       SizedBox(height: Responsive.h(8)),
 
                       // Pricing Details Row
-                      Row(
-                        children: [
-                          CustomText.title(
-                            '68% OFF  ',
-                            color: const Color(0xFF4CAF50),
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          Text(
-                            '₹307 ',
-                            style: TextStyle(
-                              fontSize: 12,
-                              decoration: TextDecoration.lineThrough,
-                              color: Colors.grey.shade500,
+                      Builder(builder: (context) {
+                        final double price = (widget.product['price'] as num?)?.toDouble() ?? 0.0;
+                        final double origPrice = (widget.product['originalPrice'] as num?)?.toDouble() ?? price;
+                        final int discount = (widget.product['discountPercentage'] as num?)?.toInt() ?? 0;
+
+                        return Row(
+                          children: [
+                            if (discount > 0) ...[
+                              CustomText.title(
+                                '$discount% OFF  ',
+                                color: const Color(0xFF4CAF50),
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              Text(
+                                '₹${origPrice.toStringAsFixed(0)} ',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  decoration: TextDecoration.lineThrough,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                              SizedBox(width: Responsive.w(4)),
+                            ],
+                            CustomText.header(
+                              '₹${price.toStringAsFixed(0)}',
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                             ),
-                          ),
-                          SizedBox(width: Responsive.w(4)),
-                          CustomText.header(
-                            '₹99',
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ],
-                      ),
+                          ],
+                        );
+                      }),
                       SizedBox(height: Responsive.h(12)),
 
                       // Quantity Pill & Cart Badge Row
@@ -228,7 +271,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 CustomText.subtitle(
-                                  'Selected Quantity: 1 Units',
+                                  'Selected Quantity: ${widget.product['unit'] ?? '1 Units'}',
                                   fontSize: 11,
                                   color: AppColors.grayFont,
                                   maxLines: 1,
@@ -245,7 +288,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     vertical: Responsive.h(8),
                                   ),
                                   child: CustomText.title(
-                                    '1 Units',
+                                    widget.product['unit'] ?? '1 Units',
                                     color: Colors.white,
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
@@ -253,8 +296,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 ),
                                 SizedBox(height: Responsive.h(4)),
                                 CustomText.title(
-                                  '3 left',
-                                  color: AppColors.primary,
+                                  stock <= 0 ? 'Out of stock' : '$stock left',
+                                  color: stock <= 3 ? AppColors.error : AppColors.primary,
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -387,6 +430,79 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           ),
         ),
       ),
+    );
+  }
+  Widget _buildProductHeroImage(String? imagePath, String storeType, {double? height}) {
+    final effectiveHeight = height ?? Responsive.h(220);
+
+    Widget buildNoImagePlaceholder() {
+      return Container(
+        height: effectiveHeight,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(Responsive.w(16)),
+          border: Border.all(color: Colors.grey.shade200, width: 1),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.image_not_supported_outlined,
+                size: effectiveHeight > 100 ? Responsive.w(48) : Responsive.w(24),
+                color: Colors.grey.shade400,
+              ),
+              if (effectiveHeight > 100) ...[
+                SizedBox(height: Responsive.h(8)),
+                Text(
+                  'No Image Available',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (imagePath == null || imagePath.trim().isEmpty) {
+      return buildNoImagePlaceholder();
+    }
+
+    final normalized = ApiClient.normalizeImageUrl(imagePath);
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      return Image.network(
+        normalized,
+        height: effectiveHeight,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => buildNoImagePlaceholder(),
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return SizedBox(
+            height: effectiveHeight,
+            child: const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    return Image.asset(
+      imagePath,
+      height: effectiveHeight,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) => buildNoImagePlaceholder(),
     );
   }
 
@@ -526,13 +642,33 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               ),
               child: Column(
                 children: [
-                  _buildSpecRow('Pack of', '1', 'Brand', 'Unbranded'),
+                  _buildSpecRow(
+                    'Pack of',
+                    widget.product['packOf']?.toString() ?? '1',
+                    'Brand',
+                    widget.product['brand']?.toString() ?? 'Unbranded',
+                  ),
                   const Divider(),
-                  _buildSpecRow('Type', widget.storeType == 'medical' ? 'Medicine' : 'Watermelon', 'Quantity', '1 Units'),
+                  _buildSpecRow(
+                    'Type',
+                    widget.product['type']?.toString() ?? (widget.storeType == 'medical' ? 'Medicine' : 'Grocery'),
+                    'Quantity',
+                    widget.product['unit']?.toString() ?? '1 Units',
+                  ),
                   const Divider(),
-                  _buildSpecRow('Shelf Life', '7 Days', 'Form Factor', 'Whole'),
+                  _buildSpecRow(
+                    'Shelf Life',
+                    widget.product['shelfLife']?.toString() ?? '7 Days',
+                    'Form Factor',
+                    widget.product['formFactor']?.toString() ?? 'Standard',
+                  ),
                   const Divider(),
-                  _buildSpecRow('Organic', 'No', 'Origin', 'India'),
+                  _buildSpecRow(
+                    'Subsidized',
+                    widget.product['isSubsidized'] == true ? 'Yes (Govt Scheme)' : 'No',
+                    'Origin',
+                    widget.product['origin']?.toString() ?? 'India',
+                  ),
                 ],
               ),
             ),
@@ -673,13 +809,31 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       ? Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            if ((widget.product['description'] ?? '').toString().trim().isNotEmpty) ...[
+                              CustomText.subtitle('Description', fontSize: 10, color: Colors.grey),
+                              SizedBox(height: Responsive.h(2)),
+                              CustomText.title(
+                                widget.product['description'].toString(),
+                                fontSize: 12,
+                                fontWeight: FontWeight.normal,
+                              ),
+                              const Divider(),
+                            ],
                             CustomText.subtitle('Generic name', fontSize: 10, color: Colors.grey),
                             SizedBox(height: Responsive.h(2)),
-                            CustomText.title(widget.storeType == 'medical' ? 'Medicine' : 'Fruit', fontSize: 12, fontWeight: FontWeight.bold),
+                            CustomText.title(
+                              widget.product['type']?.toString() ?? (widget.storeType == 'medical' ? 'Medicine' : 'Grocery'),
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
                             const Divider(),
                             CustomText.subtitle('Country of origin', fontSize: 10, color: Colors.grey),
                             SizedBox(height: Responsive.h(2)),
-                            CustomText.title('India', fontSize: 12, fontWeight: FontWeight.bold),
+                            CustomText.title(
+                              widget.product['origin']?.toString() ?? 'India',
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
                             if (_isSpecsMoreExpanded) ...[
                               const Divider(),
                               CustomText.subtitle('Net Quantity', fontSize: 10, color: Colors.grey),
@@ -852,7 +1006,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           ),
           SizedBox(height: Responsive.h(4)),
           Center(
-            child: Image.asset(prod['image'], height: Responsive.h(60), fit: BoxFit.contain),
+            child: _buildProductHeroImage(
+              prod['image'],
+              widget.storeType,
+              height: Responsive.h(60),
+            ),
           ),
           const Spacer(),
           CustomText.title(prod['title'], fontSize: 11, maxLines: 1),

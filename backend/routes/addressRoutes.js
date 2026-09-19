@@ -60,6 +60,8 @@ router.post('/', async (req, res) => {
       landmark = '',
       imagePath = null,
       isDefault = false,
+      latitude = null,
+      longitude = null,
     } = req.body;
 
     if (!userId || !description || !phone) {
@@ -92,6 +94,8 @@ router.post('/', async (req, res) => {
       imagePath,
       isDefault: shouldBeDefault,
       isDeleted: false,
+      latitude: latitude !== null && latitude !== undefined ? Number(latitude) : null,
+      longitude: longitude !== null && longitude !== undefined ? Number(longitude) : null,
     });
 
     const savedAddress = await newAddress.save();
@@ -133,7 +137,7 @@ router.put('/:id', async (req, res) => {
     }
 
     // Update allowed fields
-    const allowedFields = ['type', 'description', 'phone', 'name', 'floor', 'landmark', 'imagePath', 'isDefault'];
+    const allowedFields = ['type', 'description', 'phone', 'name', 'floor', 'landmark', 'imagePath', 'isDefault', 'latitude', 'longitude'];
     allowedFields.forEach((field) => {
       if (updateData[field] !== undefined) {
         existing[field] = updateData[field];

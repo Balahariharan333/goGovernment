@@ -54,7 +54,7 @@ class CartManager {
   }
 
   bool addToCart(Map<String, dynamic> product, {int qty = 1, String? productId, BuildContext? context}) {
-    final id = productId ?? product['id']?.toString() ?? '';
+    final id = productId ?? product['id']?.toString() ?? product['productId']?.toString() ?? '';
     if (id.isEmpty) return false;
     final stock = getStock(product);
 
@@ -87,14 +87,23 @@ class CartManager {
     }
 
     if (product.isNotEmpty) {
-      productDetails[id] = {...productDetails[id] ?? {}, ...product, 'id': id};
+      final normalized = {
+        ...product,
+        'id': id,
+        'productId': id,
+        if (product['name'] != null && product['title'] == null) 'title': product['name'],
+        if (product['imageUrl'] != null && product['image'] == null) 'image': product['imageUrl'],
+      };
+      productDetails[id] = {...productDetails[id] ?? {}, ...normalized};
+      CartBloc.instance.add(AddToCartEvent(id, normalized));
+    } else {
+      CartBloc.instance.add(AddToCartEvent(id, {'id': id, 'productId': id}));
     }
-    CartBloc.instance.add(AddToCartEvent(id, product.isNotEmpty ? product : {'id': id}));
     return true;
   }
 
   bool updateQuantity(Map<String, dynamic> product, int qty, {String? productId, BuildContext? context}) {
-    final id = productId ?? product['id']?.toString() ?? '';
+    final id = productId ?? product['id']?.toString() ?? product['productId']?.toString() ?? '';
     if (id.isEmpty) return false;
     final stock = getStock(product);
 

@@ -15,6 +15,9 @@ import '../../../bloc/transaction/transaction_bloc.dart';
 import '../../../bloc/transaction/transaction_event.dart';
 import '../../../service/cart_manager.dart';
 import '../../../widget/common_wishlist_button.dart';
+import '../../../network/api_client.dart';
+import '../../../network/order_api_service.dart';
+import '../../../hive/hive_service.dart';
 
 class CartScreen extends StatefulWidget {
   final String storeType; // 'medical' or 'vegstore'
@@ -612,22 +615,40 @@ class _CartScreenState extends State<CartScreen> {
                                   child: CustomText.title('Fail', color: AppColors.error, fontSize: 14, fontWeight: FontWeight.bold),
                                 ),
                                 TextButton(
-                                  onPressed: () {
+                                  onPressed: () async {
                                     Navigator.pop(dialogContext); // Close dialog
 
-                                    // Build order & transaction data
+                                    // Build order items for UI and backend
+                                    String resolvedStoreId = 'STORE_479113';
+                                    final backendItems = <Map<String, dynamic>>[];
                                     final orderItems = cartItemsMap.entries.map((e) {
                                       final prod = CartManager.instance.productDetails[e.key] ?? {};
+                                      if (prod['storeId'] != null && prod['storeId'].toString().isNotEmpty) {
+                                        resolvedStoreId = prod['storeId'].toString();
+                                      }
+                                      final p = parsePrice(prod['price'], 83);
+                                      final orig = parsePrice(prod['originalPrice'], 106);
+
+                                      backendItems.add({
+                                        'productId': e.key,
+                                        'title': prod['title'] ?? 'Product',
+                                        'price': p.toDouble(),
+                                        'originalPrice': orig.toDouble(),
+                                        'quantity': e.value,
+                                        'image': prod['image'] ?? '',
+                                        'unit': prod['unit'] ?? '1 Units',
+                                      });
+
                                       return {
                                         'id': e.key,
                                         'title': prod['title'] ?? 'Product',
-                                        'price': '₹${prod['price'] ?? 83}',
+                                        'price': '₹$p',
                                         'qty': e.value,
                                         'image': prod['image'] ?? 'assets/images/product1.png',
                                       };
                                     }).toList();
 
-                                    final String orderId = 'ORD-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
+                                    String orderId = 'ORD_${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
                                     final String storeTitle = widget.storeType == 'medical'
                                         ? 'Apothecary Pharmacy'
                                         : 'Bangalore Horticulture';
@@ -639,6 +660,34 @@ class _CartScreenState extends State<CartScreen> {
                                     final selectedAddr = context.read<AddressBloc>().state.selectedAddress;
                                     final String deliveryAddr = selectedAddr?.description ??
                                         (_deliveryAddress.isNotEmpty ? _deliveryAddress : 'Location not specified');
+
+                                    // Create order in backend MongoDB
+                                    final serverOrder = await OrderApiService.createOrder(
+                                      storeId: resolvedStoreId,
+                                      items: backendItems,
+                                      itemTotal: itemDiscountedTotal.toDouble(),
+                                      deliveryCharge: deliveryCharge.toDouble(),
+                                      handlingCharge: handlingCharge.toDouble(),
+                                      couponDiscount: effectiveCouponDiscount.toDouble(),
+                                      coinsDiscount: coinsDiscount.toDouble(),
+                                      grandTotal: grandTotal.toDouble(),
+                                      paymentMethod: 'Wallet Account',
+                                      deliveryAddress: {
+                                        'address': deliveryAddr,
+                                        'latitude': selectedAddr?.latitude ?? 12.9784,
+                                        'longitude': selectedAddr?.longitude ?? 77.6408,
+                                        'receiverName': _receiverName ?? HiveService.userName,
+                                        'receiverPhone': _receiverPhone ?? HiveService.userPhone,
+                                      },
+                                      storeDetails: {
+                                        'storeId': resolvedStoreId,
+                                        'name': storeTitle,
+                                      },
+                                    );
+
+                                    if (serverOrder != null && serverOrder['orderId'] != null) {
+                                      orderId = serverOrder['orderId'].toString();
+                                    }
 
                                     final newTx = {
                                       'id': orderId,
@@ -674,6 +723,7 @@ class _CartScreenState extends State<CartScreen> {
                                     CartManager.instance.clear();
 
                                     // Proceed to success screen
+                                    if (!mounted) return;
                                     Navigator.pushReplacementNamed(
                                       context,
                                       RouteConstants.orderSuccess,
@@ -753,6 +803,49 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
+  Widget _buildCartItemImage(String? imagePath, {double? width, double? height}) {
+    Widget buildPlaceholder() {
+      return Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(Responsive.w(8)),
+        ),
+        child: Center(
+          child: Icon(
+            Icons.image_not_supported_outlined,
+            size: (width != null && width > 40) ? Responsive.w(22) : Responsive.w(16),
+            color: Colors.grey.shade400,
+          ),
+        ),
+      );
+    }
+
+    if (imagePath == null || imagePath.trim().isEmpty) {
+      return buildPlaceholder();
+    }
+
+    final normalized = ApiClient.normalizeImageUrl(imagePath);
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      return Image.network(
+        normalized,
+        width: width,
+        height: height,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => buildPlaceholder(),
+      );
+    }
+
+    return Image.asset(
+      imagePath,
+      width: width,
+      height: height,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) => buildPlaceholder(),
+    );
+  }
+
   Widget _buildCartItem({
     required String title,
     required String subtitle,
@@ -771,11 +864,10 @@ class _CartScreenState extends State<CartScreen> {
         // Product Thumbnail
         ClipRRect(
           borderRadius: BorderRadius.circular(Responsive.w(8)),
-          child: Image.asset(
+          child: _buildCartItemImage(
             image,
             width: Responsive.w(52),
             height: Responsive.w(52),
-            fit: BoxFit.contain,
           ),
         ),
         SizedBox(width: Responsive.w(12)),
@@ -1002,7 +1094,7 @@ class _CartScreenState extends State<CartScreen> {
           ),
           SizedBox(height: Responsive.h(4)),
           Center(
-            child: Image.asset(prod['image'], height: Responsive.h(56), fit: BoxFit.contain),
+            child: _buildCartItemImage(prod['image'], height: Responsive.h(56)),
           ),
           const Spacer(),
           CustomText.title(prod['title'], fontSize: 10, maxLines: 1),

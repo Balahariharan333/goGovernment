@@ -92,13 +92,26 @@ class HiveService {
   }
 
   static Future<void> clearAuth() async {
-    await _authBox.delete(HiveKeys.isLoggedIn);
-    await _authBox.delete(HiveKeys.userPhone);
-    await _authBox.delete(HiveKeys.userName);
-    await _authBox.delete(HiveKeys.userEmail);
-    await _authBox.delete(HiveKeys.userProfileImage);
-    await _authBox.delete('citizenId');
-    await clearAddresses();
+    await clearAllHiveData();
+  }
+
+  /// Clears ALL Hive boxes across the app on logout
+  static Future<void> clearAllHiveData({bool preserveLanguage = true}) async {
+    final lang = preserveLanguage ? getLanguage() : null;
+    final langCode = preserveLanguage ? getLanguageCode() : null;
+
+    await _authBox.clear();
+    await _cartBox.clear();
+    await _addressBox.clear();
+    await _complaintBox.clear();
+    await _transactionBox.clear();
+    await _settingsBox.clear();
+
+    // Preserve the user's selected language preference across logouts
+    if (preserveLanguage && lang != null && langCode != null) {
+      await setLanguage(lang);
+      await setLanguageCode(langCode);
+    }
   }
 
   static Future<void> clearAddresses() async {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../utils/app_colors.dart';
@@ -5,9 +6,13 @@ import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
 import '../../constants/route_constants.dart';
+import '../../network/order_api_service.dart';
+import '../../service/socket_service.dart';
 import '../../bloc/transaction/transaction_bloc.dart';
 import '../../bloc/transaction/transaction_event.dart';
 import '../../bloc/transaction/transaction_state.dart';
+import '../../service/cart_manager.dart';
+import '../../utils/call_launcher.dart';
 
 class YourOrdersScreen extends StatefulWidget {
   const YourOrdersScreen({super.key});
@@ -18,6 +23,82 @@ class YourOrdersScreen extends StatefulWidget {
 
 class _YourOrdersScreenState extends State<YourOrdersScreen> {
   String _selectedFilter = 'All'; // 'All', 'Active', 'Completed'
+  StreamSubscription? _socketSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLiveOrders();
+
+    // Listen to real-time status updates without battery drain
+    _socketSub = SocketService().onOrderStatusUpdate.listen((_) {
+      if (mounted) {
+        _fetchLiveOrders();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _socketSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchLiveOrders() async {
+    try {
+      final serverOrders = await OrderApiService.fetchUserOrders();
+      if (!mounted || serverOrders.isEmpty) return;
+
+      final currentTxs = context.read<TransactionBloc>().state.transactions;
+
+      for (final order in serverOrders) {
+        final orderId = order['orderId']?.toString();
+        if (orderId == null || orderId.isEmpty) continue;
+
+        final rawStatus = order['status']?.toString() ?? 'placed';
+        String displayStatus = 'Processing';
+        if (rawStatus == 'placed') displayStatus = 'Placed';
+        if (rawStatus == 'preparing') displayStatus = 'Preparing';
+        if (rawStatus == 'ready_for_pickup') displayStatus = 'Ready for Pickup';
+        if (rawStatus == 'out_for_delivery') displayStatus = 'Out for Delivery';
+        if (rawStatus == 'delivered') displayStatus = 'Delivered';
+        if (rawStatus == 'cancelled') displayStatus = 'Cancelled';
+
+        final existingIdx = currentTxs.indexWhere((tx) => tx['id']?.toString() == orderId);
+        if (existingIdx != -1) {
+          if (currentTxs[existingIdx]['status'] != displayStatus) {
+            context.read<TransactionBloc>().add(
+              UpdateOrderStatusEvent(orderId: orderId, status: displayStatus),
+            );
+          }
+        } else {
+          final storeDetails = order['storeDetails'] as Map? ?? {};
+          final storeName = storeDetails['name']?.toString() ?? 'Government Store';
+          final grandTotal = order['grandTotal']?.toString() ?? '0';
+          final items = (order['items'] as List?) ?? [];
+
+          final tx = {
+            'id': orderId,
+            'title': storeName,
+            'subtitle': 'Order placed',
+            'amount': '-₹$grandTotal',
+            'isPositive': false,
+            'status': displayStatus,
+            'date': 'Recent',
+            'items': items,
+            'address': order['deliveryAddress']?['address']?.toString() ?? '',
+            'listingPrice': '₹$grandTotal',
+            'sellingPrice': '₹$grandTotal',
+            'grandTotal': '₹$grandTotal',
+            'paid': '₹$grandTotal',
+            'storeDetails': storeDetails,
+            'storePhone': (storeDetails['phone'] ?? '').toString(),
+          };
+          context.read<TransactionBloc>().add(AddTransactionEvent(tx));
+        }
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -147,25 +228,38 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
                   // Order List or Empty State
                   Expanded(
                     child: filteredOrders.isEmpty
-                        ? _buildEmptyState(context)
-                        : ListView.builder(
-                            physics: const BouncingScrollPhysics(),
-                            padding: EdgeInsets.fromLTRB(
-                              Responsive.w(20),
-                              Responsive.h(8),
-                              Responsive.w(20),
-                              Responsive.h(40),
+                        ? RefreshIndicator(
+                            onRefresh: _fetchLiveOrders,
+                            color: AppColors.primary,
+                            child: SingleChildScrollView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              child: _buildEmptyState(context),
                             ),
-                            itemCount: filteredOrders.length,
-                            itemBuilder: (context, index) {
-                              final order = filteredOrders[index];
-                              return Padding(
-                                padding: EdgeInsets.only(
-                                  bottom: Responsive.h(14),
-                                ),
-                                child: _buildOrderCard(context, order),
-                              );
-                            },
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _fetchLiveOrders,
+                            color: AppColors.primary,
+                            child: ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(
+                                parent: BouncingScrollPhysics(),
+                              ),
+                              padding: EdgeInsets.fromLTRB(
+                                Responsive.w(20),
+                                Responsive.h(8),
+                                Responsive.w(20),
+                                Responsive.h(40),
+                              ),
+                              itemCount: filteredOrders.length,
+                              itemBuilder: (context, index) {
+                                final order = filteredOrders[index];
+                                return Padding(
+                                  padding: EdgeInsets.only(
+                                    bottom: Responsive.h(14),
+                                  ),
+                                  child: _buildOrderCard(context, order),
+                                );
+                              },
+                            ),
                           ),
                   ),
                 ],
@@ -250,75 +344,6 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
     );
   }
 
-  void _confirmCompleteOrder(BuildContext context, String orderId) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(Responsive.w(20)),
-        ),
-        title: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Color(0xFF2E7D32), size: 24),
-            SizedBox(width: Responsive.w(8)),
-            CustomText.title(
-              'Complete Order?',
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ],
-        ),
-        content: CustomText.body(
-          'Mark order #$orderId as Delivered/Completed for manual testing? It will move to the Completed tab.',
-          fontSize: 13,
-          color: AppColors.grayFont,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: CustomText.title(
-              'Cancel',
-              color: AppColors.grayFont,
-              fontSize: 13,
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2E7D32),
-              elevation: 0,
-              padding: EdgeInsets.symmetric(
-                horizontal: Responsive.w(16),
-                vertical: Responsive.h(8),
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(Responsive.w(14)),
-              ),
-            ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.read<TransactionBloc>().add(
-                UpdateOrderStatusEvent(orderId: orderId, status: 'Delivered'),
-              );
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Order #$orderId marked as Delivered!'),
-                  backgroundColor: const Color(0xFF2E7D32),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            },
-            child: CustomText.title(
-              'Mark Delivered',
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildOrderCard(BuildContext context, Map<String, dynamic> order) {
     final String id = order['id']?.toString() ?? 'ORD-0000';
@@ -327,6 +352,10 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
     final String amount = order['amount']?.toString() ?? '₹0';
     final String status = order['status']?.toString() ?? 'Processing';
     final List items = (order['items'] as List?) ?? [];
+    final String storePhone = (order['storePhone'] ??
+            (order['storeDetails'] is Map ? order['storeDetails']['phone'] : null) ??
+            '')
+        .toString();
 
     final String s = status.toLowerCase();
     final bool isDelivered = s.contains('delivered') || s.contains('completed');
@@ -384,39 +413,46 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: Responsive.w(36),
-                    height: Responsive.w(36),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF2EC),
-                      borderRadius: BorderRadius.circular(Responsive.w(10)),
-                    ),
-                    child: Icon(
-                      Icons.storefront,
-                      color: AppColors.primary,
-                      size: Responsive.w(18),
-                    ),
-                  ),
-                  SizedBox(width: Responsive.w(10)),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      CustomText.title(
-                        storeName,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      width: Responsive.w(36),
+                      height: Responsive.w(36),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF2EC),
+                        borderRadius: BorderRadius.circular(Responsive.w(10)),
                       ),
-                      CustomText.subtitle(
-                        date,
-                        fontSize: 11,
-                        color: AppColors.grayFont,
+                      child: Icon(
+                        Icons.storefront,
+                        color: AppColors.primary,
+                        size: Responsive.w(18),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                    SizedBox(width: Responsive.w(10)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CustomText.title(
+                            storeName,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          CustomText.subtitle(
+                            date,
+                            fontSize: 11,
+                            color: AppColors.grayFont,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              SizedBox(width: Responsive.w(8)),
               Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: Responsive.w(10),
@@ -478,36 +514,6 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
                 children: [
                   // Track Order button (strictly for active orders)
                   if (isActive) ...[
-                    // Complete Order button (Manual test option)
-                    GestureDetector(
-                      onTap: () => _confirmCompleteOrder(context, id),
-                      child: Container(
-                        margin: EdgeInsets.only(right: Responsive.w(8)),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: Responsive.w(10),
-                          vertical: Responsive.h(8),
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE8F5E9),
-                          borderRadius: BorderRadius.circular(Responsive.w(16)),
-                          border: Border.all(
-                            color: const Color(0xFF4CAF50),
-                            width: 1.0,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            
-                            CustomText.title(
-                              'Complete it',
-                              color: const Color(0xFF2E7D32),
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
 
                     // Track Order button (strictly for active orders)
                     GestureDetector(
@@ -551,6 +557,84 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
                     ),
                   ],
 
+                  // Call Store button (if store phone is available)
+                  if (storePhone.isNotEmpty) ...[
+                    GestureDetector(
+                      onTap: () => CallLauncher.launchCall(
+                        context,
+                        phone: storePhone,
+                        name: storeName,
+                      ),
+                      child: Container(
+                        margin: EdgeInsets.only(right: Responsive.w(8)),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: Responsive.w(10),
+                          vertical: Responsive.h(8),
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(Responsive.w(16)),
+                          border: Border.all(
+                            color: Colors.green.shade400,
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.phone_outlined,
+                              color: Color(0xFF2E7D32),
+                              size: 13,
+                            ),
+                            SizedBox(width: Responsive.w(4)),
+                            CustomText.title(
+                              'Call',
+                              color: const Color(0xFF2E7D32),
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  // Reorder button (instant 1-tap reorder directly to Cart)
+                  GestureDetector(
+                    onTap: () => _reorderOrderAndGoToCart(context, order),
+                    child: Container(
+                      margin: EdgeInsets.only(right: Responsive.w(8)),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: Responsive.w(12),
+                        vertical: Responsive.h(8),
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF2EC),
+                        borderRadius: BorderRadius.circular(Responsive.w(16)),
+                        border: Border.all(
+                          color: AppColors.primary,
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.replay,
+                            color: AppColors.primary,
+                            size: 13,
+                          ),
+                          SizedBox(width: Responsive.w(4)),
+                          CustomText.title(
+                            'Reorder',
+                            color: AppColors.primary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
                   // View Details button
                   GestureDetector(
                     onTap: () {
@@ -568,13 +652,13 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
                         color: AppColors.white,
                         borderRadius: BorderRadius.circular(Responsive.w(16)),
                         border: Border.all(
-                          color: AppColors.primary,
+                          color: AppColors.outliner,
                           width: 1.2,
                         ),
                       ),
                       child: CustomText.title(
                         'Details',
-                        color: AppColors.primary,
+                        color: AppColors.black,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -587,5 +671,56 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
         ],
       ),
     );
+  }
+
+  void _reorderOrderAndGoToCart(BuildContext context, Map<String, dynamic> order) {
+    final List items = (order['items'] as List?) ?? [];
+    if (items.isNotEmpty) {
+      for (final raw in items) {
+        if (raw is Map) {
+          final it = Map<String, dynamic>.from(raw);
+          final pId = it['productId']?.toString() ??
+              it['id']?.toString() ??
+              'prod_${DateTime.now().millisecondsSinceEpoch}';
+          final prodData = {
+            ...it,
+            'id': pId,
+            'productId': pId,
+            'title': it['title'] ?? it['name'] ?? 'Product',
+            'price': it['price'] ?? 99,
+            'originalPrice': it['originalPrice'] ?? it['price'] ?? 99,
+            'image': it['image'] ?? it['imageUrl'] ?? 'assets/images/product1.png',
+            'stock': 10,
+          };
+          final qty = ((it['qty'] ?? it['quantity'] ?? 1) as num).toInt();
+          CartManager.instance.addToCart(prodData, qty: qty);
+        }
+      }
+    } else {
+      CartManager.instance.addToCart({
+        'id': 'reorder_${DateTime.now().millisecondsSinceEpoch}',
+        'title': order['title'] ?? 'Store Item',
+        'price': 99,
+        'originalPrice': 150,
+        'image': 'assets/images/product1.png',
+        'stock': 10,
+      }, qty: 1);
+    }
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Reordered ${items.isNotEmpty ? items.length : 1} item(s)! Navigating to cart...'),
+        backgroundColor: const Color(0xFF2E7D32),
+        duration: const Duration(seconds: 2),
+        action: SnackBarAction(
+          label: 'VIEW CART',
+          textColor: Colors.white,
+          onPressed: () => Navigator.pushNamed(context, RouteConstants.cart),
+        ),
+      ),
+    );
+
+    Navigator.of(context).pushNamed(RouteConstants.cart);
   }
 }

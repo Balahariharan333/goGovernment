@@ -253,6 +253,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (!_canSubmit) return;
 
     if (widget.isRegistration) {
+      await HiveService.setUserName(name);
+      await HiveService.setUserEmail(email);
       await HiveService.setLoggedIn(true);
       if (!mounted) return;
       context.read<ProfileBloc>().add(UpdateProfileEvent(name, email, _imagePath));

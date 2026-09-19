@@ -14,6 +14,7 @@ const FeedbackSchema = new mongoose.Schema(
     type: { type: String, enum: ['survey', 'app_rating', 'general'], default: 'survey' },
     rating: { type: Number, default: 5, min: 1, max: 5 },
     comments: { type: String, default: '' },
+
     surveyAnswers: [SurveyAnswerSchema],
   },
   {

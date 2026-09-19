@@ -49,9 +49,9 @@ void main() async {
   SocketService().init();
 
 
-  // If citizen is logged in and device GPS permission is already active (granted in-app or in OS settings),
+  // If citizen is logged in, registered, and device GPS permission is already active (granted in-app or in OS settings),
   // ensure hasSeenPermissionScreen is marked true so the permission screen is never shown on restart!
-  if (HiveService.isLoggedIn && !HiveService.hasSeenPermissionScreen) {
+  if (HiveService.isLoggedIn && HiveService.userName.trim().isNotEmpty && !HiveService.hasSeenPermissionScreen) {
     try {
       final locStatus = await Permission.location.status;
       if (locStatus.isGranted) {

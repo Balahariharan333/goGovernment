@@ -121,6 +121,32 @@ class CustomText extends StatelessWidget {
     );
   }
 
+  factory CustomText.caption(
+    String text, {
+    Key? key,
+    Color color = AppColors.grayFont,
+    double fontSize = 12,
+    FontWeight fontWeight = FontWeight.normal,
+    double? height,
+    TextAlign? textAlign,
+    int? maxLines,
+    TextOverflow? overflow,
+  }) {
+    return CustomText._(
+      key: key,
+      text: text,
+      textAlign: textAlign,
+      maxLines: maxLines,
+      overflow: overflow,
+      style: TextStyle(
+        color: color,
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        height: height,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Text(

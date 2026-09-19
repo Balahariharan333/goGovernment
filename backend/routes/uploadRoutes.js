@@ -7,17 +7,37 @@ const router = express.Router();
 
 const uploadDir = path.join(__dirname, '..', 'uploads');
 const profileDir = path.join(uploadDir, 'profile_images');
+const storeDir = path.join(uploadDir, 'store_images');
+const productDir = path.join(uploadDir, 'product_images');
 
-if (!fs.existsSync(profileDir)) {
-  fs.mkdirSync(profileDir, { recursive: true });
-}
+[uploadDir, profileDir, storeDir, productDir].forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
 
-// 1. Complaint Storage (directly in uploads/)
-const complaintStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
+// 1. General Upload Storage (Handles complaint, store, and product prefixes)
+const generalStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const type = req.query.type || req.body.type || '';
+    if (type === 'store' || type === 'storeimg') {
+      return cb(null, uploadDir);
+    }
+    if (type === 'product' || type === 'productimg') {
+      return cb(null, uploadDir);
+    }
+    cb(null, uploadDir);
+  },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname) || '.jpg';
-    cb(null, 'complaint-' + Date.now() + ext);
+    const type = (req.query.type || req.body.type || '').toLowerCase();
+    let prefix = 'complaint-';
+    if (type === 'store' || type === 'storeimg') {
+      prefix = 'storeimg-';
+    } else if (type === 'product' || type === 'productimg') {
+      prefix = 'productimg-';
+    }
+    cb(null, prefix + Date.now() + ext);
   },
 });
 
@@ -30,14 +50,53 @@ const profileStorage = multer.diskStorage({
   },
 });
 
-const uploadComplaint = multer({ storage: complaintStorage });
-const uploadProfile = multer({ storage: profileStorage });
+// 3. Store Image Dedicated Storage
+const storeStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, 'storeimg-' + Date.now() + ext);
+  },
+});
 
-// POST /api/upload - Upload Complaint Photo
-router.post('/', uploadComplaint.single('image'), (req, res) => {
+// 4. Product Image Dedicated Storage
+const productStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, 'productimg-' + Date.now() + ext);
+  },
+});
+
+const uploadGeneral = multer({ storage: generalStorage });
+const uploadProfile = multer({ storage: profileStorage });
+const uploadStore = multer({ storage: storeStorage });
+const uploadProduct = multer({ storage: productStorage });
+
+// POST /api/upload - Upload with optional query ?type=store or ?type=product
+router.post('/', uploadGeneral.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
   const host = req.get('host');
   const imageUrl = `${req.protocol}://${host}/uploads/${req.file.filename}`;
+  console.log(`📸 [Image Uploaded] Filename: ${req.file.filename} -> ${imageUrl}`);
+  res.status(200).json({ success: true, imageUrl, filename: req.file.filename });
+});
+
+// POST /api/upload/store - Dedicated Store Image Upload
+router.post('/store', uploadStore.single('image'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No store image uploaded' });
+  const host = req.get('host');
+  const imageUrl = `${req.protocol}://${host}/uploads/${req.file.filename}`;
+  console.log(`🏪 [Store Image Uploaded] Filename: ${req.file.filename} -> ${imageUrl}`);
+  res.status(200).json({ success: true, imageUrl, filename: req.file.filename });
+});
+
+// POST /api/upload/product - Dedicated Product Image Upload
+router.post('/product', uploadProduct.single('image'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No product image uploaded' });
+  const host = req.get('host');
+  const imageUrl = `${req.protocol}://${host}/uploads/${req.file.filename}`;
+  console.log(`📦 [Product Image Uploaded] Filename: ${req.file.filename} -> ${imageUrl}`);
   res.status(200).json({ success: true, imageUrl, filename: req.file.filename });
 });
 

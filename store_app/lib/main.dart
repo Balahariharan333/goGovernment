@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'bloc/auth/auth_bloc.dart';
+import 'bloc/product/product_bloc.dart';
 import 'bloc/store/store_bloc.dart';
 import 'constants/route_constants.dart';
 import 'hive/hive_service.dart';
@@ -44,6 +45,7 @@ class StoreApp extends StatelessWidget {
       providers: [
         BlocProvider<AuthBloc>(create: (_) => AuthBloc()),
         BlocProvider<StoreBloc>(create: (_) => StoreBloc()),
+        BlocProvider<ProductBloc>(create: (_) => ProductBloc()),
       ],
       child: MaterialApp(
         title: 'GoGovernment Store Partner',

@@ -6,9 +6,16 @@ import 'auth_state.dart';
 import '../../network/api_service.dart';
 import '../profile/profile_bloc.dart';
 import '../profile/profile_event.dart';
+import '../cart/cart_bloc.dart';
+import '../cart/cart_event.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  AuthBloc() : super(HiveService.isLoggedIn ? AuthSuccess() : AuthInitial()) {
+  AuthBloc()
+      : super(
+          (HiveService.isLoggedIn && HiveService.userName.trim().isNotEmpty)
+              ? AuthSuccess()
+              : AuthInitial(),
+        ) {
     on<SendOtpEvent>((event, emit) async {
       emit(AuthLoading());
       await HiveService.setUserPhone(event.phone);
@@ -51,8 +58,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         }
 
         final bool isNewUser = result['isNewUser'] == true;
-        await HiveService.setLoggedIn(true);
-        ProfileBloc.instance.add(ReloadProfileEvent());
+        if (!isNewUser) {
+          // Returning user: already completed registration, can mark logged in immediately
+          await HiveService.setLoggedIn(true);
+          ProfileBloc.instance.add(ReloadProfileEvent());
+        } else {
+          // New user: Must complete registration screen before being marked logged in
+          await HiveService.setLoggedIn(false);
+          await HiveService.setUserName('');
+        }
+
         emit(AuthSuccess(isNewUser: isNewUser));
       } else {
         emit(AuthFailure(result?['message'] ?? 'Invalid OTP code. Please try again.'));
@@ -61,7 +76,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     on<LogoutEvent>((event, emit) async {
       emit(AuthLoading());
-      await HiveService.clearAuth();
+      await HiveService.clearAllHiveData();
+      CartBloc.instance.add(ResetCartAndWishlistEvent());
       ProfileBloc.instance.add(ReloadProfileEvent());
       await Future.delayed(const Duration(milliseconds: 300));
       emit(AuthInitial());

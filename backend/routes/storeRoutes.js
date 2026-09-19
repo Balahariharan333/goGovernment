@@ -149,11 +149,17 @@ router.get('/pending', async (req, res) => {
   }
 });
 
-// 4. GET ALL APPROVED STORES (Used by User App for "Near Stores" map & list)
+// 4. GET ALL APPROVED & ONLINE STORES (Used by Citizen App for "Near Stores" map & list)
 router.get('/approved', async (req, res) => {
   try {
-    const { category } = req.query;
+    const { category, includeOffline } = req.query;
     const filter = { status: 'approved' };
+    
+    // By default, only show stores that are ONLINE (isOnline !== false)
+    if (includeOffline !== 'true') {
+      filter.isOnline = { $ne: false };
+    }
+    
     if (category && category !== 'all') {
       filter.category = category;
     }
@@ -170,11 +176,60 @@ router.get('/approved', async (req, res) => {
   }
 });
 
-// 5. ADMIN APPROVE OR REJECT STORE
+// 4b. GET SINGLE STORE DETAILS BY ID
+router.get('/:storeId', async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const store = await Store.findOne({
+      $or: [{ storeId: storeId }, { _id: storeId.match(/^[0-9a-fA-F]{24}$/) ? storeId : null }],
+    });
+    if (!store) {
+      return res.status(404).json({ success: false, error: 'Store not found' });
+    }
+    res.status(200).json({ success: true, store });
+  } catch (error) {
+    console.error('Error fetching store by ID:', error);
+    res.status(500).json({ error: 'Failed to fetch store details' });
+  }
+});
+
+// 5. TOGGLE STORE ONLINE / OFFLINE
+router.patch('/:storeId/online', async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const { isOnline } = req.body;
+    const updatedStore = await Store.findOneAndUpdate(
+      { storeId },
+      { $set: { isOnline: Boolean(isOnline) } },
+      { new: true }
+    );
+    if (!updatedStore) {
+      return res.status(404).json({ error: 'Store not found' });
+    }
+    console.log(`🏪 [Store Online Toggle] ${updatedStore.name} is now ${updatedStore.isOnline ? 'ONLINE' : 'OFFLINE'}`);
+    res.status(200).json({ success: true, store: updatedStore });
+  } catch (error) {
+    console.error('Error toggling online status:', error);
+    res.status(500).json({ error: 'Failed to update store online status' });
+  }
+});
+
+// 5b. ADMIN APPROVE OR REJECT STORE
 router.patch('/:storeId/status', async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { status, rejectionReason, verifiedBy } = req.body;
+    const { status, rejectionReason, verifiedBy, isOnline } = req.body;
+
+    // Handle online toggle directly if passed without status change
+    if (isOnline !== undefined && !status) {
+      const updatedStore = await Store.findOneAndUpdate(
+        { storeId },
+        { $set: { isOnline: Boolean(isOnline) } },
+        { new: true }
+      );
+      if (!updatedStore) return res.status(404).json({ error: 'Store not found' });
+      return res.status(200).json({ success: true, store: updatedStore });
+    }
 
     if (!['approved', 'rejected', 'pending'].includes(status)) {
       return res.status(400).json({

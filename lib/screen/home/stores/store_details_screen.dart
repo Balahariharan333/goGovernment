@@ -10,11 +10,15 @@ import 'package:go_government/bloc/product/product_event.dart';
 import 'package:go_government/bloc/product/product_state.dart';
 import 'package:go_government/bloc/direction/direction_bloc.dart';
 import 'package:go_government/bloc/direction/direction_event.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../../../constants/route_constants.dart';
 import '../../../service/cart_manager.dart';
 import '../../../widget/common_wishlist_button.dart';
 import '../../../widget/common_directions_button.dart';
 import '../../../services/translation_service.dart';
+import '../../../network/api_client.dart';
+import '../../../utils/call_launcher.dart';
 
 class StoreDetailsScreen extends StatefulWidget {
   final String storeId;
@@ -22,6 +26,8 @@ class StoreDetailsScreen extends StatefulWidget {
   final String storeAddress;
   final String storeImage;
   final String storeType; // 'medical' or 'vegstore'
+  final String? storePhone;
+  final String? ownerName;
 
   const StoreDetailsScreen({
     super.key,
@@ -30,6 +36,8 @@ class StoreDetailsScreen extends StatefulWidget {
     required this.storeAddress,
     required this.storeImage,
     required this.storeType,
+    this.storePhone,
+    this.ownerName,
   });
 
   @override
@@ -37,9 +45,19 @@ class StoreDetailsScreen extends StatefulWidget {
 }
 
 class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
+  String _currentStorePhone = '';
+  String _currentOwnerName = '';
+
   @override
   void initState() {
     super.initState();
+    _currentStorePhone = widget.storePhone ?? '';
+    _currentOwnerName = widget.ownerName ?? '';
+
+    if (_currentStorePhone.isEmpty && widget.storeId.isNotEmpty) {
+      _fetchStoreContact();
+    }
+
     // Dispatch a fetch directions event with real store address
     context.read<DirectionBloc>().add(FetchDirections(
           origin: 'Current Location',
@@ -55,8 +73,11 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
     CartManager.instance.cartItems.addListener(_cartListener);
     WishlistManager.instance.favoriteIds.addListener(_favListener);
 
-    // Dispatch product load based on store type
-    context.read<ProductBloc>().add(LoadProducts(storeType: widget.storeType));
+    // Dispatch product load based on store id and store type
+    context.read<ProductBloc>().add(LoadProducts(
+          storeId: widget.storeId,
+          storeType: widget.storeType,
+        ));
 
     // 1. Setup filter categories based on store type
     if (widget.storeType == 'medical') {
@@ -75,6 +96,24 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
         {'title': 'Dairy', 'image': 'assets/images/groceries/milk.png'},
       ];
     }
+  }
+
+  Future<void> _fetchStoreContact() async {
+    try {
+      final res = await http
+          .get(Uri.parse('${ApiClient.baseUrl}/stores/${widget.storeId}'))
+          .timeout(const Duration(seconds: 4));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final store = data['store'];
+        if (store != null && mounted) {
+          setState(() {
+            _currentStorePhone = (store['phone'] ?? '').toString();
+            _currentOwnerName = (store['ownerName'] ?? '').toString();
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   String _searchQuery = '';
@@ -168,14 +207,111 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
                       // Store banner image
                       ClipRRect(
                         borderRadius: BorderRadius.circular(Responsive.w(16)),
-                        child: Image.asset(
+                        child: _buildStoreBannerImage(
                           widget.storeImage,
-                          width: double.infinity,
-                          height: Responsive.h(140),
-                          fit: BoxFit.cover,
+                          widget.storeType,
                         ),
                       ),
-                      SizedBox(height: Responsive.h(16)),
+                      SizedBox(height: Responsive.h(14)),
+
+                      // Store Owner / Contact Details Banner
+                      if (_currentStorePhone.isNotEmpty) ...[
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: Responsive.w(14),
+                            vertical: Responsive.h(10),
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F5E9),
+                            borderRadius: BorderRadius.circular(Responsive.w(14)),
+                            border: Border.all(
+                              color: Colors.green.shade300,
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: Responsive.w(36),
+                                      height: Responsive.w(36),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.green.shade300),
+                                      ),
+                                      child: const Icon(
+                                        Icons.storefront,
+                                        color: Color(0xFF2E7D32),
+                                        size: 18,
+                                      ),
+                                    ),
+                                    SizedBox(width: Responsive.w(10)),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          CustomText.title(
+                                            _currentOwnerName.isNotEmpty
+                                                ? 'Owner: $_currentOwnerName'
+                                                : 'Store Contact',
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          Text(
+                                            _currentStorePhone,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF1B5E20),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(width: Responsive.w(8)),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  CallLauncher.launchCall(
+                                    context,
+                                    phone: _currentStorePhone,
+                                    name: widget.storeName,
+                                  );
+                                },
+                                icon: const Icon(Icons.phone, size: 14, color: Colors.white),
+                                label: const Text(
+                                  'Call',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2E7D32),
+                                  elevation: 0,
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: Responsive.w(12),
+                                    vertical: Responsive.h(6),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(Responsive.w(16)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: Responsive.h(14)),
+                      ],
 
                       // Categories filter horizontal list
                       SizedBox(
@@ -255,22 +391,62 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
                       ),
                       SizedBox(height: Responsive.h(16)),
 
-                      // Products Grid View
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: Responsive.w(12),
-                          mainAxisSpacing: Responsive.h(12),
-                          childAspectRatio: 0.72,
+                      // Products Grid View or Empty State
+                      if (productState is ProductLoading)
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: Responsive.h(40)),
+                          child: const Center(
+                            child: CircularProgressIndicator(color: AppColors.primary),
+                          ),
+                        )
+                      else if (filteredProducts.isEmpty)
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: Responsive.h(40),
+                            horizontal: Responsive.w(20),
+                          ),
+                          child: Center(
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.inventory_2_outlined,
+                                  size: Responsive.w(48),
+                                  color: Colors.grey.shade400,
+                                ),
+                                SizedBox(height: Responsive.h(10)),
+                                CustomText.title(
+                                  'No Products Listed',
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade700,
+                                ),
+                                SizedBox(height: Responsive.h(4)),
+                                CustomText.body(
+                                  'This store has not added any products yet.',
+                                  fontSize: 12,
+                                  color: AppColors.grayFont,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: Responsive.w(12),
+                            mainAxisSpacing: Responsive.h(12),
+                            childAspectRatio: 0.72,
+                          ),
+                          itemCount: filteredProducts.length,
+                          itemBuilder: (context, index) {
+                            final product = filteredProducts[index];
+                            return _buildProductCard(product);
+                          },
                         ),
-                        itemCount: filteredProducts.length,
-                        itemBuilder: (context, index) {
-                          final product = filteredProducts[index];
-                          return _buildProductCard(product);
-                        },
-                      ),
 
                       // Bottom safe offset space
                       SizedBox(height: Responsive.h(80)),
@@ -333,6 +509,45 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
                       ),
                       SizedBox(width: Responsive.w(10)),
 
+                      // Call Store button
+                      if (_currentStorePhone.isNotEmpty) ...[
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            CallLauncher.launchCall(
+                              context,
+                              phone: _currentStorePhone,
+                              name: widget.storeName,
+                            );
+                          },
+                          child: Container(
+                            width: Responsive.w(44),
+                            height: Responsive.w(44),
+                            decoration: BoxDecoration(
+                              color: AppColors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.green.shade300,
+                                width: Responsive.w(1.5),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.green.withValues(alpha: 0.15),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.phone_outlined,
+                              color: Color(0xFF2E7D32),
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: Responsive.w(8)),
+                      ],
+
                       // Directions button
                       CommonDirectionsButton(
                         title: widget.storeName,
@@ -364,12 +579,141 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
     );
   }
 
+  Widget _buildStoreBannerImage(String? imagePath, String type) {
+    final fallbackAsset = type == 'medical'
+        ? 'assets/images/medical.png'
+        : 'assets/images/vegstore.png';
+
+    if (imagePath == null || imagePath.isEmpty) {
+      return Image.asset(
+        fallbackAsset,
+        width: double.infinity,
+        height: Responsive.h(140),
+        fit: BoxFit.cover,
+      );
+    }
+
+    final normalized = ApiClient.normalizeImageUrl(imagePath);
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      return Image.network(
+        normalized,
+        width: double.infinity,
+        height: Responsive.h(140),
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Image.asset(
+          fallbackAsset,
+          width: double.infinity,
+          height: Responsive.h(140),
+          fit: BoxFit.cover,
+        ),
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return Container(
+            width: double.infinity,
+            height: Responsive.h(140),
+            color: Colors.grey.shade100,
+            child: const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    return Image.asset(
+      imagePath,
+      width: double.infinity,
+      height: Responsive.h(140),
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => Image.asset(
+        fallbackAsset,
+        width: double.infinity,
+        height: Responsive.h(140),
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+
+  Widget _buildProductCardImage(String? imagePath, String storeType) {
+    Widget buildPlaceholder() {
+      return Container(
+        height: Responsive.h(90),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(Responsive.w(10)),
+          border: Border.all(color: Colors.grey.shade200, width: 0.8),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.image_not_supported_outlined,
+                size: Responsive.w(26),
+                color: Colors.grey.shade400,
+              ),
+              SizedBox(height: Responsive.h(2)),
+              Text(
+                'No image',
+                style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (imagePath == null || imagePath.trim().isEmpty) {
+      return buildPlaceholder();
+    }
+
+    final normalized = ApiClient.normalizeImageUrl(imagePath);
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      return Image.network(
+        normalized,
+        height: Responsive.h(90),
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => buildPlaceholder(),
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return SizedBox(
+            height: Responsive.h(90),
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    return Image.asset(
+      imagePath,
+      height: Responsive.h(90),
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) => buildPlaceholder(),
+    );
+  }
+
   Widget _buildProductCard(Map<String, dynamic> product) {
     final String id = product['id'];
     final int qty = CartManager.instance.getQuantity(id);
     final int stock = CartManager.instance.getStock(product);
     final bool isOutOfStock = stock <= 0;
     final bool isMaxStock = qty >= stock;
+
+    final double price = (product['price'] as num?)?.toDouble() ?? 0.0;
+    final double origPrice = (product['originalPrice'] as num?)?.toDouble() ?? price;
+    final int discount = (product['discountPercentage'] as num?)?.toInt() ?? 0;
 
     return Container(
       decoration: BoxDecoration(
@@ -439,11 +783,7 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
                     SizedBox(height: Responsive.h(12)),
                     // Centered Product image
                     Center(
-                      child: Image.asset(
-                        product['image'],
-                        height: Responsive.h(90),
-                        fit: BoxFit.contain,
-                      ),
+                      child: _buildProductCardImage(product['image'], widget.storeType),
                     ),
                     SizedBox(height: Responsive.h(8)),
                     // Product Title
@@ -459,28 +799,30 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
               const Spacer(),
               SizedBox(height: Responsive.h(4)),
 
-              // Pricing Details Row (68% OFF, Struck Original Price, Discount Price)
+              // Pricing Details Row (Discount %, Struck Original Price, Current Price)
               Row(
                 children: [
-                  Icon(
-                    Icons.arrow_downward,
-                    color: const Color(0xFF4CAF50),
-                    size: Responsive.w(10),
-                  ),
-                  CustomText.title(
-                    '68% ',
-                    color: const Color(0xFF4CAF50),
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  CustomText.subtitle(
-                    '₹307 ',
+                  if (discount > 0) ...[
+                    Icon(
+                      Icons.arrow_downward,
+                      color: const Color(0xFF4CAF50),
+                      size: Responsive.w(10),
+                    ),
+                    CustomText.title(
+                      '$discount% ',
+                      color: const Color(0xFF4CAF50),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    CustomText.subtitle(
+                      '₹${origPrice.toStringAsFixed(0)} ',
                       fontSize: 10,
                       decoration: TextDecoration.lineThrough,
                       color: Colors.grey,
-                  ),
+                    ),
+                  ],
                   CustomText.title(
-                    '₹99',
+                    '₹${price.toStringAsFixed(0)}',
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                   ),

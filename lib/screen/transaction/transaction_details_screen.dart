@@ -8,6 +8,9 @@ import '../../bloc/transaction/transaction_bloc.dart';
 import '../../bloc/transaction/transaction_event.dart';
 import '../../bloc/transaction/transaction_state.dart';
 import '../../service/cart_manager.dart';
+import '../../network/api_client.dart';
+import '../../constants/route_constants.dart';
+import '../../utils/call_launcher.dart';
 
 class TransactionDetailsScreen extends StatefulWidget {
   final String title;
@@ -171,7 +174,94 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
                                   fontSize: 13,
                                   color: AppColors.grayFont,
                                 ),
-                                SizedBox(height: Responsive.h(16)),
+                                SizedBox(height: Responsive.h(14)),
+
+                                // Store Details & Call Card
+                                if (isStoreOrder) ...[
+                                  Builder(builder: (context) {
+                                    final storeDetails = tx['storeDetails'] as Map? ?? {};
+                                    final String storeName = storeDetails['name']?.toString() ??
+                                        (isStoreOrder ? title : 'Government Store');
+                                    final String storePhone = storeDetails['phone']?.toString() ??
+                                        tx['storePhone']?.toString() ?? '';
+                                    final String storeAddress = storeDetails['address']?.toString() ??
+                                        tx['storeAddress']?.toString() ?? '';
+
+                                    return Container(
+                                      padding: EdgeInsets.all(Responsive.w(14)),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.white,
+                                        borderRadius: BorderRadius.circular(Responsive.w(18)),
+                                        border: Border.all(color: AppColors.outliner, width: 1.2),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: Responsive.w(38),
+                                            height: Responsive.w(38),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFFF2EC),
+                                              borderRadius: BorderRadius.circular(Responsive.w(10)),
+                                            ),
+                                            child: Icon(Icons.storefront, color: AppColors.primary, size: Responsive.w(20)),
+                                          ),
+                                          SizedBox(width: Responsive.w(12)),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                CustomText.title(
+                                                  storeName,
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.bold,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                                if (storePhone.isNotEmpty) ...[
+                                                  SizedBox(height: Responsive.h(2)),
+                                                  Text(
+                                                    'Contact: $storePhone',
+                                                    style: const TextStyle(
+                                                      fontSize: 11,
+                                                      color: Color(0xFF2E7D32),
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ] else if (storeAddress.isNotEmpty) ...[
+                                                  SizedBox(height: Responsive.h(2)),
+                                                  Text(
+                                                    storeAddress,
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      color: AppColors.grayFont,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
+                                          if (storePhone.isNotEmpty) ...[
+                                            SizedBox(width: Responsive.w(8)),
+                                            ElevatedButton.icon(
+                                              onPressed: () => CallLauncher.launchCall(context, phone: storePhone, name: storeName),
+                                              icon: const Icon(Icons.phone, size: 12, color: Colors.white),
+                                              label: const Text('Call', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: const Color(0xFF2E7D32),
+                                                elevation: 0,
+                                                padding: EdgeInsets.symmetric(horizontal: Responsive.w(10), vertical: Responsive.h(6)),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(14))),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                  SizedBox(height: Responsive.h(14)),
+                                ],
 
                                 // Items card — orange border
                                 Container(
@@ -561,9 +651,90 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
             SizedBox(height: Responsive.h(12)),
             _buildReorderCard(context, 'Fresh Spinach bunch', '₹25 x 2 qty', '2 items will be added to cart', true),
           ],
+          SizedBox(height: Responsive.h(16)),
+          SizedBox(
+            width: double.infinity,
+            height: Responsive.h(48),
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(Responsive.w(24)),
+                ),
+                elevation: 0,
+              ),
+              onPressed: () => _reorderAllAndGoToCart(context),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.shopping_bag_outlined, color: Colors.white, size: 18),
+                  SizedBox(width: Responsive.w(8)),
+                  CustomText.title(
+                    'Reorder All & Go to Cart',
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: Responsive.h(20)),
         ],
       ),
     );
+  }
+
+  void _reorderAllAndGoToCart(BuildContext context) {
+    final List items = widget.transaction?['items'] as List? ?? [];
+    if (items.isNotEmpty) {
+      for (final raw in items) {
+        if (raw is Map) {
+          final item = Map<String, dynamic>.from(raw);
+          final pId = item['productId']?.toString() ??
+              item['id']?.toString() ??
+              'prod_${DateTime.now().millisecondsSinceEpoch}';
+          final prodData = {
+            ...item,
+            'id': pId,
+            'productId': pId,
+            'title': item['title'] ?? item['name'] ?? 'Product',
+            'price': item['price'] ?? 99,
+            'originalPrice': item['originalPrice'] ?? item['price'] ?? 99,
+            'image': item['image'] ?? item['imageUrl'] ?? 'assets/images/product1.png',
+            'stock': 10,
+          };
+          final qty = ((item['qty'] ?? item['quantity'] ?? 1) as num).toInt();
+          CartManager.instance.addToCart(prodData, qty: qty);
+        }
+      }
+    } else {
+      CartManager.instance.addToCart({
+        'id': 'reorder_${DateTime.now().millisecondsSinceEpoch}',
+        'title': widget.title,
+        'price': 99,
+        'originalPrice': 150,
+        'image': 'assets/images/product1.png',
+        'stock': 10,
+      }, qty: 1);
+    }
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Items added to cart! Proceeding to cart...'),
+        backgroundColor: const Color(0xFF2E7D32),
+        duration: const Duration(seconds: 2),
+        action: SnackBarAction(
+          label: 'VIEW CART',
+          textColor: Colors.white,
+          onPressed: () => Navigator.pushNamed(context, RouteConstants.cart),
+        ),
+      ),
+    );
+
+    context.read<TransactionBloc>().add(ToggleReorderScreenEvent(false));
+    Navigator.of(context).pushNamed(RouteConstants.cart);
   }
 
   Widget _buildReorderCard(
@@ -591,11 +762,10 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(Responsive.w(8)),
-                child: Image.asset(
-                  item?['image'] ?? 'assets/images/product1.png',
+                child: _buildProductImage(
+                  item?['image'],
                   width: Responsive.w(48),
                   height: Responsive.w(48),
-                  fit: BoxFit.cover,
                 ),
               ),
               SizedBox(width: Responsive.w(12)),
@@ -631,25 +801,36 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
           GestureDetector(
             onTap: isAvailable
                 ? () {
-                    if (item != null) {
-                      CartManager.instance.addToCart(item, qty: item['qty'] ?? 1);
-                    } else {
-                      CartManager.instance.addToCart({
-                        'id': 'reorder_${DateTime.now().millisecondsSinceEpoch}',
-                        'title': title,
-                        'price': 99,
-                        'originalPrice': 150,
-                        'image': 'assets/images/product1.png',
-                      }, qty: 1);
-                    }
+                    final pId = item?['productId']?.toString() ??
+                        item?['id']?.toString() ??
+                        'reorder_${DateTime.now().millisecondsSinceEpoch}';
+                    final pTitle = item?['title'] ?? item?['name'] ?? title;
+                    final pPrice = item?['price'] ?? 99;
+                    final pQty = ((item?['qty'] ?? item?['quantity'] ?? 1) as num).toInt();
+
+                    final prodData = {
+                      ...?item,
+                      'id': pId,
+                      'productId': pId,
+                      'title': pTitle,
+                      'price': pPrice,
+                      'originalPrice': item?['originalPrice'] ?? pPrice,
+                      'image': item?['image'] ?? item?['imageUrl'] ?? 'assets/images/product1.png',
+                      'stock': 10,
+                    };
+
+                    CartManager.instance.addToCart(prodData, qty: pQty);
+
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('$title added to cart!'),
-                        backgroundColor: Colors.green,
+                        content: Text('$pTitle added to cart! Proceeding to cart...'),
+                        backgroundColor: const Color(0xFF2E7D32),
                         duration: const Duration(seconds: 2),
                       ),
                     );
                     context.read<TransactionBloc>().add(ToggleReorderScreenEvent(false));
+                    Navigator.of(context).pushNamed(RouteConstants.cart);
                   }
                 : null,
             child: Container(
@@ -689,6 +870,45 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
     );
   }
 
+  Widget _buildProductImage(String? imagePath, {required double width, required double height}) {
+    final raw = (imagePath ?? '').trim();
+    if (raw.isEmpty) {
+      return Image.asset(
+        'assets/images/product1.png',
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+      );
+    }
+    final normalized = ApiClient.normalizeImageUrl(raw);
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      return Image.network(
+        normalized,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Image.asset(
+          'assets/images/product1.png',
+          width: width,
+          height: height,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+    return Image.asset(
+      normalized,
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => Image.asset(
+        'assets/images/product1.png',
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+
   Widget _buildItemRow(BuildContext context, int index, String name, String price, String assetPath, bool isReturned) {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: Responsive.h(10)),
@@ -699,11 +919,10 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(Responsive.w(8)),
-                child: Image.asset(
+                child: _buildProductImage(
                   assetPath,
                   width: Responsive.w(42),
                   height: Responsive.w(42),
-                  fit: BoxFit.cover,
                 ),
               ),
               SizedBox(width: Responsive.w(12)),
@@ -774,7 +993,7 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
             ),
             child: InkWell(
               onTap: () {
-                context.read<TransactionBloc>().add(ToggleReorderScreenEvent(true));
+                _reorderAllAndGoToCart(context);
               },
               borderRadius: BorderRadius.circular(Responsive.w(24)),
               child: Center(
