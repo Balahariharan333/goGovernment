@@ -9,9 +9,15 @@ import '../../hive/hive_service.dart';
 import '../../model/delivery_order_model.dart';
 import '../../network/rider_api_service.dart';
 import '../../service/socket_service.dart';
+import '../../service/background_task_handler.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/navigation_launcher.dart';
 import '../../utils/responsive_helper.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:geolocator/geolocator.dart';
+import '../../widget/available_order_card.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
 
@@ -22,11 +28,170 @@ class RiderDashboardScreen extends StatefulWidget {
   State<RiderDashboardScreen> createState() => _RiderDashboardScreenState();
 }
 
-class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
+class _RiderDashboardScreenState extends State<RiderDashboardScreen>
+    with WidgetsBindingObserver {
   StreamSubscription? _availableSub;
   StreamSubscription? _statusSub;
   StreamSubscription? _assignedSub;
+  StreamSubscription? _dispatchSub;
+  StreamSubscription? _dispatchCancelledSub;
+  Timer? _gpsPingTimer;
   final Set<String> _acceptingOrderIds = {};
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
+  bool _isPlayingSound = false;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) {
+      // Rider app closed / killed by user -> Turn OFFLINE immediately
+      HiveService.setIsOnline(false);
+      RiderSocketService().sendGpsPing(0, 0, false);
+      RiderSocketService().dispose();
+      FlutterForegroundTask.stopService();
+    }
+    // paused / inactive: foreground service keeps socket alive + alerts rider!
+  }
+
+  Future<void> _playAlertSound() async {
+    if (_isPlayingSound) return;
+    _isPlayingSound = true;
+    try {
+      await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+      await _audioPlayer.setVolume(1.0);
+      await _audioPlayer.play(AssetSource('sound/alert.wav'));
+    } catch (_) {
+      try {
+        await _audioPlayer.play(AssetSource('assets/sound/alert.wav'));
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _stopAlertSound() async {
+    if (!_isPlayingSound) return;
+    _isPlayingSound = false;
+    try {
+      await _audioPlayer.stop();
+    } catch (_) {}
+  }
+
+  Future<void> _syncRealRiderProfile() async {
+    final userId = HiveService.userId;
+    if (userId.isEmpty) return;
+    final profile = await RiderApiService.fetchRiderProfile(userId);
+    if (profile != null && mounted) {
+      final name = profile['userName']?.toString();
+      final phone = profile['phone']?.toString();
+      final vType = profile['vehicleType']?.toString();
+      final vNum = profile['vehicleNumber']?.toString();
+      if (name != null && name.isNotEmpty) await HiveService.setUserName(name);
+      if (phone != null && phone.isNotEmpty) await HiveService.setUserPhone(phone);
+      if (vType != null && vType.isNotEmpty) await HiveService.setVehicleType(vType);
+      if (vNum != null && vNum.isNotEmpty) await HiveService.setVehicleNumber(vNum);
+      setState(() {});
+    }
+  }
+
+  void _startGpsPings() {
+    _gpsPingTimer?.cancel();
+    _sendGpsPing();
+    _gpsPingTimer = Timer.periodic(const Duration(seconds: 20), (_) => _sendGpsPing());
+  }
+
+  Future<void> _sendGpsPing() async {
+    if (!HiveService.isOnline) return;
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+      ).timeout(const Duration(seconds: 5));
+      RiderSocketService().sendGpsPing(pos.latitude, pos.longitude, true);
+    } catch (e) {
+      RiderSocketService().sendGpsPing(0, 0, HiveService.isOnline);
+    }
+  }
+
+  Future<void> _handleToggleOnline(bool targetOnline) async {
+    if (targetOnline) {
+      // 1. Check if location services are enabled
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (!mounted) return;
+        _showLocationDialog(
+          title: 'GPS Location Disabled',
+          content: 'GPS / Location services are required to go online and receive delivery order alerts nearby. Please turn on GPS on your device.',
+        );
+        return;
+      }
+
+      // 2. Check location permission
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        _showLocationDialog(
+          title: 'Location Permission Required',
+          content: 'Location permission is mandatory to go online and take delivery orders. Please grant location access in App Settings.',
+        );
+        return;
+      }
+
+      // 3. Acquire current location fix to verify GPS before going online
+      try {
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        ).timeout(const Duration(seconds: 8));
+
+        await HiveService.setIsOnline(true);
+        if (!mounted) return;
+        context.read<DeliveryBloc>().add(ToggleDutyEvent(true));
+        RiderSocketService().sendGpsPing(pos.latitude, pos.longitude, true);
+        _startGpsPings();
+        // Start foreground service so background socket stays alive
+        await _startForegroundService();
+      } catch (e) {
+        if (!mounted) return;
+        _showLocationDialog(
+          title: 'Unable to Get GPS Signal',
+          content: 'Could not fetch your location signal. Please ensure you have clear GPS signal to go online.',
+        );
+      }
+    } else {
+      // Turn OFFLINE
+      await HiveService.setIsOnline(false);
+      if (!mounted) return;
+      context.read<DeliveryBloc>().add(ToggleDutyEvent(false));
+      _gpsPingTimer?.cancel();
+      RiderSocketService().sendGpsPing(0, 0, false);
+      // Stop foreground service — rider is offline
+      await _stopForegroundService();
+    }
+  }
+
+  void _showLocationDialog({required String title, required String content}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.location_off_rounded, color: AppColors.error),
+            const SizedBox(width: 10),
+            Expanded(child: CustomText.title(title, fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: CustomText.body(content, fontSize: 13),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _handleAcceptOrder(DeliveryOrder order) async {
     if (_acceptingOrderIds.contains(order.orderId)) return;
@@ -52,6 +217,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
       if (!mounted) return;
 
       if (res['success'] == true) {
+        _stopAlertSound();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Accepted Order #${order.orderId}! Navigate to store for pickup.'),
@@ -96,13 +262,98 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
     }
   }
 
+  // ─── Foreground Task Setup ──────────────────────────────────────────────
+
+  void _initForegroundTask() {
+    FlutterForegroundTask.init(
+      androidNotificationOptions: AndroidNotificationOptions(
+        channelId: 'rider_duty_channel',
+        channelName: 'Rider Duty Status',
+        channelDescription: 'Shows when rider is on duty and listening for orders',
+        channelImportance: NotificationChannelImportance.LOW,
+        priority: NotificationPriority.LOW,
+      ),
+      iosNotificationOptions: const IOSNotificationOptions(
+        showNotification: true,
+        playSound: false,
+      ),
+      foregroundTaskOptions: ForegroundTaskOptions(
+        eventAction: ForegroundTaskEventAction.repeat(15000), // ping every 15s
+        autoRunOnBoot: false,
+        allowWakeLock: true,
+      ),
+    );
+  }
+
+  Future<void> _startForegroundService() async {
+    await FlutterForegroundTask.requestNotificationPermission();
+    // Save real rider ID so background isolate can read it
+    final riderId = HiveService.userId.isNotEmpty
+        ? HiveService.userId
+        : HiveService.userPhone;
+    await FlutterForegroundTask.saveData(key: 'riderId', value: riderId);
+    if (await FlutterForegroundTask.isRunningService) return;
+    await FlutterForegroundTask.startService(
+      serviceId: 1001,
+      notificationTitle: '🟢 GoGovernment — On Duty',
+      notificationText: 'Listening for nearby delivery orders...',
+      callback: startCallback,
+    );
+  }
+
+  Future<void> _stopForegroundService() async {
+    if (await FlutterForegroundTask.isRunningService) {
+      await FlutterForegroundTask.stopService();
+    }
+  }
+
+  // ─── Local Notifications Init ───────────────────────────────────────────
+
+  Future<void> _initLocalNotifications() async {
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidInit);
+    await _localNotifications.initialize(
+      settings: initSettings,
+      onDidReceiveNotificationResponse: (details) {
+        // Tapping notification brings app to foreground (handled by OS)
+      },
+    );
+    // Create the high-priority order alert channel
+    const channel = AndroidNotificationChannel(
+      'rider_order_alerts',
+      'Order Alerts',
+      description: 'Heads-up alerts for incoming delivery orders',
+      importance: Importance.max,
+      sound: RawResourceAndroidNotificationSound('alert'),
+      playSound: true,
+      enableVibration: true,
+      enableLights: true,
+    );
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+  }
+
   @override
   void initState() {
     super.initState();
     context.read<DeliveryBloc>().add(LoadDeliveriesEvent());
 
-    // Connect to real-time WebSocket events (zero polling, zero battery drain)
+    // Init foreground task config & local notification channel
+    _initForegroundTask();
+    _initLocalNotifications();
+
+    // Connect to real-time WebSocket events & sync backend rider profile
     RiderSocketService().init();
+    _syncRealRiderProfile();
+    _startGpsPings();
+
+    // If rider was already ONLINE before app restart, resume service
+    if (HiveService.isOnline) {
+      _startForegroundService();
+    }
+
     _availableSub = RiderSocketService().onOrderAvailable.listen((_) {
       if (mounted) {
         context.read<DeliveryBloc>().add(LoadDeliveriesEvent());
@@ -118,13 +369,35 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
         context.read<DeliveryBloc>().add(LoadDeliveriesEvent());
       }
     });
+
+    // Targeted 30-second dispatch alert
+    _dispatchSub = RiderSocketService().onOrderDispatch.listen((_) {
+      if (mounted) {
+        context.read<DeliveryBloc>().add(LoadDeliveriesEvent());
+      }
+    });
+
+    // Refresh when dispatch is cancelled / claimed by another rider
+    _dispatchCancelledSub = RiderSocketService().onOrderDispatchCancelled.listen((_) {
+      if (mounted) {
+        context.read<DeliveryBloc>().add(LoadDeliveriesEvent());
+      }
+    });
+
+    // Register App Lifecycle Observer
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopAlertSound();
     _availableSub?.cancel();
     _statusSub?.cancel();
     _assignedSub?.cancel();
+    _dispatchSub?.cancel();
+    _dispatchCancelledSub?.cancel();
+    _gpsPingTimer?.cancel();
     super.dispose();
   }
 
@@ -142,6 +415,12 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
               final active = state is DeliveryLoaded ? state.activeOrders : <DeliveryOrder>[];
               final earnings = state is DeliveryLoaded ? state.totalEarnings : HiveService.totalEarnings;
               final completed = state is DeliveryLoaded ? state.completedCount : HiveService.completedCount;
+
+              if (active.isEmpty && available.isNotEmpty && isOnline) {
+                _playAlertSound();
+              } else {
+                _stopAlertSound();
+              }
 
               return RefreshIndicator(
                 onRefresh: () async {
@@ -180,46 +459,60 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                         SizedBox(height: Responsive.h(20)),
                       ],
 
-                      // Available Deliveries Feed
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: isOnline ? AppColors.success : AppColors.grayFont,
-                                  shape: BoxShape.circle,
+                      // Available Deliveries Feed (Only shown when rider has NO active order)
+                      if (active.isEmpty) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: isOnline ? AppColors.success : AppColors.grayFont,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
+                                SizedBox(width: Responsive.w(8)),
+                                CustomText.title('Available Deliveries', fontSize: Responsive.sp(16)),
+                              ],
+                            ),
+                            Container(
+                              padding: EdgeInsets.symmetric(horizontal: Responsive.w(10), vertical: Responsive.h(4)),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(Responsive.w(12)),
                               ),
-                              SizedBox(width: Responsive.w(8)),
-                              CustomText.title('Available Deliveries', fontSize: Responsive.sp(16)),
-                            ],
-                          ),
-                          Container(
-                            padding: EdgeInsets.symmetric(horizontal: Responsive.w(10), vertical: Responsive.h(4)),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(Responsive.w(12)),
+                              child: CustomText.caption(
+                                '${available.length} Nearby',
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                            child: CustomText.caption(
-                              '${available.length} Nearby',
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: Responsive.h(12)),
+                          ],
+                        ),
+                        SizedBox(height: Responsive.h(12)),
 
-                      if (!isOnline)
-                        _buildOfflineNotice()
-                      else if (available.isEmpty)
-                        _buildNoOrdersState()
-                      else
-                        ...available.map((order) => _buildAvailableOrderCard(context, order)),
+                        if (!isOnline)
+                          _buildOfflineNotice()
+                        else if (available.isEmpty)
+                          _buildNoOrdersState()
+                        else
+                          ...available.map(
+                            (order) => AvailableOrderCard(
+                              key: ValueKey(order.orderId),
+                              order: order,
+                              isAccepting: _acceptingOrderIds.contains(order.orderId),
+                              onAccept: () => _handleAcceptOrder(order),
+                              onExpired: () {
+                                if (mounted) {
+                                  context.read<DeliveryBloc>().add(LoadDeliveriesEvent());
+                                }
+                              },
+                            ),
+                          ),
+                      ],
 
                       SizedBox(height: Responsive.h(30)),
                     ],
@@ -274,11 +567,9 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
               ],
             ),
           ),
-          // Duty Toggle Button
+          // Duty Toggle Button (Mandatory GPS check required to go online)
           GestureDetector(
-            onTap: () {
-              context.read<DeliveryBloc>().add(ToggleDutyEvent(!isOnline));
-            },
+            onTap: () => _handleToggleOnline(!isOnline),
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: Responsive.w(12), vertical: Responsive.h(6)),
               decoration: BoxDecoration(
@@ -474,161 +765,6 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(10))),
                   ),
                   child: const Text('Manage', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ----------------------------------------------------
-  // Available Order Card
-  // ----------------------------------------------------
-  Widget _buildAvailableOrderCard(BuildContext context, DeliveryOrder order) {
-    return Container(
-      margin: EdgeInsets.only(bottom: Responsive.h(12)),
-      padding: EdgeInsets.all(Responsive.w(16)),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(Responsive.w(16)),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header: ID + Payout Badge
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(Responsive.w(6)),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.shopping_bag_outlined, size: 18, color: AppColors.primary),
-                  ),
-                  SizedBox(width: Responsive.w(8)),
-                  CustomText.title('#${order.orderId}', fontSize: Responsive.sp(14), fontWeight: FontWeight.bold),
-                ],
-              ),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: Responsive.w(10), vertical: Responsive.h(4)),
-                decoration: BoxDecoration(
-                  color: AppColors.success.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(Responsive.w(12)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.currency_rupee, size: 14, color: AppColors.success),
-                    CustomText.title(
-                      '${order.estimatedPayout.toStringAsFixed(0)} Earn',
-                      fontSize: Responsive.sp(13),
-                      color: AppColors.success,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: Responsive.h(14)),
-
-          // Store Pickup Address
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.store, size: 16, color: AppColors.primary),
-              SizedBox(width: Responsive.w(8)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CustomText.title(order.storeName, fontSize: Responsive.sp(13)),
-                    CustomText.caption(order.storeAddress, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: Responsive.h(10)),
-
-          // Customer Drop Address
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.location_on, size: 16, color: AppColors.success),
-              SizedBox(width: Responsive.w(8)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CustomText.title('Drop: ${order.receiverName}', fontSize: Responsive.sp(13)),
-                    CustomText.caption(order.dropAddress, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: Responsive.h(14)),
-
-          // Action Buttons: Google Maps Direction Preview & Accept Order
-          Row(
-            children: [
-              // Google Maps preview button
-              IconButton(
-                onPressed: () {
-                  NavigationLauncher.openGoogleMapsDirections(order.storeLat, order.storeLng, label: 'Store Location');
-                },
-                icon: const Icon(Icons.map_outlined, color: AppColors.primary),
-                tooltip: 'Preview route in Google Maps',
-              ),
-              SizedBox(width: Responsive.w(8)),
-
-              // Accept Button
-              Expanded(
-                child: SizedBox(
-                  height: Responsive.h(44),
-                  child: ElevatedButton(
-                    onPressed: _acceptingOrderIds.contains(order.orderId)
-                        ? null
-                        : () => _handleAcceptOrder(order),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Responsive.w(12))),
-                    ),
-                    child: _acceptingOrderIds.contains(order.orderId)
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.check, size: 18, color: Colors.white),
-                              SizedBox(width: Responsive.w(6)),
-                              const Text(
-                                'Accept Delivery',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                              ),
-                            ],
-                          ),
-                  ),
                 ),
               ),
             ],

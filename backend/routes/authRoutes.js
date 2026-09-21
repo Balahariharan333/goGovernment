@@ -93,7 +93,7 @@ router.post('/verify-otp', async (req, res) => {
 // 3. UPDATE / SAVE PROFILE API (Name, Email, Profile Pic)
 router.post('/profile', async (req, res) => {
   try {
-    const { userId, userName, email, profileImage } = req.body;
+    const { userId, userName, email, profileImage, vehicleType, vehicleNumber } = req.body;
 
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
@@ -107,6 +107,8 @@ router.post('/profile', async (req, res) => {
           ...(userName && { userName }),
           ...(email && { email }),
           ...(profileImage && { profileImage }),
+          ...(vehicleType && { vehicleType }),
+          ...(vehicleNumber && { vehicleNumber }),
         },
       },
       { new: true, upsert: true }

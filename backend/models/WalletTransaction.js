@@ -1,0 +1,35 @@
+const mongoose = require('mongoose');
+
+const WalletTransactionSchema = new mongoose.Schema(
+  {
+    transactionId: { type: String, required: true, unique: true },
+    userId: { type: String, required: true, index: true },
+    amount: { type: Number, required: true }, // positive for credit, negative for debit
+    type: { type: String, enum: ['credit', 'debit'], required: true },
+    category: {
+      type: String,
+      enum: ['topup', 'order_payment', 'order_refund', 'reward_redemption', 'cashback'],
+      required: true,
+    },
+    paymentMethod: { type: String, default: 'Wallet' },
+    orderId: { type: String, default: '' },
+    title: { type: String, required: true },
+    subtitle: { type: String, default: '' },
+    balanceAfter: { type: Number, required: true },
+    status: { type: String, enum: ['success', 'failed', 'pending'], default: 'success' },
+    metadata: { type: Object, default: {} },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+WalletTransactionSchema.set('toJSON', {
+  virtuals: true,
+  versionKey: false,
+  transform: function (doc, ret) {
+    delete ret._id;
+  },
+});
+
+module.exports = mongoose.model('WalletTransaction', WalletTransactionSchema);

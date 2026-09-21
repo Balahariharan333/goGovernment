@@ -88,7 +88,7 @@ class MainApp extends StatelessWidget {
         BlocProvider<ProfileBloc>.value(value: ProfileBloc.instance),
         BlocProvider<ReportBloc>(create: (context) => ReportBloc()),
         BlocProvider<FeedbackBloc>(create: (context) => FeedbackBloc()),
-        BlocProvider<TransactionBloc>(create: (context) => TransactionBloc()),
+        BlocProvider<TransactionBloc>.value(value: TransactionBloc.instance),
         BlocProvider<ComplaintBloc>(create: (context) => ComplaintBloc()),
         BlocProvider<OrderTrackingBloc>(create: (context) => OrderTrackingBloc()),
         BlocProvider<RiderChatBloc>(create: (context) => RiderChatBloc()),

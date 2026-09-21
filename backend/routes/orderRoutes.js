@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order');
 const Store = require('../models/Store');
+const User = require('../models/User');
+const WalletTransaction = require('../models/WalletTransaction');
 
 // 1. CREATE NEW ORDER (Placed by Citizen)
 router.post('/', async (req, res) => {
@@ -46,6 +48,51 @@ router.post('/', async (req, res) => {
       }
     }
 
+    const isWallet = paymentMethod && paymentMethod.toLowerCase().includes('wallet');
+    const numGrandTotal = Number(grandTotal);
+
+    if (isWallet) {
+      const updatedUser = await User.findOneAndUpdate(
+        {
+          $or: [{ userId }, { phone: userId }],
+          walletBalance: { $gte: numGrandTotal },
+        },
+        { $inc: { walletBalance: -numGrandTotal } },
+        { new: true }
+      );
+
+      if (!updatedUser) {
+        const currentUser = await User.findOne({ $or: [{ userId }, { phone: userId }] });
+        const curBal = currentUser ? currentUser.walletBalance || 0 : 0;
+        return res.status(400).json({
+          success: false,
+          code: 'INSUFFICIENT_WALLET_BALANCE',
+          message: `Insufficient wallet balance. Total: ₹${numGrandTotal}, Available: ₹${curBal}`,
+          walletBalance: curBal,
+        });
+      }
+
+      // Record wallet debit transaction
+      const now = new Date();
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const dateStr = `${months[now.getMonth()]} ${now.getDate()} · ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+      const walletTx = new WalletTransaction({
+        transactionId: 'PAY_' + Date.now().toString().slice(-6) + Math.floor(100 + Math.random() * 900),
+        userId: updatedUser.userId,
+        amount: -numGrandTotal,
+        type: 'debit',
+        category: 'order_payment',
+        paymentMethod: 'Wallet Account',
+        orderId: orderId,
+        title: resolvedStoreDetails.name || 'Store Order',
+        subtitle: `Paid for order #${orderId} · ${dateStr}`,
+        balanceAfter: updatedUser.walletBalance,
+        status: 'success',
+      });
+      await walletTx.save();
+    }
+
     const newOrder = new Order({
       orderId,
       userId,
@@ -66,7 +113,31 @@ router.post('/', async (req, res) => {
 
     await newOrder.save();
 
-    console.log(`📦 [Order Placed] Order ID: ${orderId} by User: ${userId} for Store: ${storeId}`);
+    // ── Record order transaction in ledger for ALL payment methods ──
+    if (!isWallet) {
+      // For non-wallet payments, just record a ledger entry (no balance deduction)
+      const now = new Date();
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const dateStr = `${months[now.getMonth()]} ${now.getDate()} · ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+      const walletTx = new WalletTransaction({
+        transactionId: 'PAY_' + Date.now().toString().slice(-6) + Math.floor(100 + Math.random() * 900),
+        userId,
+        amount: -numGrandTotal,
+        type: 'debit',
+        category: 'order_payment',
+        paymentMethod: paymentMethod,
+        orderId,
+        title: resolvedStoreDetails.name || 'Store Order',
+        subtitle: `Paid for order #${orderId} · ${dateStr}`,
+        balanceAfter: null,
+        status: 'success',
+      });
+      await walletTx.save();
+    }
+
+    console.log(`📦 [Order Placed] Order ID: ${orderId} by User: ${userId} for Store: ${storeId} via ${paymentMethod}`);
+
 
     // Emit real-time Socket.io event to notify merchants of new order
     const io = req.app.get('io');
@@ -82,6 +153,7 @@ router.post('/', async (req, res) => {
       success: true,
       message: 'Order placed successfully',
       data: newOrder,
+      order: newOrder,
     });
   } catch (error) {
     console.error('Error creating order:', error);
@@ -89,11 +161,120 @@ router.post('/', async (req, res) => {
   }
 });
 
+// GET ALL ORDERS (Admin Web Monitoring)
+router.get('/', async (req, res) => {
+  try {
+    const orders = await Order.find({}).sort({ createdAt: -1 });
+    return res.status(200).json({ success: true, data: orders });
+  } catch (error) {
+    console.error('Error fetching all orders:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch all orders', error: error.message });
+  }
+});
+
+// GET LIVE RIDER GPS LOCATIONS (For Admin Web & Backend Monitoring)
+router.get('/riders/live-locations', async (req, res) => {
+  try {
+    const riderRegistry = req.app.get('riderRegistry') || new Map();
+
+    // 1. Query ONLY actual delivery partners (role: 'rider' or having vehicle info)
+    const dbRiders = await User.find({
+      $or: [
+        { role: 'rider' },
+        { vehicleNumber: { $exists: true, $ne: '' } },
+        { vehicleType: { $exists: true, $ne: '' } },
+      ],
+    });
+
+    const now = Date.now();
+    const ridersMap = new Map();
+
+    // 1. Add DB Riders
+    for (const u of dbRiders) {
+      ridersMap.set(u.userId, {
+        riderId: u.userId,
+        name: u.userName || 'Delivery Partner',
+        phone: u.phone || '',
+        vehicleType: u.vehicleType || 'Motorcycle',
+        vehicleNumber: u.vehicleNumber || 'KA-01-EE-4521',
+        latitude: 0,
+        longitude: 0,
+        isOnline: false,
+        socketId: null,
+        lastSeenSecondsAgo: null,
+        isActiveGps: false,
+      });
+    }
+
+    // 2. Merge live socket registry data
+    for (const [rId, info] of riderRegistry.entries()) {
+      if (!rId) continue;
+      
+      // Match by userId first, or by phone if rId is a phone number
+      let entry = ridersMap.get(rId);
+      if (!entry) {
+        for (const candidate of ridersMap.values()) {
+          if (candidate.phone && candidate.phone === rId) {
+            entry = candidate;
+            break;
+          }
+        }
+      }
+
+      if (!entry) {
+        entry = {
+          riderId: rId,
+          name: 'Express Rider (' + rId + ')',
+          phone: rId,
+          vehicleType: 'Motorcycle',
+          vehicleNumber: '',
+          latitude: 0,
+          longitude: 0,
+          isOnline: false,
+          socketId: null,
+          lastSeenSecondsAgo: null,
+          isActiveGps: false,
+        };
+        ridersMap.set(rId, entry);
+      }
+
+      const lastSeenSecs = info.lastSeen ? Math.round((now - info.lastSeen) / 1000) : null;
+      const hasPos = info.lat !== undefined && info.lat !== 0 && info.lng !== undefined && info.lng !== 0;
+      const isActiveGps = Boolean(info.isOnline && hasPos && (lastSeenSecs === null || lastSeenSecs < 120));
+
+      entry.latitude = info.lat || entry.latitude || 0;
+      entry.longitude = info.lng || entry.longitude || 0;
+      entry.isOnline = Boolean(info.isOnline);
+      entry.socketId = info.socketId || null;
+      entry.lastSeenSecondsAgo = lastSeenSecs;
+      entry.isActiveGps = isActiveGps;
+    }
+
+    const ridersList = Array.from(ridersMap.values());
+    return res.status(200).json({
+      success: true,
+      count: ridersList.length,
+      riders: ridersList,
+    });
+  } catch (error) {
+    console.error('Error fetching live rider locations:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 2. GET USER ORDERS (Citizen Order History)
 router.get('/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    const orders = await Order.find({ userId }).sort({ createdAt: -1 });
+    let queryUsers = [userId];
+    const userDoc = await User.findOne({
+      $or: [{ userId }, { phone: userId }],
+    });
+    if (userDoc) {
+      if (userDoc.userId && !queryUsers.includes(userDoc.userId)) queryUsers.push(userDoc.userId);
+      if (userDoc.phone && !queryUsers.includes(userDoc.phone)) queryUsers.push(userDoc.phone);
+    }
+    const orders = await Order.find({ userId: { $in: queryUsers } }).sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
@@ -124,12 +305,14 @@ router.get('/store/:storeId', async (req, res) => {
 // 4. GET AVAILABLE DELIVERIES (Rider Dashboard)
 router.get('/available', async (req, res) => {
   try {
-    // Return orders ready for pickup where no rider is assigned yet
+    // Return orders ready for pickup where no rider is assigned yet.
+    // 'accepted' orders are excluded — they already belong to another rider.
     const orders = await Order.find({
       status: 'ready_for_pickup',
       $or: [
         { 'deliveryAgent.riderId': '' },
         { 'deliveryAgent.riderId': { $exists: false } },
+        { 'deliveryAgent.riderId': null },
       ],
     }).sort({ createdAt: -1 });
 
@@ -233,7 +416,8 @@ router.post('/:orderId/accept-rider', async (req, res) => {
           'deliveryAgent.phone': phone || '',
           'deliveryAgent.vehicleNumber': vehicleNumber || '',
           'deliveryAgent.rating': Number(rating) || 4.9,
-          status: 'ready_for_pickup',
+          // Transition to 'accepted' — removes this order from other riders' available pool
+          status: 'accepted',
         },
       },
       { returnDocument: 'after' }
@@ -252,6 +436,13 @@ router.post('/:orderId/accept-rider', async (req, res) => {
     }
 
     console.log(`🚴 [Rider Assigned] Rider ${name} (${riderId}) accepted order ${orderId}`);
+
+    // Mark rider as BUSY in registry — dispatcher will skip them for new orders
+    const riderRegistry = req.app.get('riderRegistry');
+    if (riderRegistry && riderRegistry.has(riderId)) {
+      riderRegistry.get(riderId).isBusy = true;
+      console.log(`🔒 [Rider] ${riderId} marked BUSY — will not receive new dispatch events`);
+    }
 
     // Emit real-time Socket.io event to notify citizen & merchant & riders
     const io = req.app.get('io');
@@ -283,7 +474,7 @@ router.patch('/:orderId/status', async (req, res) => {
     const { orderId } = req.params;
     const { status } = req.body;
 
-    const validStatuses = ['placed', 'preparing', 'ready_for_pickup', 'out_for_delivery', 'delivered', 'cancelled'];
+    const validStatuses = ['placed', 'preparing', 'ready_for_pickup', 'accepted', 'out_for_delivery', 'delivered', 'cancelled'];
     if (!status || !validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
@@ -295,6 +486,45 @@ router.patch('/:orderId/status', async (req, res) => {
     if (status === 'delivered') {
       updateFields.deliveredAt = new Date();
       updateFields.paymentStatus = 'paid';
+    }
+
+    // If order is cancelled and was paid via wallet, automatically refund to citizen wallet
+    if (status === 'cancelled') {
+      const existing = await Order.findOne({ orderId });
+      if (existing && existing.status !== 'cancelled') {
+        const wasWallet = existing.paymentMethod && existing.paymentMethod.toLowerCase().includes('wallet');
+        if (wasWallet && existing.paymentStatus === 'paid') {
+          const refundAmt = Number(existing.grandTotal) || 0;
+          if (refundAmt > 0) {
+            const refundedUser = await User.findOneAndUpdate(
+              { $or: [{ userId: existing.userId }, { phone: existing.userId }] },
+              { $inc: { walletBalance: refundAmt } },
+              { new: true, upsert: true }
+            );
+
+            const now = new Date();
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const dateStr = `${months[now.getMonth()]} ${now.getDate()} · ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+            const refundTx = new WalletTransaction({
+              transactionId: 'REF_' + Date.now().toString().slice(-6) + Math.floor(100 + Math.random() * 900),
+              userId: refundedUser.userId,
+              amount: refundAmt,
+              type: 'credit',
+              category: 'order_refund',
+              paymentMethod: 'Wallet Refund',
+              orderId: existing.orderId,
+              title: 'Order Refund',
+              subtitle: `Refund for cancelled order #${existing.orderId} · ${dateStr}`,
+              balanceAfter: refundedUser.walletBalance,
+              status: 'success',
+            });
+            await refundTx.save();
+            updateFields.paymentStatus = 'refunded';
+            console.log(`💳 [Auto Refund] Refunded ₹${refundAmt} to user ${refundedUser.userId} for cancelled order ${existing.orderId}`);
+          }
+        }
+      }
     }
 
     const order = await Order.findOneAndUpdate(
@@ -317,9 +547,42 @@ router.patch('/:orderId/status', async (req, res) => {
       io.emit(`store:${order.storeId}:order_update`, orderPayload);
       io.to(`store:${order.storeId}`).emit('order:status_update', orderPayload);
       if (status === 'ready_for_pickup') {
-        io.emit('order:available', orderPayload);
-        io.to('riders').emit('order:available', orderPayload);
-        console.log(`📡 [Socket.io] Emitted order:available for order ${orderId}`);
+        // Proximity-based dispatch instead of broadcast
+        const dispatchOrder = req.app.get('dispatchOrder');
+        const storeLat = order.storeDetails?.latitude || 0;
+        const storeLng = order.storeDetails?.longitude || 0;
+        if (dispatchOrder && (storeLat !== 0 || storeLng !== 0)) {
+          dispatchOrder(io, orderPayload, storeLat, storeLng, 1, []);
+        } else {
+          // Fallback: broadcast if no store coords
+          io.to('riders').emit('order:dispatch', { ...orderPayload, dispatchRound: 3, countdownSecs: 30 });
+          console.log(`📡 [Dispatch fallback] No store coords — broadcast for order ${orderId}`);
+        }
+      }
+      // When rider accepted — cancel dispatch timer, remove from all riders' alert
+      if (status === 'accepted') {
+        const dispatchTimers = req.app.get('dispatchTimers');
+        if (dispatchTimers && dispatchTimers.has(orderId)) {
+          clearTimeout(dispatchTimers.get(orderId).timer);
+          dispatchTimers.delete(orderId);
+          console.log(`✅ [Dispatch] Cancelled timer for order ${orderId} — rider accepted`);
+        }
+        io.to(`store:${order.storeId}`).emit('order:status_update', orderPayload);
+        // Tell all riders to dismiss any open alert for this order
+        io.to('riders').emit('order:dispatch_cancelled', { orderId });
+        console.log(`📡 [Socket.io] Emitted order:dispatch_cancelled for order ${orderId}`);
+      }
+
+      // When delivered — free the rider so they can receive new dispatch events
+      if (status === 'delivered') {
+        const riderId = order.deliveryAgent?.riderId;
+        if (riderId) {
+          const riderRegistry = req.app.get('riderRegistry');
+          if (riderRegistry && riderRegistry.has(riderId)) {
+            riderRegistry.get(riderId).isBusy = false;
+            console.log(`🔓 [Rider] ${riderId} marked FREE — delivery complete, ready for new orders`);
+          }
+        }
       }
     }
 

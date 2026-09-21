@@ -12,6 +12,10 @@ import '../../bloc/profile/profile_event.dart';
 import '../../hive/hive_service.dart';
 import '../../constants/route_constants.dart';
 import '../../network/api_client.dart';
+import '../../bloc/transaction/transaction_bloc.dart';
+import '../../bloc/transaction/transaction_event.dart';
+import '../../bloc/cart/cart_bloc.dart';
+import '../../bloc/cart/cart_event.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final String initialName;
@@ -258,6 +262,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       await HiveService.setLoggedIn(true);
       if (!mounted) return;
       context.read<ProfileBloc>().add(UpdateProfileEvent(name, email, _imagePath));
+      TransactionBloc.instance.add(LoadTransactionsEvent());
+      CartBloc.instance.add(FetchCartAndWishlistEvent());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Registration completed successfully!'),

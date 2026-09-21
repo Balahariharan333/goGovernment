@@ -2,6 +2,8 @@ abstract class TransactionEvent {}
 
 class LoadTransactionsEvent extends TransactionEvent {}
 
+class ResetTransactionsEvent extends TransactionEvent {}
+
 class AddTransactionEvent extends TransactionEvent {
   final Map<String, dynamic> transaction;
   AddTransactionEvent(this.transaction);

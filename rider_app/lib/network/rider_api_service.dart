@@ -267,4 +267,31 @@ class RiderApiService {
       return null;
     }
   }
+
+  // --------------------------------------------------------------------------
+  // 9. Fetch Real Rider Profile Details from Backend
+  // --------------------------------------------------------------------------
+  static Future<Map<String, dynamic>?> fetchRiderProfile(String userId) async {
+    if (userId.isEmpty) return null;
+    final url = '${ApiClient.baseUrl}/auth/profile/$userId';
+    ApiClient.logRequest('GET', url);
+
+    try {
+      final response = await http
+          .get(Uri.parse(url), headers: ApiClient.defaultHeaders)
+          .timeout(const Duration(seconds: 10));
+
+      ApiClient.logResponse('GET', url, response.statusCode, response.body);
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map) {
+          return Map<String, dynamic>.from(decoded);
+        }
+      }
+      return null;
+    } catch (e) {
+      ApiClient.logError('GET', url, e);
+      return null;
+    }
+  }
 }

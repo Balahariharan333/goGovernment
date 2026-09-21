@@ -3,6 +3,7 @@ import '../services/admin_api_service.dart';
 import '../widgets/store_detail_dialog.dart';
 import '../widgets/complaint_detail_dialog.dart';
 import '../widgets/feedback_detail_dialog.dart';
+import '../widgets/live_monitoring_view.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -295,11 +296,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
           // Main Workspace
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            child: _activeSection == 'monitoring'
+                ? const LiveMonitoringView()
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                   // KPI Overview Cards
                   if (_activeSection == 'complaints')
                     _buildComplaintStatsRow()
@@ -402,57 +405,71 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: const Icon(Icons.account_balance_rounded, color: Color(0xFF38BDF8), size: 24),
           ),
           const SizedBox(width: 14),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'GoGovernment Administration Portal',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              Text(
-                'Municipal Citizen Grievance Redressal, Merchant Verification & Public Feedback',
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
-              ),
-            ],
-          ),
-
-          const SizedBox(width: 36),
-
-          // Segmented Switcher between Complaints, Stores, and Feedback
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
+          Flexible(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildSectionButton(
-                  title: 'Citizen Complaints',
-                  icon: Icons.campaign_rounded,
-                  sectionKey: 'complaints',
-                  count: _complaintStats['total'] ?? 0,
+                const Text(
+                  'GoGovernment Administration Portal',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(width: 4),
-                _buildSectionButton(
-                  title: 'Store Approvals',
-                  icon: Icons.storefront_rounded,
-                  sectionKey: 'stores',
-                  count: _storeStats['pending'] ?? 0,
-                ),
-                const SizedBox(width: 4),
-                _buildSectionButton(
-                  title: 'Citizen Feedback',
-                  icon: Icons.rate_review_rounded,
-                  sectionKey: 'feedback',
-                  count: _feedbackStats['total'] ?? 0,
+                Text(
+                  'Municipal Grievances, Merchants & Dispatch',
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
 
-          const Spacer(),
+          const SizedBox(width: 16),
+
+          // Segmented Switcher between Complaints, Stores, Feedback & Monitoring
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  _buildSectionButton(
+                    title: 'Citizen Complaints',
+                    icon: Icons.campaign_rounded,
+                    sectionKey: 'complaints',
+                    count: _complaintStats['total'] ?? 0,
+                  ),
+                  const SizedBox(width: 4),
+                  _buildSectionButton(
+                    title: 'Store Approvals',
+                    icon: Icons.storefront_rounded,
+                    sectionKey: 'stores',
+                    count: _storeStats['pending'] ?? 0,
+                  ),
+                  const SizedBox(width: 4),
+                  _buildSectionButton(
+                    title: 'Citizen Feedback',
+                    icon: Icons.rate_review_rounded,
+                    sectionKey: 'feedback',
+                    count: _feedbackStats['total'] ?? 0,
+                  ),
+                  const SizedBox(width: 4),
+                  _buildSectionButton(
+                    title: 'Live Dispatch & Riders',
+                    icon: Icons.radar_rounded,
+                    sectionKey: 'monitoring',
+                    count: 0,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 12),
 
           ElevatedButton.icon(
             icon: const Icon(Icons.refresh_rounded, size: 16),

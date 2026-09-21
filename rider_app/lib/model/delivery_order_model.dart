@@ -120,4 +120,36 @@ class DeliveryOrder {
 
   // Estimated payout for this delivery (e.g. delivery fee or standard 40 INR)
   double get estimatedPayout => deliveryCharge > 0 ? deliveryCharge : 40.0;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'orderId': orderId,
+      'userId': userId,
+      'storeId': storeId,
+      'itemTotal': itemTotal,
+      'deliveryCharge': deliveryCharge,
+      'grandTotal': grandTotal,
+      'paymentMethod': paymentMethod,
+      'paymentStatus': paymentStatus,
+      'status': status,
+      'deliveryAddress': {
+        'address': dropAddress,
+        'latitude': dropLat,
+        'longitude': dropLng,
+        'receiverName': receiverName,
+        'receiverPhone': receiverPhone,
+      },
+      'storeDetails': {
+        'name': storeName,
+        'address': storeAddress,
+        'latitude': storeLat,
+        'longitude': storeLng,
+        'phone': storePhone,
+      },
+      'deliveryAgent': {
+        'riderId': riderId,
+      },
+      'countdownSecs': 30,
+    };
+  }
 }

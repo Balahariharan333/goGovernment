@@ -308,9 +308,9 @@ class HiveService {
   }
 
   static double getWalletBalance() {
-    final val = _transactionBox.get(HiveKeys.walletBalance, defaultValue: 54789.0);
+    final val = _transactionBox.get(HiveKeys.walletBalance, defaultValue: 0.0);
     if (val is num) return val.toDouble();
-    return 54789.0;
+    return 0.0;
   }
 
   static Future<void> setWalletBalance(double amount) async {
@@ -318,9 +318,9 @@ class HiveService {
   }
 
   static int getCoinsBalance() {
-    final val = _transactionBox.get(HiveKeys.coinsBalance, defaultValue: 350);
+    final val = _transactionBox.get(HiveKeys.coinsBalance, defaultValue: 0);
     if (val is num) return val.toInt();
-    return 350;
+    return 0;
   }
 
   static Future<void> setCoinsBalance(int coins) async {

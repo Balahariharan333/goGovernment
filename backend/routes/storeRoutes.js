@@ -176,6 +176,34 @@ router.get('/approved', async (req, res) => {
   }
 });
 
+// 7. GET ALL STORES (Admin overview with stats)
+router.get('/', async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = {};
+    if (status) filter.status = status;
+
+    const stores = await Store.find(filter).sort({ createdAt: -1 });
+    const pendingCount = await Store.countDocuments({ status: 'pending' });
+    const approvedCount = await Store.countDocuments({ status: 'approved' });
+    const rejectedCount = await Store.countDocuments({ status: 'rejected' });
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        total: pendingCount + approvedCount + rejectedCount,
+        pending: pendingCount,
+        approved: approvedCount,
+        rejected: rejectedCount,
+      },
+      stores,
+    });
+  } catch (error) {
+    console.error('Error fetching stores:', error);
+    res.status(500).json({ error: 'Failed to fetch stores' });
+  }
+});
+
 // 4b. GET SINGLE STORE DETAILS BY ID
 router.get('/:storeId', async (req, res) => {
   try {
@@ -272,48 +300,6 @@ router.patch('/:storeId/status', async (req, res) => {
   } catch (error) {
     console.error('Error updating store status:', error);
     res.status(500).json({ error: 'Failed to update store status', details: error.message });
-  }
-});
-
-// 6. GET SINGLE STORE DETAILS
-router.get('/:storeId', async (req, res) => {
-  try {
-    const store = await Store.findOne({ storeId: req.params.storeId });
-    if (!store) {
-      return res.status(404).json({ error: 'Store not found' });
-    }
-    res.status(200).json({ success: true, store });
-  } catch (error) {
-    console.error('Error fetching store:', error);
-    res.status(500).json({ error: 'Failed to fetch store details' });
-  }
-});
-
-// 7. GET ALL STORES (Admin overview with stats)
-router.get('/', async (req, res) => {
-  try {
-    const { status } = req.query;
-    const filter = {};
-    if (status) filter.status = status;
-
-    const stores = await Store.find(filter).sort({ createdAt: -1 });
-    const pendingCount = await Store.countDocuments({ status: 'pending' });
-    const approvedCount = await Store.countDocuments({ status: 'approved' });
-    const rejectedCount = await Store.countDocuments({ status: 'rejected' });
-
-    res.status(200).json({
-      success: true,
-      stats: {
-        total: pendingCount + approvedCount + rejectedCount,
-        pending: pendingCount,
-        approved: approvedCount,
-        rejected: rejectedCount,
-      },
-      stores,
-    });
-  } catch (error) {
-    console.error('Error fetching stores:', error);
-    res.status(500).json({ error: 'Failed to fetch stores' });
   }
 });
 

@@ -192,5 +192,46 @@ class AdminApiService {
 
     return trimmed;
   }
+
+  // 9. Fetch Live Rider Locations
+  static Future<Map<String, dynamic>> getLiveRiders() async {
+    try {
+      final res = await http.get(Uri.parse('$_baseUrl/orders/riders/live-locations'));
+      debugPrint('📡 [AdminApiService] GET /orders/riders/live-locations status: ${res.statusCode}');
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        final list = body['riders'] as List? ?? body['data'] as List? ?? [];
+        return {
+          'success': true,
+          'riders': List<Map<String, dynamic>>.from(list),
+          'data': body,
+        };
+      }
+      return {'success': false, 'riders': [], 'error': 'Server error: ${res.statusCode}'};
+    } catch (e) {
+      debugPrint('⚠️ [AdminApiService] getLiveRiders error: $e');
+      return {'success': false, 'riders': [], 'error': 'Connection error: $e'};
+    }
+  }
+
+  // 10. Fetch All Orders for Live Monitoring
+  static Future<Map<String, dynamic>> getAllOrders() async {
+    try {
+      final res = await http.get(Uri.parse('$_baseUrl/orders'));
+      debugPrint('📦 [AdminApiService] GET /orders status: ${res.statusCode}');
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        final list = body['data'] as List? ?? body['orders'] as List? ?? [];
+        return {
+          'success': true,
+          'orders': List<Map<String, dynamic>>.from(list),
+        };
+      }
+      return {'success': false, 'orders': [], 'error': 'Server error: ${res.statusCode}'};
+    } catch (e) {
+      debugPrint('⚠️ [AdminApiService] getAllOrders error: $e');
+      return {'success': false, 'orders': [], 'error': 'Connection error: $e'};
+    }
+  }
 }
 

@@ -8,6 +8,8 @@ import '../profile/profile_bloc.dart';
 import '../profile/profile_event.dart';
 import '../cart/cart_bloc.dart';
 import '../cart/cart_event.dart';
+import '../transaction/transaction_bloc.dart';
+import '../transaction/transaction_event.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   AuthBloc()
@@ -62,10 +64,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           // Returning user: already completed registration, can mark logged in immediately
           await HiveService.setLoggedIn(true);
           ProfileBloc.instance.add(ReloadProfileEvent());
+          TransactionBloc.instance.add(LoadTransactionsEvent());
+          CartBloc.instance.add(FetchCartAndWishlistEvent());
         } else {
           // New user: Must complete registration screen before being marked logged in
           await HiveService.setLoggedIn(false);
           await HiveService.setUserName('');
+          TransactionBloc.instance.add(ResetTransactionsEvent());
         }
 
         emit(AuthSuccess(isNewUser: isNewUser));
@@ -79,6 +84,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await HiveService.clearAllHiveData();
       CartBloc.instance.add(ResetCartAndWishlistEvent());
       ProfileBloc.instance.add(ReloadProfileEvent());
+      TransactionBloc.instance.add(ResetTransactionsEvent());
       await Future.delayed(const Duration(milliseconds: 300));
       emit(AuthInitial());
     });

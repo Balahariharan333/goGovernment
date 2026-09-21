@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../hive/hive_service.dart';
+import '../../model/delivery_order_model.dart';
 import '../../network/rider_api_service.dart';
 import 'delivery_event.dart';
 import 'delivery_state.dart';
@@ -26,9 +27,14 @@ class DeliveryBloc extends Bloc<DeliveryEvent, DeliveryState> {
     final completedCount = HiveService.completedCount;
     final riderId = HiveService.userId;
 
-    // Fetch available orders from backend (Strictly filter for packages packed and ready for pickup)
-    final rawAvailable = await RiderApiService.fetchAvailableOrders();
-    final availableOrders = rawAvailable.where((o) => o.status == 'ready_for_pickup').toList();
+    // Fetch available orders from backend ONLY if rider is online
+    final List<DeliveryOrder> availableOrders;
+    if (currentOnline) {
+      final rawAvailable = await RiderApiService.fetchAvailableOrders();
+      availableOrders = rawAvailable.where((o) => o.status == 'ready_for_pickup').toList();
+    } else {
+      availableOrders = [];
+    }
 
     // Fetch rider assigned orders
     final riderOrders = await RiderApiService.fetchRiderOrders(riderId);

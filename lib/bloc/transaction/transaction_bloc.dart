@@ -1,23 +1,118 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../hive/hive_service.dart';
+import '../../network/wallet_api_service.dart';
 import 'transaction_event.dart';
 import 'transaction_state.dart';
 
 class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
-  TransactionBloc() : super(TransactionState.initial()) {
-    on<LoadTransactionsEvent>((event, emit) {
+  static final TransactionBloc instance = TransactionBloc._();
+
+  TransactionBloc() : this._();
+
+  TransactionBloc._() : super(TransactionState.initial()) {
+    on<ResetTransactionsEvent>((event, emit) {
+      emit(TransactionState(
+        transactions: [],
+        walletBalance: 0.0,
+        coinsBalance: 0,
+        showReorderScreen: false,
+        watermelonReturned: List.generate(4, (_) => false),
+      ));
+    });
+
+    on<LoadTransactionsEvent>((event, emit) async {
+      // 1. Instantly display cached Hive state
       final raw = HiveService.getMyTransactions();
       final clean = raw.where((tx) => !TransactionState.isMock(tx)).toList();
       if (clean.length != raw.length) {
         HiveService.saveAllTransactions(clean);
       }
-      final wallet = HiveService.getWalletBalance();
-      final coins = HiveService.getCoinsBalance();
+      final localWallet = HiveService.getWalletBalance();
+      final localCoins = HiveService.getCoinsBalance();
+
       emit(state.copyWith(
         transactions: clean,
-        walletBalance: wallet,
-        coinsBalance: coins,
+        walletBalance: localWallet,
+        coinsBalance: localCoins,
       ));
+
+      // 2. Fetch live balance, ledger, and order history from MongoDB backend
+      try {
+        final results = await Future.wait([
+          WalletApiService.getWalletDetails(),
+          WalletApiService.getOrderHistory(),
+        ]);
+
+        final walletRes = results[0] as Map<String, dynamic>;
+        final orderTxs = results[1] as List<Map<String, dynamic>>;
+
+        double serverWallet = localWallet;
+        int serverCoins = localCoins;
+        final nonOrderWalletTxs = <Map<String, dynamic>>[];
+
+        if (walletRes['success'] == true) {
+          serverWallet = (walletRes['walletBalance'] as num?)?.toDouble() ?? 0.0;
+          serverCoins = (walletRes['coinsBalance'] as num?)?.toInt() ?? 0;
+          final serverTxs = walletRes['transactions'] as List<dynamic>? ?? [];
+
+          for (final t in serverTxs) {
+            if (t is Map) {
+              final cat = t['category']?.toString();
+              final orderId = t['orderId']?.toString();
+              // Exclude order payment transactions from wallet ledger so they don't duplicate orderTxs
+              if (cat == 'order_payment' || (orderId != null && orderId.isNotEmpty)) {
+                continue;
+              }
+
+              final isCredit = t['type'] == 'credit';
+              final amt = (t['amount'] as num?)?.abs().toDouble() ?? 0.0;
+              nonOrderWalletTxs.add({
+                'id': t['transactionId'] ?? t['_id'] ?? '',
+                'title': t['title'] ?? 'Transaction',
+                'subtitle': t['subtitle'] ?? '',
+                'amount': isCredit ? '+₹${amt.toInt()}' : '-₹${amt.toInt()}',
+                'isPositive': isCredit,
+                'status': t['status'] == 'success' ? 'Successful' : (t['status'] ?? 'Successful'),
+                'date': t['subtitle']?.toString().split('·').last.trim() ?? '',
+                'items': [],
+                'address': t['paymentMethod'] ?? 'Wallet Account',
+                'listingPrice': '₹0.00',
+                'sellingPrice': '₹${amt.toInt()}',
+                'grandTotal': '₹${amt.toInt()}',
+                'paid': '₹${amt.toInt()}',
+                'paymentMethod': t['paymentMethod'] ?? 'Wallet',
+              });
+            }
+          }
+        }
+
+        // Merge order history with non-order wallet entries (top-ups, coin redemptions, refunds)
+        if (orderTxs.isNotEmpty || nonOrderWalletTxs.isNotEmpty) {
+          final combined = <Map<String, dynamic>>[
+            ...orderTxs,
+            ...nonOrderWalletTxs,
+          ];
+
+          await HiveService.setWalletBalance(serverWallet);
+          await HiveService.setCoinsBalance(serverCoins);
+          await HiveService.saveAllTransactions(combined);
+
+          emit(state.copyWith(
+            walletBalance: serverWallet,
+            coinsBalance: serverCoins,
+            transactions: combined,
+          ));
+        } else if (walletRes['success'] == true) {
+          await HiveService.setWalletBalance(serverWallet);
+          await HiveService.setCoinsBalance(serverCoins);
+          await HiveService.saveAllTransactions([]);
+          emit(state.copyWith(
+            walletBalance: serverWallet,
+            coinsBalance: serverCoins,
+            transactions: [],
+          ));
+        }
+      } catch (_) {}
     });
 
     on<AddTransactionEvent>((event, emit) async {
@@ -27,12 +122,13 @@ class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
     });
 
     on<AddWalletMoneyEvent>((event, emit) async {
-      final newBalance = state.walletBalance + event.amount;
-      await HiveService.setWalletBalance(newBalance);
+      // 1. Optimistic UI update
+      final optimisticBal = state.walletBalance + event.amount;
+      await HiveService.setWalletBalance(optimisticBal);
 
       final now = DateTime.now();
       final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      final dateStr = '${months[now.month - 1]} ${now.day} - ${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'pm' : 'am'}';
+      final dateStr = '${months[now.month - 1]} ${now.day} · ${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'pm' : 'am'}';
 
       final tx = {
         'id': 'TOP-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}',
@@ -51,12 +147,23 @@ class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
       };
 
       await HiveService.saveTransaction(tx);
-      final updatedList = HiveService.getMyTransactions();
-
       emit(state.copyWith(
-        walletBalance: newBalance,
-        transactions: updatedList,
+        walletBalance: optimisticBal,
+        transactions: HiveService.getMyTransactions(),
       ));
+
+      // 2. Persist to MongoDB backend
+      try {
+        final res = await WalletApiService.topupWallet(
+          amount: event.amount,
+          paymentMethod: event.paymentMethod,
+        );
+        if (res['success'] == true) {
+          final serverBal = (res['walletBalance'] as num?)?.toDouble() ?? optimisticBal;
+          await HiveService.setWalletBalance(serverBal);
+          emit(state.copyWith(walletBalance: serverBal));
+        }
+      } catch (_) {}
     });
 
     on<DeductWalletMoneyEvent>((event, emit) async {
@@ -83,14 +190,19 @@ class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
       await HiveService.setCoinsBalance(newCoins);
       await HiveService.setWalletBalance(newBalance);
 
+      // Call backend
+      try {
+        await WalletApiService.redeemCoins(coins: actualCoinsToDeduct);
+      } catch (_) {}
+
       final now = DateTime.now();
       final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      final dateStr = '${months[now.month - 1]} ${now.day} - ${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'pm' : 'am'}';
+      final dateStr = '${months[now.month - 1]} ${now.day} · ${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'pm' : 'am'}';
 
       final tx = {
         'id': 'RED-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}',
         'title': 'Coins Redeemed',
-        'subtitle': '${event.coins} coins converted · $dateStr',
+        'subtitle': '$actualCoinsToDeduct coins converted · $dateStr',
         'amount': '+₹${cashAmount.toInt()}',
         'isPositive': true,
         'status': 'Credited',

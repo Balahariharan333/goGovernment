@@ -15,8 +15,28 @@ import '../../widget/motion/fade_slide_transition.dart';
 import '../../widget/motion/tilt_3d_card.dart';
 import '../../widget/motion/spinning_3d_coin.dart';
 
-class TransactionScreen extends StatelessWidget {
+class TransactionScreen extends StatefulWidget {
   const TransactionScreen({super.key});
+
+  @override
+  State<TransactionScreen> createState() => _TransactionScreenState();
+}
+
+class _TransactionScreenState extends State<TransactionScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<TransactionBloc>().add(LoadTransactionsEvent());
+      }
+    });
+  }
+
+  Future<void> _handleRefresh() async {
+    context.read<TransactionBloc>().add(LoadTransactionsEvent());
+    await Future.delayed(const Duration(milliseconds: 600));
+  }
 
   void _showAddMoneyBottomSheet(BuildContext context) {
     final amountController = TextEditingController();
@@ -654,8 +674,11 @@ class TransactionScreen extends StatelessWidget {
         final int coinsBalance = state.coinsBalance;
         final transactions = state.transactions;
 
-        return SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
+        return RefreshIndicator(
+          onRefresh: _handleRefresh,
+          color: AppColors.primary,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1057,8 +1080,9 @@ class TransactionScreen extends StatelessWidget {
               SizedBox(height: Responsive.h(30)),
             ],
           ),
-        );
-      },
+        ),
+      );
+    },
     );
   }
 

@@ -40,7 +40,8 @@ class OrderStatusScreen extends StatefulWidget {
   State<OrderStatusScreen> createState() => _OrderStatusScreenState();
 }
 
-class _OrderStatusScreenState extends State<OrderStatusScreen> {
+class _OrderStatusScreenState extends State<OrderStatusScreen>
+    with SingleTickerProviderStateMixin {
 
   int get _currentStep => context.read<OrderTrackingBloc>().state.currentStep;
 
@@ -54,9 +55,15 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
   double? _riderLat;
   double? _riderLng;
 
+  late final AnimationController _routeAnimController;
+
   @override
   void initState() {
     super.initState();
+    _routeAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2500),
+    )..repeat();
     _orderId = widget.orderId ?? widget.transaction?['id']?.toString() ?? 'ORD-123456787654';
 
     final profile = context.read<ProfileBloc>().state;
@@ -107,6 +114,7 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
 
   @override
   void dispose() {
+    _routeAnimController.dispose();
     _socketSub?.cancel();
     _riderLocationSub?.cancel();
     super.dispose();
@@ -148,6 +156,9 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
       step = 1;
     } else if (status == 'ready_for_pickup') {
       step = 2;
+    } else if (status == 'accepted') {
+      // Rider accepted — on the way to store for pickup
+      step = 2;
     } else if (status == 'out_for_delivery') {
       step = 3;
     } else if (status == 'delivered') {
@@ -168,10 +179,23 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
   final List<String> _statusTitles = [
     'Arriving on time!',
     'Preparing your order',
-    'Packing with care',
-    'Rider on the way',
+    'Ready! Rider coming to pick up',
+    'Rider on the way 🚦',
     'Order Delivered 🎉'
   ];
+
+  /// Returns a more descriptive subtitle based on the raw server status.
+  String _getStatusSubtitle(String? rawStatus) {
+    switch (rawStatus) {
+      case 'placed':      return 'Order received by the store';
+      case 'preparing':   return 'Store is packing your items';
+      case 'ready_for_pickup': return 'Packed & waiting for a delivery rider';
+      case 'accepted':    return 'A rider has accepted — heading to store';
+      case 'out_for_delivery': return 'Rider is on the way to you';
+      case 'delivered':   return 'Successfully delivered!';
+      default:            return 'Processing your order';
+    }
+  }
 
   String _getEstimatedTimeDisplay() {
     final createdAt = _serverOrderData?['createdAt']?.toString();
@@ -188,6 +212,63 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
     return 'Est: ~25 mins';
   }
 
+  /// Generates a smooth quadratic Bezier curve between two coordinates.
+  List<LatLng> _generateCurvedPath(
+    LatLng start,
+    LatLng end, {
+    int pointCount = 60,
+    double curvature = 0.22,
+  }) {
+    final points = <LatLng>[];
+    final dLat = end.latitude - start.latitude;
+    final dLng = end.longitude - start.longitude;
+
+    final midLat = (start.latitude + end.latitude) / 2;
+    final midLng = (start.longitude + end.longitude) / 2;
+
+    // Control point offset perpendicularly — negative sign bows the arc downward (south)
+    final ctrlLat = midLat + dLng * curvature;
+    final ctrlLng = midLng - dLat * curvature;
+
+    for (int i = 0; i <= pointCount; i++) {
+      final t = i / pointCount;
+      final oneMinusT = 1.0 - t;
+      final lat = oneMinusT * oneMinusT * start.latitude +
+          2 * oneMinusT * t * ctrlLat +
+          t * t * end.latitude;
+      final lng = oneMinusT * oneMinusT * start.longitude +
+          2 * oneMinusT * t * ctrlLng +
+          t * t * end.longitude;
+      points.add(LatLng(lat, lng));
+    }
+    return points;
+  }
+
+  /// Evaluates coordinate on the Bezier curve at parameter t [0.0, 1.0].
+  LatLng _getPointOnCurve(
+    LatLng start,
+    LatLng end,
+    double t, {
+    double curvature = 0.22,
+  }) {
+    final clampedT = t.clamp(0.0, 1.0);
+    final dLat = end.latitude - start.latitude;
+    final dLng = end.longitude - start.longitude;
+    final midLat = (start.latitude + end.latitude) / 2;
+    final midLng = (start.longitude + end.longitude) / 2;
+    final ctrlLat = midLat + dLng * curvature;
+    final ctrlLng = midLng - dLat * curvature;
+
+    final oneMinusT = 1.0 - clampedT;
+    final lat = oneMinusT * oneMinusT * start.latitude +
+        2 * oneMinusT * clampedT * ctrlLat +
+        clampedT * clampedT * end.latitude;
+    final lng = oneMinusT * oneMinusT * start.longitude +
+        2 * oneMinusT * clampedT * ctrlLng +
+        clampedT * clampedT * end.longitude;
+    return LatLng(lat, lng);
+  }
+
   Widget _buildTrackingMap(int currentStep) {
     final storeDetails = _serverOrderData?['storeDetails'] as Map<String, dynamic>?;
     final deliveryAddr = _serverOrderData?['deliveryAddress'] as Map<String, dynamic>?;
@@ -201,112 +282,184 @@ class _OrderStatusScreenState extends State<OrderStatusScreen> {
     final dropLng = (deliveryAddr?['longitude'] as num?)?.toDouble() ?? 77.6000;
     final dropPoint = LatLng(dropLat, dropLng);
 
+    // Pre-calculate the curved path points between store and drop destination
+    final curvePoints = _generateCurvedPath(storePoint, dropPoint, pointCount: 60);
+
     final agentLoc = deliveryAgent?['currentLocation'] as Map<String, dynamic>?;
+    final defaultRiderPos = _getPointOnCurve(
+      storePoint,
+      dropPoint,
+      currentStep >= 3 ? 0.65 : 0.20,
+    );
     final dynamicRiderLat = _riderLat ??
         (agentLoc?['latitude'] as num?)?.toDouble() ??
-        (storeLat + (dropLat - storeLat) * (currentStep >= 3 ? 0.65 : 0.15));
+        defaultRiderPos.latitude;
     final dynamicRiderLng = _riderLng ??
         (agentLoc?['longitude'] as num?)?.toDouble() ??
-        (storeLng + (dropLng - storeLng) * (currentStep >= 3 ? 0.65 : 0.15));
+        defaultRiderPos.longitude;
     final riderPoint = LatLng(dynamicRiderLat, dynamicRiderLng);
 
-    final markers = <Marker>[
-      Marker(
-        point: storePoint,
-        width: 36,
-        height: 36,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.15),
-                blurRadius: 6,
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.all(6),
-          child: const Icon(
-            Icons.storefront_rounded,
-            color: AppColors.primary,
-            size: 20,
-          ),
-        ),
-      ),
-      Marker(
-        point: dropPoint,
-        width: 36,
-        height: 36,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.15),
-                blurRadius: 6,
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.all(6),
-          child: const Icon(
-            Icons.person_pin_circle_rounded,
-            color: Colors.blueAccent,
-            size: 20,
-          ),
-        ),
-      ),
-    ];
+    return AnimatedBuilder(
+      animation: _routeAnimController,
+      builder: (context, _) {
+        final progress = _routeAnimController.value;
 
-    if (currentStep >= 2 && currentStep <= 3) {
-      markers.add(
-        Marker(
-          point: riderPoint,
-          width: 38,
-          height: 38,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.green.shade600,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.green.withValues(alpha: 0.4),
-                  blurRadius: 8,
-                  spreadRadius: 2,
+        // Calculate animated travelling pulse segment along the curved route
+        final totalCount = curvePoints.length;
+        final headIdx = (progress * (totalCount - 1)).round().clamp(1, totalCount - 1);
+        final tailIdx = ((progress - 0.28) * (totalCount - 1)).round().clamp(0, totalCount - 1);
+        final animatedActivePoints = curvePoints.sublist(tailIdx, headIdx + 1);
+
+        final pulseHeadPoint = _getPointOnCurve(storePoint, dropPoint, progress);
+
+        final markers = <Marker>[
+          // Store marker
+          Marker(
+            point: storePoint,
+            width: 38,
+            height: 38,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(6),
+              child: const Icon(
+                Icons.storefront_rounded,
+                color: AppColors.primary,
+                size: 22,
+              ),
+            ),
+          ),
+          // Drop-off destination marker
+          Marker(
+            point: dropPoint,
+            width: 38,
+            height: 38,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(6),
+              child: const Icon(
+                Icons.person_pin_circle_rounded,
+                color: Colors.blueAccent,
+                size: 22,
+              ),
+            ),
+          ),
+          // Animated traveling pulse beacon from store to destination
+          Marker(
+            point: pulseHeadPoint,
+            width: 26,
+            height: 26,
+            child: Center(
+              child: Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.primary,
+                  border: Border.all(color: Colors.white, width: 2.2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.7),
+                      blurRadius: 10,
+                      spreadRadius: 3,
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            padding: const EdgeInsets.all(6),
-            child: const Icon(
-              Icons.motorcycle_rounded,
-              color: Colors.white,
-              size: 20,
+              ),
             ),
           ),
-        ),
-      );
-    }
+        ];
 
-    final polylines = <Polyline>[
-      Polyline(
-        points: [storePoint, dropPoint],
-        strokeWidth: 3.5,
-        color: AppColors.primary.withValues(alpha: 0.7),
-      ),
-    ];
+        // Rider marker when active
+        if (currentStep >= 2 && currentStep <= 3) {
+          markers.add(
+            Marker(
+              point: riderPoint,
+              width: 40,
+              height: 40,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.green.shade600,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.green.withValues(alpha: 0.5),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(7),
+                child: const Icon(
+                  Icons.motorcycle_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ),
+          );
+        }
 
-    final centerPoint = currentStep >= 3 ? riderPoint : storePoint;
+        final polylines = <Polyline>[
+          // Outer subtle glow along the curve
+          Polyline(
+            points: curvePoints,
+            strokeWidth: 6.0,
+            color: AppColors.primary.withValues(alpha: 0.12),
+            strokeCap: StrokeCap.round,
+            strokeJoin: StrokeJoin.round,
+          ),
+          // Base curved route path
+          Polyline(
+            points: curvePoints,
+            strokeWidth: 3.5,
+            color: AppColors.primary.withValues(alpha: 0.35),
+            strokeCap: StrokeCap.round,
+            strokeJoin: StrokeJoin.round,
+          ),
+          // High-visibility animated pulse segment traveling from store to destination
+          if (animatedActivePoints.length >= 2)
+            Polyline(
+              points: animatedActivePoints,
+              strokeWidth: 4.8,
+              color: AppColors.primary,
+              strokeCap: StrokeCap.round,
+              strokeJoin: StrokeJoin.round,
+            ),
+        ];
 
-    return CommonMap(
-      key: ValueKey('map_${currentStep}_${riderPoint.latitude}_${riderPoint.longitude}'),
-      center: centerPoint,
-      zoom: 14.5,
-      markers: markers,
-      polylines: polylines,
-      showUserLocation: false,
-      mapState: currentStep == 4 ? MapState.navigation : MapState.directions,
-      isWalkMode: false,
+        final centerPoint = currentStep >= 3 ? riderPoint : storePoint;
+
+        return CommonMap(
+          key: ValueKey('map_${currentStep}_$_orderId'),
+          center: centerPoint,
+          zoom: 14.5,
+          markers: markers,
+          polylines: polylines,
+          showUserLocation: false,
+          mapState: currentStep == 4 ? MapState.navigation : MapState.directions,
+          isWalkMode: false,
+        );
+      },
     );
   }
 

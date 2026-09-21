@@ -28,6 +28,11 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<TransactionBloc>().add(LoadTransactionsEvent());
+      }
+    });
     _fetchLiveOrders();
 
     // Listen to real-time status updates without battery drain
@@ -47,7 +52,11 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
   Future<void> _fetchLiveOrders() async {
     try {
       final serverOrders = await OrderApiService.fetchUserOrders();
-      if (!mounted || serverOrders.isEmpty) return;
+      if (!mounted) return;
+      if (serverOrders.isEmpty) {
+        context.read<TransactionBloc>().add(LoadTransactionsEvent());
+        return;
+      }
 
       final currentTxs = context.read<TransactionBloc>().state.transactions;
 

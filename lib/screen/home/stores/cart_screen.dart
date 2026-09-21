@@ -139,6 +139,311 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
+  // ── Core order placement logic ──────────────────────────────────────────────
+  Future<void> _placeOrder({
+    required Map<String, int> cartItemsMap,
+    required int grandTotal,
+    required int itemOriginalTotal,
+    required int itemDiscountedTotal,
+    required int deliveryCharge,
+    required int handlingCharge,
+    required int effectiveCouponDiscount,
+    required int coinsDiscount,
+    required int coinsDeducted,
+    required String paymentMethod,
+  }) async {
+    int parsePrice(dynamic val, int fallback) {
+      if (val == null) return fallback;
+      if (val is int) return val;
+      if (val is double) return val.toInt();
+      if (val is num) return val.toInt();
+      if (val is String) {
+        final clean = val.replaceAll('₹', '').replaceAll(',', '').trim();
+        final parsed = double.tryParse(clean);
+        if (parsed != null) return parsed.toInt();
+      }
+      return fallback;
+    }
+
+    String resolvedStoreId = 'STORE_479113';
+    final backendItems = <Map<String, dynamic>>[];
+    final orderItems = cartItemsMap.entries.map((e) {
+      final prod = CartManager.instance.productDetails[e.key] ?? {};
+      if (prod['storeId'] != null && prod['storeId'].toString().isNotEmpty) {
+        resolvedStoreId = prod['storeId'].toString();
+      }
+      final p = parsePrice(prod['price'], 83);
+      final orig = parsePrice(prod['originalPrice'], 106);
+      backendItems.add({
+        'productId': e.key,
+        'title': prod['title'] ?? 'Product',
+        'price': p.toDouble(),
+        'originalPrice': orig.toDouble(),
+        'quantity': e.value,
+        'image': prod['image'] ?? '',
+        'unit': prod['unit'] ?? '1 Units',
+      });
+      return {
+        'id': e.key,
+        'title': prod['title'] ?? 'Product',
+        'price': '₹$p',
+        'qty': e.value,
+        'image': prod['image'] ?? 'assets/images/product1.png',
+      };
+    }).toList();
+
+    String orderId = 'ORD_${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
+    final String storeTitle = widget.storeType == 'medical' ? 'Apothecary Pharmacy' : 'Bangalore Horticulture';
+    final now = DateTime.now();
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final String dateFormatted =
+        '${now.day} ${months[now.month - 1]} ${now.year}, ${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'pm' : 'am'}';
+    final String shortDate =
+        '${months[now.month - 1]} ${now.day} - ${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'pm' : 'am'}';
+
+    final selectedAddr = context.read<AddressBloc>().state.selectedAddress;
+    final String deliveryAddr =
+        selectedAddr?.description ?? (_deliveryAddress.isNotEmpty ? _deliveryAddress : 'Location not specified');
+
+    // Create order in MongoDB backend
+    final serverOrder = await OrderApiService.createOrder(
+      storeId: resolvedStoreId,
+      items: backendItems,
+      itemTotal: itemDiscountedTotal.toDouble(),
+      deliveryCharge: deliveryCharge.toDouble(),
+      handlingCharge: handlingCharge.toDouble(),
+      couponDiscount: effectiveCouponDiscount.toDouble(),
+      coinsDiscount: coinsDiscount.toDouble(),
+      grandTotal: grandTotal.toDouble(),
+      paymentMethod: paymentMethod,
+      deliveryAddress: {
+        'address': deliveryAddr,
+        'latitude': selectedAddr?.latitude ?? 12.9784,
+        'longitude': selectedAddr?.longitude ?? 77.6408,
+        'receiverName': _receiverName ?? HiveService.userName,
+        'receiverPhone': _receiverPhone ?? HiveService.userPhone,
+      },
+      storeDetails: {'storeId': resolvedStoreId, 'name': storeTitle},
+    );
+
+    if (serverOrder != null && serverOrder['orderId'] != null) {
+      orderId = serverOrder['orderId'].toString();
+    }
+
+    final newTx = {
+      'id': orderId,
+      'title': storeTitle,
+      'subtitle': 'Sent by you · $shortDate',
+      'amount': '-$grandTotal',
+      'isPositive': false,
+      'status': 'Processing',
+      'date': dateFormatted,
+      'items': orderItems,
+      'address': deliveryAddr,
+      'listingPrice': '₹$itemOriginalTotal',
+      'sellingPrice': '₹$itemDiscountedTotal',
+      'grandTotal': '₹$grandTotal',
+      'paid': '₹$grandTotal',
+      'paymentMethod': paymentMethod,
+    };
+
+    if (!mounted) return;
+
+    // Deduct coins if used
+    if (coinsDeducted > 0) {
+      // ignore: use_build_context_synchronously
+      context.read<TransactionBloc>().add(SpendCoinsEvent(coinsDeducted));
+    }
+
+    // Deduct wallet if payment is Wallet
+    if (paymentMethod == 'Wallet') {
+      // ignore: use_build_context_synchronously
+      context.read<TransactionBloc>().add(DeductWalletMoneyEvent(grandTotal.toDouble()));
+    }
+
+    // Record transaction in Hive
+    // ignore: use_build_context_synchronously
+    context.read<TransactionBloc>().add(AddTransactionEvent(newTx));
+
+    _isCheckingOut = true;
+    CartManager.instance.clear();
+
+    if (!mounted) return;
+    // ignore: use_build_context_synchronously
+    Navigator.pushReplacementNamed(
+      context,
+      RouteConstants.orderSuccess,
+      arguments: {
+        'amount': grandTotal.toDouble(),
+        'subtitle': 'Paid to',
+        'title': storeTitle,
+        'dateString': dateFormatted,
+        'buttonText': 'Track Order',
+        'nextRoute': RouteConstants.orderStatus,
+        'nextRouteArgs': {
+          'storeType': widget.storeType,
+          'orderId': orderId,
+          'transaction': newTx,
+        },
+      },
+    );
+  }
+
+  // ── Payment Method Bottom Sheet ─────────────────────────────────────────────
+  void _showPaymentSheet({
+    required BuildContext context,
+    required Map<String, int> cartItemsMap,
+    required int grandTotal,
+    required int itemOriginalTotal,
+    required int itemDiscountedTotal,
+    required int deliveryCharge,
+    required int handlingCharge,
+    required int effectiveCouponDiscount,
+    required int coinsDiscount,
+    required int coinsDeducted,
+    required double walletBalance,
+  }) {
+    bool isProcessing = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheetState) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: EdgeInsets.fromLTRB(
+                Responsive.w(20),
+                Responsive.h(16),
+                Responsive.w(20),
+                Responsive.h(32),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Drag handle
+                  Center(
+                    child: Container(
+                      width: Responsive.w(40),
+                      height: Responsive.h(4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: Responsive.h(16)),
+
+                  // Title
+                  CustomText.header(
+                    'Choose Payment Method',
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  SizedBox(height: Responsive.h(6)),
+                  CustomText.title(
+                    'Total payable: ₹$grandTotal',
+                    fontSize: 13,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  SizedBox(height: Responsive.h(20)),
+
+                  // ── Wallet option ──
+                  _PaymentTile(
+                    icon: Icons.account_balance_wallet_rounded,
+                    title: 'Wallet',
+                    subtitle: 'Balance: ₹${walletBalance.toStringAsFixed(2)}',
+                    enabled: walletBalance >= grandTotal,
+                    disabledHint: 'Insufficient balance',
+                    isProcessing: isProcessing,
+                    onTap: () async {
+                      if (isProcessing) return;
+                      setSheetState(() => isProcessing = true);
+                      Navigator.pop(sheetCtx);
+                      await _placeOrder(
+                        cartItemsMap: cartItemsMap,
+                        grandTotal: grandTotal,
+                        itemOriginalTotal: itemOriginalTotal,
+                        itemDiscountedTotal: itemDiscountedTotal,
+                        deliveryCharge: deliveryCharge,
+                        handlingCharge: handlingCharge,
+                        effectiveCouponDiscount: effectiveCouponDiscount,
+                        coinsDiscount: coinsDiscount,
+                        coinsDeducted: coinsDeducted,
+                        paymentMethod: 'Wallet',
+                      );
+                    },
+                  ),
+                  SizedBox(height: Responsive.h(12)),
+
+                  // ── UPI / Online option ──
+                  _PaymentTile(
+                    icon: Icons.payment_rounded,
+                    title: 'UPI / Online',
+                    subtitle: 'Pay via UPI, Net Banking or Cards',
+                    enabled: true,
+                    isProcessing: isProcessing,
+                    onTap: () async {
+                      if (isProcessing) return;
+                      setSheetState(() => isProcessing = true);
+                      Navigator.pop(sheetCtx);
+                      await _placeOrder(
+                        cartItemsMap: cartItemsMap,
+                        grandTotal: grandTotal,
+                        itemOriginalTotal: itemOriginalTotal,
+                        itemDiscountedTotal: itemDiscountedTotal,
+                        deliveryCharge: deliveryCharge,
+                        handlingCharge: handlingCharge,
+                        effectiveCouponDiscount: effectiveCouponDiscount,
+                        coinsDiscount: coinsDiscount,
+                        coinsDeducted: coinsDeducted,
+                        paymentMethod: 'UPI',
+                      );
+                    },
+                  ),
+                  SizedBox(height: Responsive.h(12)),
+
+                  // ── Cash on Delivery option ──
+                  _PaymentTile(
+                    icon: Icons.money_rounded,
+                    title: 'Cash on Delivery',
+                    subtitle: 'Pay when your order arrives',
+                    enabled: true,
+                    isProcessing: isProcessing,
+                    onTap: () async {
+                      if (isProcessing) return;
+                      setSheetState(() => isProcessing = true);
+                      Navigator.pop(sheetCtx);
+                      await _placeOrder(
+                        cartItemsMap: cartItemsMap,
+                        grandTotal: grandTotal,
+                        itemOriginalTotal: itemOriginalTotal,
+                        itemDiscountedTotal: itemDiscountedTotal,
+                        deliveryCharge: deliveryCharge,
+                        handlingCharge: handlingCharge,
+                        effectiveCouponDiscount: effectiveCouponDiscount,
+                        coinsDiscount: coinsDiscount,
+                        coinsDeducted: coinsDeducted,
+                        paymentMethod: 'Cash on Delivery',
+                      );
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final int totalCount = CartManager.instance.totalCartCount;
@@ -587,165 +892,19 @@ class _CartScreenState extends State<CartScreen> {
                             return;
                           }
 
-                          showDialog(
+                          // ── Payment Method Bottom Sheet ──
+                          _showPaymentSheet(
                             context: context,
-                            builder: (dialogContext) => AlertDialog(
-                              backgroundColor: AppColors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(Responsive.w(16)),
-                              ),
-                              title: CustomText.header('Select Payment Status', fontSize: 18, fontWeight: FontWeight.bold),
-                              content: CustomText.title('Simulate payment success or failure.', fontSize: 14),
-                              actions: [
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.pop(dialogContext); // Close dialog
-                                    // Show failure SnackBar
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: const Text('Payment failed! Please try again.'),
-                                        backgroundColor: AppColors.error,
-                                        behavior: SnackBarBehavior.floating,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(Responsive.w(12)),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  child: CustomText.title('Fail', color: AppColors.error, fontSize: 14, fontWeight: FontWeight.bold),
-                                ),
-                                TextButton(
-                                  onPressed: () async {
-                                    Navigator.pop(dialogContext); // Close dialog
-
-                                    // Build order items for UI and backend
-                                    String resolvedStoreId = 'STORE_479113';
-                                    final backendItems = <Map<String, dynamic>>[];
-                                    final orderItems = cartItemsMap.entries.map((e) {
-                                      final prod = CartManager.instance.productDetails[e.key] ?? {};
-                                      if (prod['storeId'] != null && prod['storeId'].toString().isNotEmpty) {
-                                        resolvedStoreId = prod['storeId'].toString();
-                                      }
-                                      final p = parsePrice(prod['price'], 83);
-                                      final orig = parsePrice(prod['originalPrice'], 106);
-
-                                      backendItems.add({
-                                        'productId': e.key,
-                                        'title': prod['title'] ?? 'Product',
-                                        'price': p.toDouble(),
-                                        'originalPrice': orig.toDouble(),
-                                        'quantity': e.value,
-                                        'image': prod['image'] ?? '',
-                                        'unit': prod['unit'] ?? '1 Units',
-                                      });
-
-                                      return {
-                                        'id': e.key,
-                                        'title': prod['title'] ?? 'Product',
-                                        'price': '₹$p',
-                                        'qty': e.value,
-                                        'image': prod['image'] ?? 'assets/images/product1.png',
-                                      };
-                                    }).toList();
-
-                                    String orderId = 'ORD_${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
-                                    final String storeTitle = widget.storeType == 'medical'
-                                        ? 'Apothecary Pharmacy'
-                                        : 'Bangalore Horticulture';
-                                    final now = DateTime.now();
-                                    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                                    final String dateFormatted = '${now.day} ${months[now.month - 1]} ${now.year}, ${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'pm' : 'am'}';
-                                    final String shortDate = '${months[now.month - 1]} ${now.day} - ${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'pm' : 'am'}';
-
-                                    final selectedAddr = context.read<AddressBloc>().state.selectedAddress;
-                                    final String deliveryAddr = selectedAddr?.description ??
-                                        (_deliveryAddress.isNotEmpty ? _deliveryAddress : 'Location not specified');
-
-                                    // Create order in backend MongoDB
-                                    final serverOrder = await OrderApiService.createOrder(
-                                      storeId: resolvedStoreId,
-                                      items: backendItems,
-                                      itemTotal: itemDiscountedTotal.toDouble(),
-                                      deliveryCharge: deliveryCharge.toDouble(),
-                                      handlingCharge: handlingCharge.toDouble(),
-                                      couponDiscount: effectiveCouponDiscount.toDouble(),
-                                      coinsDiscount: coinsDiscount.toDouble(),
-                                      grandTotal: grandTotal.toDouble(),
-                                      paymentMethod: 'Wallet Account',
-                                      deliveryAddress: {
-                                        'address': deliveryAddr,
-                                        'latitude': selectedAddr?.latitude ?? 12.9784,
-                                        'longitude': selectedAddr?.longitude ?? 77.6408,
-                                        'receiverName': _receiverName ?? HiveService.userName,
-                                        'receiverPhone': _receiverPhone ?? HiveService.userPhone,
-                                      },
-                                      storeDetails: {
-                                        'storeId': resolvedStoreId,
-                                        'name': storeTitle,
-                                      },
-                                    );
-
-                                    if (serverOrder != null && serverOrder['orderId'] != null) {
-                                      orderId = serverOrder['orderId'].toString();
-                                    }
-
-                                    final newTx = {
-                                      'id': orderId,
-                                      'title': storeTitle,
-                                      'subtitle': 'Sent by you · $shortDate',
-                                      'amount': '-$grandTotal',
-                                      'isPositive': false,
-                                      'status': 'Processing',
-                                      'date': dateFormatted,
-                                      'items': orderItems,
-                                      'address': deliveryAddr,
-                                      'listingPrice': '₹$itemOriginalTotal',
-                                      'sellingPrice': '₹$itemDiscountedTotal',
-                                      'grandTotal': '₹$grandTotal',
-                                      'paid': '₹$grandTotal',
-                                    };
-
-                                    // Deduct coins if used
-                                    if (coinsDeducted > 0) {
-                                      context.read<TransactionBloc>().add(SpendCoinsEvent(coinsDeducted));
-                                    }
-
-                                    // Deduct wallet balance
-                                    context.read<TransactionBloc>().add(DeductWalletMoneyEvent(grandTotal.toDouble()));
-
-                                    // Save to Hive via TransactionBloc
-                                    context.read<TransactionBloc>().add(AddTransactionEvent(newTx));
-
-                                    // Set checking out flag so empty cart doesn't trigger auto-pop
-                                    _isCheckingOut = true;
-
-                                    // Clear cart
-                                    CartManager.instance.clear();
-
-                                    // Proceed to success screen
-                                    if (!mounted) return;
-                                    Navigator.pushReplacementNamed(
-                                      context,
-                                      RouteConstants.orderSuccess,
-                                      arguments: {
-                                        'amount': grandTotal.toDouble(),
-                                        'subtitle': 'Paid to',
-                                        'title': storeTitle,
-                                        'dateString': dateFormatted,
-                                        'buttonText': 'Track Order',
-                                        'nextRoute': RouteConstants.orderStatus,
-                                        'nextRouteArgs': {
-                                          'storeType': widget.storeType,
-                                          'orderId': orderId,
-                                          'transaction': newTx,
-                                        },
-                                      },
-                                    );
-                                  },
-                                  child: CustomText.title('Succeed', color: AppColors.success, fontSize: 14, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
+                            cartItemsMap: cartItemsMap,
+                            grandTotal: grandTotal,
+                            itemOriginalTotal: itemOriginalTotal,
+                            itemDiscountedTotal: itemDiscountedTotal,
+                            deliveryCharge: deliveryCharge,
+                            handlingCharge: handlingCharge,
+                            effectiveCouponDiscount: effectiveCouponDiscount,
+                            coinsDiscount: coinsDiscount,
+                            coinsDeducted: coinsDeducted,
+                            walletBalance: walletBalance,
                           );
                         },
                         child: Container(
@@ -1879,6 +2038,115 @@ class _CartScreenState extends State<CartScreen> {
           },
         );
       },
+    );
+  }
+}
+
+// ── Payment Tile Widget ───────────────────────────────────────────────────────
+class _PaymentTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool enabled;
+  final String? disabledHint;
+  final bool isProcessing;
+  final VoidCallback onTap;
+
+  const _PaymentTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.enabled,
+    required this.isProcessing,
+    required this.onTap,
+    this.disabledHint,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bool canTap = enabled && !isProcessing;
+    return GestureDetector(
+      onTap: canTap ? onTap : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: EdgeInsets.symmetric(
+          horizontal: Responsive.w(16),
+          vertical: Responsive.h(14),
+        ),
+        decoration: BoxDecoration(
+          color: canTap ? Colors.white : Colors.grey.shade50,
+          border: Border.all(
+            color: canTap ? AppColors.primary.withValues(alpha: 0.35) : Colors.grey.shade300,
+            width: 1.5,
+          ),
+          borderRadius: BorderRadius.circular(Responsive.w(14)),
+          boxShadow: canTap
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : [],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: Responsive.w(44),
+              height: Responsive.w(44),
+              decoration: BoxDecoration(
+                color: canTap
+                    ? AppColors.primary.withValues(alpha: 0.10)
+                    : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(Responsive.w(12)),
+              ),
+              child: Icon(
+                icon,
+                color: canTap ? AppColors.primary : Colors.grey.shade400,
+                size: Responsive.w(22),
+              ),
+            ),
+            SizedBox(width: Responsive.w(14)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CustomText.title(
+                    title,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: canTap ? Colors.black87 : Colors.grey.shade500,
+                  ),
+                  SizedBox(height: Responsive.h(2)),
+                  CustomText.title(
+                    !enabled && disabledHint != null ? disabledHint! : subtitle,
+                    fontSize: 12,
+                    color: !enabled && disabledHint != null
+                        ? Colors.red.shade400
+                        : Colors.grey.shade500,
+                  ),
+                ],
+              ),
+            ),
+            if (isProcessing)
+              SizedBox(
+                width: Responsive.w(18),
+                height: Responsive.w(18),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                ),
+              )
+            else
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: Responsive.w(14),
+                color: canTap ? AppColors.primary : Colors.grey.shade300,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

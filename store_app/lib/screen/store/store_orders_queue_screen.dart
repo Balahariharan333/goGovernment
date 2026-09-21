@@ -28,7 +28,7 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _fetchOrders();
 
     // Subscribe to real-time Socket.io events for this store
@@ -121,6 +121,7 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
     final placedOrders = _orders.where((o) => o['status'] == 'placed').toList();
     final preparingOrders = _orders.where((o) => o['status'] == 'preparing').toList();
     final readyOrders = _orders.where((o) => o['status'] == 'ready_for_pickup').toList();
+    final acceptedOrders = _orders.where((o) => o['status'] == 'accepted').toList();
     final completedOrders = _orders.where((o) => o['status'] == 'delivered').toList();
 
     return Scaffold(
@@ -150,6 +151,7 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
             Tab(text: 'New (${placedOrders.length})'),
             Tab(text: 'Packing (${preparingOrders.length})'),
             Tab(text: 'Ready (${readyOrders.length})'),
+            Tab(text: 'Rider Coming (${acceptedOrders.length})'),
             Tab(text: 'Delivered (${completedOrders.length})'),
           ],
         ),
@@ -165,6 +167,7 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
                     _buildOrdersList(placedOrders),
                     _buildOrdersList(preparingOrders),
                     _buildOrdersList(readyOrders),
+                    _buildOrdersList(acceptedOrders),
                     _buildOrdersList(completedOrders),
                   ],
                 ),
@@ -405,13 +408,18 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
             ),
 
           // Action Buttons for Store Owner
-          _buildStoreActions(orderId, status),
+          _buildStoreActions(orderId, status, hasRider: hasRider, agent: agent),
         ],
       ),
     );
   }
 
-  Widget _buildStoreActions(String orderId, String status) {
+  Widget _buildStoreActions(
+    String orderId,
+    String status, {
+    bool hasRider = false,
+    Map agent = const {},
+  }) {
     if (status == 'placed') {
       return SizedBox(
         width: double.infinity,
@@ -457,6 +465,39 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
           ],
         ),
       );
+    } else if (status == 'accepted') {
+      // Rider has accepted and is heading to the store
+      return Container(
+        padding: EdgeInsets.symmetric(vertical: Responsive.h(10)),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE8F5E9),
+          borderRadius: BorderRadius.circular(Responsive.w(10)),
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.two_wheeler_rounded, color: AppColors.success, size: 20),
+            SizedBox(width: Responsive.w(8)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CustomText.caption(
+                  'Rider Accepted — On the Way to Store',
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.success,
+                ),
+                if (hasRider)
+                  CustomText.caption(
+                    'Rider: ${agent['name']} · ${agent['vehicleNumber'] ?? ''}',
+                    color: AppColors.grayFont,
+                    fontSize: Responsive.sp(11),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      );
     } else if (status == 'out_for_delivery') {
       return Container(
         padding: EdgeInsets.symmetric(vertical: Responsive.h(8)),
@@ -488,52 +529,37 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
 
   Color _statusColor(String status) {
     switch (status) {
-      case 'placed':
-        return AppColors.primary;
-      case 'preparing':
-        return Colors.orange;
-      case 'ready_for_pickup':
-        return AppColors.warning;
-      case 'out_for_delivery':
-        return AppColors.info;
-      case 'delivered':
-        return AppColors.success;
-      default:
-        return AppColors.grayFont;
+      case 'placed':           return AppColors.primary;
+      case 'preparing':        return Colors.orange;
+      case 'ready_for_pickup': return AppColors.warning;
+      case 'accepted':         return AppColors.success;
+      case 'out_for_delivery': return AppColors.info;
+      case 'delivered':        return AppColors.success;
+      default:                 return AppColors.grayFont;
     }
   }
 
   Color _statusBorderColor(String status) {
     switch (status) {
-      case 'placed':
-        return AppColors.primary.withOpacity(0.5);
-      case 'preparing':
-        return Colors.orange.withOpacity(0.5);
-      case 'ready_for_pickup':
-        return AppColors.warning.withOpacity(0.5);
-      case 'out_for_delivery':
-        return AppColors.info.withOpacity(0.5);
-      case 'delivered':
-        return AppColors.border;
-      default:
-        return AppColors.border;
+      case 'placed':           return AppColors.primary.withOpacity(0.5);
+      case 'preparing':        return Colors.orange.withOpacity(0.5);
+      case 'ready_for_pickup': return AppColors.warning.withOpacity(0.5);
+      case 'accepted':         return AppColors.success.withOpacity(0.6);
+      case 'out_for_delivery': return AppColors.info.withOpacity(0.5);
+      case 'delivered':        return AppColors.border;
+      default:                 return AppColors.border;
     }
   }
 
   String _statusLabel(String status) {
     switch (status) {
-      case 'placed':
-        return 'NEW ORDER';
-      case 'preparing':
-        return 'PACKING';
-      case 'ready_for_pickup':
-        return 'READY FOR PICKUP';
-      case 'out_for_delivery':
-        return 'OUT FOR DELIVERY';
-      case 'delivered':
-        return 'DELIVERED';
-      default:
-        return status.toUpperCase();
+      case 'placed':           return 'NEW ORDER';
+      case 'preparing':        return 'PACKING';
+      case 'ready_for_pickup': return 'READY FOR PICKUP';
+      case 'accepted':         return 'RIDER COMING ✔';
+      case 'out_for_delivery': return 'OUT FOR DELIVERY';
+      case 'delivered':        return 'DELIVERED';
+      default:                 return status.toUpperCase();
     }
   }
 }

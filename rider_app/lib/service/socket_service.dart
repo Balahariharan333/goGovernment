@@ -19,6 +19,10 @@ class RiderSocketService {
       StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _orderAssignedController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _orderDispatchController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _orderDispatchCancelledController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get onOrderAvailable =>
       _orderAvailableController.stream;
@@ -26,6 +30,10 @@ class RiderSocketService {
       _orderStatusController.stream;
   Stream<Map<String, dynamic>> get onOrderAssigned =>
       _orderAssignedController.stream;
+  Stream<Map<String, dynamic>> get onOrderDispatch =>
+      _orderDispatchController.stream;
+  Stream<Map<String, dynamic>> get onOrderDispatchCancelled =>
+      _orderDispatchCancelledController.stream;
 
   void init() {
     if (_socket != null) {
@@ -53,8 +61,10 @@ class RiderSocketService {
       _socket?.onConnect((_) {
         _isConnected = true;
         debugPrint('⚡ [RiderSocketService] Connected successfully (ID: ${_socket?.id})');
-        final riderId = HiveService.userId;
-        _socket?.emit('join:rider', riderId.isNotEmpty ? riderId : 'rider');
+        final riderId = HiveService.userId.isNotEmpty
+            ? HiveService.userId
+            : (HiveService.userPhone.isNotEmpty ? HiveService.userPhone : 'rider');
+        _socket?.emit('join:rider', riderId);
       });
 
       _socket?.onDisconnect((_) {
@@ -101,10 +111,42 @@ class RiderSocketService {
         }
       });
 
+      // 4. Targeted dispatch alert for this rider (with distance & 30s countdown)
+      _socket?.on('order:dispatch', (data) {
+        debugPrint('🚨 [RiderSocketService] Targeted dispatch received: $data');
+        if (data is Map) {
+          final map = Map<String, dynamic>.from(data);
+          _orderDispatchController.add(map);
+          _orderAvailableController.add(map);
+        }
+      });
+
+      // 5. Dispatch cancelled (claimed by another rider)
+      _socket?.on('order:dispatch_cancelled', (data) {
+        debugPrint('❌ [RiderSocketService] Dispatch cancelled: $data');
+        if (data is Map) {
+          final map = Map<String, dynamic>.from(data);
+          _orderDispatchCancelledController.add(map);
+        }
+      });
+
       _socket?.connect();
     } catch (e) {
       debugPrint('⚠️ [RiderSocketService] Exception: $e');
     }
+  }
+
+  void sendGpsPing(double lat, double lng, bool isOnline) {
+    final riderId = HiveService.userId.isNotEmpty
+        ? HiveService.userId
+        : (HiveService.userPhone.isNotEmpty ? HiveService.userPhone : 'RIDER_DEVICE');
+    debugPrint('📡 [RiderSocketService] Emitting rider:location_ping for $riderId ($lat, $lng) Online: $isOnline');
+    _socket?.emit('rider:location_ping', {
+      'riderId': riderId,
+      'lat': lat,
+      'lng': lng,
+      'isOnline': isOnline,
+    });
   }
 
   void sendLocation({

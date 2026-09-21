@@ -101,12 +101,16 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
                 child: CustomText.caption(
                   _order.status == 'out_for_delivery'
                       ? 'ON THE WAY'
-                      : (_order.status == 'ready_for_pickup'
-                          ? 'READY FOR PICKUP'
-                          : (_order.status == 'preparing' ? 'STORE PACKING' : 'PENDING PACKING')),
+                      : (_order.status == 'accepted'
+                          ? 'ACCEPTED ✔'
+                          : (_order.status == 'ready_for_pickup'
+                              ? 'READY FOR PICKUP'
+                              : (_order.status == 'preparing' ? 'STORE PACKING' : 'PENDING PACKING'))),
                   color: _order.status == 'out_for_delivery'
                       ? AppColors.info
-                      : (_order.status == 'ready_for_pickup' ? AppColors.success : AppColors.warning),
+                      : (_order.status == 'accepted'
+                          ? AppColors.success
+                          : (_order.status == 'ready_for_pickup' ? AppColors.warning : AppColors.warning)),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -156,6 +160,7 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
   // Progress tracker
   // --------------------------------------------------------------------------
   Widget _buildProgressTracker() {
+    final isAccepted = _order.status == 'accepted';
     final isOut = _order.status == 'out_for_delivery';
 
     return Container(
@@ -167,14 +172,21 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
       ),
       child: Row(
         children: [
-          _stepNode(1, 'Store Pickup', isOut ? true : true, isOut ? false : true),
+          _stepNode(1, 'Accepted', true, (!isAccepted && !isOut) ? true : isAccepted),
+          Expanded(
+            child: Container(
+              height: 3,
+              color: (isAccepted || isOut) ? AppColors.success : AppColors.lightGray,
+            ),
+          ),
+          _stepNode(2, 'Store Pickup', isOut ? true : false, isOut ? false : false),
           Expanded(
             child: Container(
               height: 3,
               color: isOut ? AppColors.success : AppColors.lightGray,
             ),
           ),
-          _stepNode(2, 'Customer Drop', isOut ? true : false, isOut ? true : false),
+          _stepNode(3, 'Customer Drop', isOut ? true : false, isOut ? true : false),
         ],
       ),
     );
@@ -511,8 +523,10 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
   // --------------------------------------------------------------------------
   Widget _buildActionControls(BuildContext context) {
     final isOut = _order.status == 'out_for_delivery';
+    // Both 'accepted' and legacy 'ready_for_pickup' show the store-pickup button
+    final isPrePickup = _order.status == 'accepted' || _order.status == 'ready_for_pickup';
 
-    if (!isOut) {
+    if (isPrePickup) {
       return SizedBox(
         width: double.infinity,
         height: Responsive.h(54),
@@ -543,7 +557,7 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
           ),
         ),
       );
-    } else {
+    } else if (isOut) {
       return SizedBox(
         width: double.infinity,
         height: Responsive.h(54),
@@ -563,6 +577,8 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
         ),
       );
     }
+    // Fallback: order in an intermediate state (e.g. still appearing in a stale list)
+    return const SizedBox.shrink();
   }
 
   void _showDeliveryConfirmationDialog(BuildContext context) {
