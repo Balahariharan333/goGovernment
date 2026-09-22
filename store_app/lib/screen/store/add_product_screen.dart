@@ -15,11 +15,13 @@ import '../../widget/custom_text.dart';
 class AddProductScreen extends StatefulWidget {
   final String storeId;
   final String storeCategory;
+  final ProductModel? initialProduct;
 
   const AddProductScreen({
     super.key,
     required this.storeId,
     required this.storeCategory,
+    this.initialProduct,
   });
 
   @override
@@ -28,6 +30,8 @@ class AddProductScreen extends StatefulWidget {
 
 class _AddProductScreenState extends State<AddProductScreen> {
   final _formKey = GlobalKey<FormState>();
+
+  bool get _isEditing => widget.initialProduct != null;
 
   late TextEditingController _titleController;
   late TextEditingController _priceController;
@@ -54,20 +58,42 @@ class _AddProductScreenState extends State<AddProductScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedCategory = widget.storeCategory.isNotEmpty ? widget.storeCategory : 'general';
-    _titleController = TextEditingController();
-    _priceController = TextEditingController();
-    _origPriceController = TextEditingController();
-    _stockController = TextEditingController(text: '10');
-    _unitController = TextEditingController(text: '1 Units');
-    _brandController = TextEditingController(text: 'Unbranded');
-    _packOfController = TextEditingController(text: '1');
-    _typeController = TextEditingController();
-    _shelfLifeController = TextEditingController(text: '7 Days');
-    _formFactorController = TextEditingController(text: 'Whole');
-    _originController = TextEditingController(text: 'India');
-    _descriptionController = TextEditingController();
-    _subsidyLimitController = TextEditingController();
+    final p = widget.initialProduct;
+    if (p != null) {
+      _selectedCategory = p.category.isNotEmpty ? p.category : (widget.storeCategory.isNotEmpty ? widget.storeCategory : 'general');
+      _titleController = TextEditingController(text: p.title);
+      _priceController = TextEditingController(text: p.price.toStringAsFixed(0));
+      _origPriceController = TextEditingController(text: p.originalPrice > 0 ? p.originalPrice.toStringAsFixed(0) : '');
+      _stockController = TextEditingController(text: p.stock.toString());
+      _unitController = TextEditingController(text: p.unit);
+      _brandController = TextEditingController(text: p.brand);
+      _packOfController = TextEditingController(text: p.packOf);
+      _typeController = TextEditingController(text: p.type);
+      _shelfLifeController = TextEditingController(text: p.shelfLife);
+      _formFactorController = TextEditingController(text: p.formFactor);
+      _originController = TextEditingController(text: p.origin);
+      _descriptionController = TextEditingController(text: p.description);
+      _subsidyLimitController = TextEditingController(text: p.subsidyLimit);
+      _isSubsidized = p.isSubsidized;
+      if (p.image.isNotEmpty) {
+        _uploadedImageUrl = p.image;
+      }
+    } else {
+      _selectedCategory = widget.storeCategory.isNotEmpty ? widget.storeCategory : 'general';
+      _titleController = TextEditingController();
+      _priceController = TextEditingController();
+      _origPriceController = TextEditingController();
+      _stockController = TextEditingController(text: '10');
+      _unitController = TextEditingController(text: '1 Units');
+      _brandController = TextEditingController(text: 'Unbranded');
+      _packOfController = TextEditingController(text: '1');
+      _typeController = TextEditingController();
+      _shelfLifeController = TextEditingController(text: '7 Days');
+      _formFactorController = TextEditingController(text: 'Whole');
+      _originController = TextEditingController(text: 'India');
+      _descriptionController = TextEditingController();
+      _subsidyLimitController = TextEditingController();
+    }
   }
 
   @override
@@ -273,6 +299,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     final stock = int.tryParse(_stockController.text.trim()) ?? 10;
 
     final product = ProductModel(
+      productId: _isEditing ? widget.initialProduct!.productId : '',
       storeId: widget.storeId,
       title: _titleController.text.trim(),
       category: _selectedCategory,
@@ -280,7 +307,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       price: price,
       originalPrice: origPrice > 0 ? origPrice : price,
       stock: stock,
-      image: _uploadedImageUrl ?? '',
+      image: _uploadedImageUrl ?? widget.initialProduct?.image ?? '',
       brand: _brandController.text.trim(),
       packOf: _packOfController.text.trim(),
       type: _typeController.text.trim(),
@@ -290,9 +317,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
       isSubsidized: _isSubsidized,
       subsidyLimit: _isSubsidized ? _subsidyLimitController.text.trim() : '',
       description: _descriptionController.text.trim(),
+      isAvailable: stock > 0,
     );
 
-    context.read<ProductBloc>().add(AddProductEvent(product));
+    if (_isEditing) {
+      context.read<ProductBloc>().add(UpdateProductEvent(product));
+    } else {
+      context.read<ProductBloc>().add(AddProductEvent(product));
+    }
   }
 
   @override
@@ -329,27 +361,28 @@ class _AddProductScreenState extends State<AddProductScreen> {
             icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.black, size: 20),
             onPressed: () => Navigator.pop(context),
           ),
-          title: CustomText.title('Add New Store Product', fontSize: 16, color: AppColors.black),
+          title: CustomText.title(_isEditing ? 'Edit Store Product' : 'Add New Store Product', fontSize: 16, color: AppColors.black),
           centerTitle: true,
           actions: [
-            TextButton.icon(
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                padding: EdgeInsets.only(right: Responsive.w(12)),
+            if (!_isEditing)
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  padding: EdgeInsets.only(right: Responsive.w(12)),
+                ),
+                icon: const Icon(Icons.bolt_rounded, size: 18, color: Colors.amber),
+                label: const Text(
+                  'Demo Fill',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                ),
+                onPressed: () {
+                  final matching = _mockPresets.firstWhere(
+                    (p) => p['category'] == widget.storeCategory,
+                    orElse: () => _mockPresets.first,
+                  );
+                  _applyMockPreset(matching);
+                },
               ),
-              icon: const Icon(Icons.bolt_rounded, size: 18, color: Colors.amber),
-              label: const Text(
-                'Demo Fill',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
-              ),
-              onPressed: () {
-                final matching = _mockPresets.firstWhere(
-                  (p) => p['category'] == widget.storeCategory,
-                  orElse: () => _mockPresets.first,
-                );
-                _applyMockPreset(matching);
-              },
-            ),
           ],
         ),
         body: CommonBackground(
@@ -701,9 +734,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                 : Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      const Icon(Icons.add_circle_outline_rounded, color: Colors.white, size: 20),
+                                      Icon(_isEditing ? Icons.check_circle_outline_rounded : Icons.add_circle_outline_rounded, color: Colors.white, size: 20),
                                       SizedBox(width: Responsive.w(8)),
-                                      CustomText.title('Add Product to Catalog', fontSize: 15, color: Colors.white),
+                                      CustomText.title(_isEditing ? 'Save Product Changes' : 'Add Product to Catalog', fontSize: 15, color: Colors.white),
                                     ],
                                   ),
                           ),

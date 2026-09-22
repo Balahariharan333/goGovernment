@@ -40,3 +40,13 @@ class RefreshStoreStatusEvent extends StoreEvent {
   @override
   List<Object?> get props => [identifier];
 }
+
+class UpdateStoreProfileEvent extends StoreEvent {
+  final String storeId;
+  final Map<String, dynamic> updates;
+  const UpdateStoreProfileEvent({required this.storeId, required this.updates});
+
+  @override
+  List<Object?> get props => [storeId, updates];
+}
+

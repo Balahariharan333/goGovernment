@@ -104,4 +104,25 @@ class OrderApiService {
     }
     return null;
   }
+  /// 4. Update order status (e.g. cancel order)
+  static Future<bool> updateOrderStatus({
+    required String orderId,
+    required String status,
+  }) async {
+    final url = '${ApiClient.baseUrl}/orders/$orderId/status';
+    final payload = jsonEncode({'status': status});
+
+    try {
+      ApiClient.logRequest('PATCH', url, body: payload);
+      final response = await http
+          .patch(Uri.parse(url), headers: ApiClient.defaultHeaders, body: payload)
+          .timeout(const Duration(seconds: 8));
+
+      ApiClient.logResponse('PATCH', url, response.statusCode, response.body);
+      return response.statusCode >= 200 && response.statusCode < 300;
+    } catch (e) {
+      ApiClient.logError('PATCH', url, e);
+      return false;
+    }
+  }
 }

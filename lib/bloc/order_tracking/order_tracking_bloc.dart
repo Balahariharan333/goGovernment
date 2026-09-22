@@ -9,7 +9,7 @@ class OrderTrackingBloc extends Bloc<OrderTrackingEvent, OrderTrackingState> {
     });
 
     on<SetTrackingOrderEvent>((event, emit) {
-      final orderId = event.order['id']?.toString();
+      final orderId = event.order['orderId']?.toString() ?? event.order['id']?.toString();
       emit(state.copyWith(
         activeOrderId: orderId,
         activeOrder: event.order,

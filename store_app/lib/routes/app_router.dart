@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:store_app/model/product_model.dart';
 import '../constants/route_constants.dart';
 import '../hive/hive_service.dart';
 import '../model/store_model.dart';
@@ -96,10 +97,12 @@ class AppRouter {
         final args = settings.arguments as Map<String, dynamic>? ?? {};
         final storeId = args['storeId']?.toString() ?? '';
         final storeCategory = args['storeCategory']?.toString() ?? 'general';
+        final initialProduct = args['initialProduct'] as ProductModel?;
         return MaterialPageRoute(
           builder: (_) => AddProductScreen(
             storeId: storeId,
             storeCategory: storeCategory,
+            initialProduct: initialProduct,
           ),
         );
 

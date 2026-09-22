@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../bloc/cart/cart_bloc.dart';
 import '../bloc/cart/cart_event.dart';
+import '../utils/app_colors.dart';
 
 class CartManager {
   static final CartManager instance = CartManager._();
@@ -20,6 +21,28 @@ class CartManager {
       ValueNotifier(Map.from(CartBloc.instance.state.cartItems));
   final Map<String, Map<String, dynamic>> productDetails =
       Map.from(CartBloc.instance.state.productDetails);
+
+  String? get currentStoreId {
+    for (final entry in cartItems.value.entries) {
+      if (entry.value > 0) {
+        final details = productDetails[entry.key];
+        final sId = details?['storeId']?.toString();
+        if (sId != null && sId.isNotEmpty) return sId;
+      }
+    }
+    return null;
+  }
+
+  String? get currentStoreName {
+    for (final entry in cartItems.value.entries) {
+      if (entry.value > 0) {
+        final details = productDetails[entry.key];
+        final sName = details?['storeName']?.toString() ?? details?['storeTitle']?.toString();
+        if (sName != null && sName.isNotEmpty) return sName;
+      }
+    }
+    return null;
+  }
 
   int getStock(Map<String, dynamic> product) {
     if (product['stock'] != null) {
@@ -56,6 +79,58 @@ class CartManager {
   bool addToCart(Map<String, dynamic> product, {int qty = 1, String? productId, BuildContext? context}) {
     final id = productId ?? product['id']?.toString() ?? product['productId']?.toString() ?? '';
     if (id.isEmpty) return false;
+
+    // Multi-Store check: Prevent mixing products from different stores in the same cart
+    final incomingStoreId = product['storeId']?.toString();
+    final existingStoreId = currentStoreId;
+    final hasActiveCart = cartItems.value.values.any((q) => q > 0);
+
+    if (hasActiveCart &&
+        existingStoreId != null &&
+        incomingStoreId != null &&
+        incomingStoreId.isNotEmpty &&
+        incomingStoreId != existingStoreId) {
+      if (context != null) {
+        final existingName = currentStoreName ?? 'another store';
+        final incomingName = product['storeName']?.toString() ?? product['storeTitle']?.toString() ?? 'this store';
+        showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text('Replace cart items?'),
+            content: Text(
+              'Your cart already contains items from "$existingName". Would you like to discard them and add items from "$incomingName"?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Replace Cart', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ).then((confirmed) {
+          if (confirmed == true) {
+            clear();
+            addToCart(
+              product,
+              qty: qty,
+              productId: productId,
+              context: (context.mounted) ? context : null,
+            );
+          }
+        });
+      }
+      return false;
+    }
+
     final stock = getStock(product);
 
     if (stock <= 0) {

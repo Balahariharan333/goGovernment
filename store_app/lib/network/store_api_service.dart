@@ -108,4 +108,22 @@ class StoreApiService {
     }
     return null;
   }
+
+  static Future<Map<String, dynamic>?> updateStoreProfile(String storeId, Map<String, dynamic> updates) async {
+    final url = '${ApiClient.baseUrl}/stores/$storeId/profile';
+    final body = jsonEncode(updates);
+
+    try {
+      ApiClient.logRequest('PATCH', url, body: body);
+      final response = await http
+          .patch(Uri.parse(url), headers: ApiClient.defaultHeaders, body: body)
+          .timeout(const Duration(seconds: 10));
+
+      ApiClient.logResponse('PATCH', url, response.statusCode, response.body);
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (e) {
+      ApiClient.logError('PATCH', url, e);
+      return {'success': false, 'error': 'Network error: $e'};
+    }
+  }
 }

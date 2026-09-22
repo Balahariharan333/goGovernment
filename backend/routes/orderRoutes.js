@@ -3,6 +3,7 @@ const router = express.Router();
 const Order = require('../models/Order');
 const Store = require('../models/Store');
 const User = require('../models/User');
+const Product = require('../models/Product');
 const WalletTransaction = require('../models/WalletTransaction');
 
 // 1. CREATE NEW ORDER (Placed by Citizen)
@@ -32,20 +33,28 @@ router.post('/', async (req, res) => {
 
     const orderId = 'ORD_' + Date.now().toString().slice(-6);
 
-    // Fetch store details if missing or incomplete
+    // Fetch authoritative store details & coordinates
     let resolvedStoreDetails = storeDetails || {};
-    if (!resolvedStoreDetails.name || !resolvedStoreDetails.phone) {
-      const storeDoc = await Store.findOne({ storeId });
-      if (storeDoc) {
-        resolvedStoreDetails = {
-          storeId: storeDoc.storeId,
-          name: storeDoc.name,
-          address: storeDoc.address,
-          latitude: storeDoc.latitude || 12.9716,
-          longitude: storeDoc.longitude || 77.5946,
-          phone: storeDoc.phone || '',
-        };
-      }
+    const storeDoc = await Store.findOne({ storeId });
+    if (storeDoc) {
+      const realLat = (storeDoc.location && storeDoc.location.lat !== undefined)
+        ? Number(storeDoc.location.lat)
+        : (storeDoc.latitude || 0.0);
+      const realLng = (storeDoc.location && storeDoc.location.lng !== undefined)
+        ? Number(storeDoc.location.lng)
+        : (storeDoc.longitude || 0.0);
+
+      resolvedStoreDetails = {
+        storeId: storeDoc.storeId,
+        name: resolvedStoreDetails.name || storeDoc.name,
+        address: resolvedStoreDetails.address || storeDoc.address,
+        latitude: realLat,
+        longitude: realLng,
+        phone: resolvedStoreDetails.phone || storeDoc.phone || '',
+      };
+    } else {
+      resolvedStoreDetails.latitude = resolvedStoreDetails.latitude || 12.9716;
+      resolvedStoreDetails.longitude = resolvedStoreDetails.longitude || 77.5946;
     }
 
     const isWallet = paymentMethod && paymentMethod.toLowerCase().includes('wallet');
@@ -112,6 +121,18 @@ router.post('/', async (req, res) => {
     });
 
     await newOrder.save();
+
+    // ── Decrement Product Stock Atomically ──
+    for (const item of items) {
+      const pId = item.productId || item.id;
+      const qty = Number(item.quantity || item.qty || 1);
+      if (pId && qty > 0) {
+        await Product.updateOne(
+          { productId: pId },
+          { $inc: { stock: -qty } }
+        ).catch((err) => console.warn(`⚠️ [Inventory] Could not decrement stock for product ${pId}:`, err.message));
+      }
+    }
 
     // ── Record order transaction in ledger for ALL payment methods ──
     if (!isWallet) {
@@ -196,7 +217,7 @@ router.get('/riders/live-locations', async (req, res) => {
         name: u.userName || 'Delivery Partner',
         phone: u.phone || '',
         vehicleType: u.vehicleType || 'Motorcycle',
-        vehicleNumber: u.vehicleNumber || 'KA-01-EE-4521',
+        vehicleNumber: u.vehicleNumber || '',
         latitude: 0,
         longitude: 0,
         isOnline: false,
@@ -292,9 +313,49 @@ router.get('/store/:storeId', async (req, res) => {
     const { storeId } = req.params;
     const orders = await Order.find({ storeId }).sort({ createdAt: -1 });
 
+    // Calculate real subsidy & financial metrics from actual store orders
+    let totalSubsidyDisbursed = 0;
+    let pendingSubsidyPayout = 0;
+    let totalGrossSales = 0;
+    let activeOrdersCount = 0;
+
+    for (const order of orders) {
+      if (order.status === 'cancelled') continue;
+
+      let orderSubsidy = 0;
+      if (Array.isArray(order.items)) {
+        for (const it of order.items) {
+          const orig = it.originalPrice ? Number(it.originalPrice) : 0;
+          const pr = it.price ? Number(it.price) : 0;
+          const qty = it.quantity ? Number(it.quantity) : 1;
+          if (orig > pr) {
+            orderSubsidy += (orig - pr) * qty;
+          }
+        }
+      }
+
+      totalSubsidyDisbursed += orderSubsidy;
+      totalGrossSales += (order.grandTotal || 0);
+
+      if (['placed', 'preparing', 'ready_for_pickup', 'accepted', 'out_for_delivery'].includes(order.status)) {
+        activeOrdersCount++;
+      }
+
+      if (order.status === 'delivered') {
+        pendingSubsidyPayout += orderSubsidy;
+      }
+    }
+
     return res.status(200).json({
       success: true,
       data: orders,
+      summary: {
+        totalOrders: orders.length,
+        activeOrdersCount,
+        totalSubsidyDisbursed: Math.round(totalSubsidyDisbursed),
+        pendingSubsidyPayout: Math.round(pendingSubsidyPayout),
+        totalGrossSales: Math.round(totalGrossSales),
+      },
     });
   } catch (error) {
     console.error('Error fetching store orders:', error);
@@ -488,40 +549,122 @@ router.patch('/:orderId/status', async (req, res) => {
       updateFields.paymentStatus = 'paid';
     }
 
-    // If order is cancelled and was paid via wallet, automatically refund to citizen wallet
-    if (status === 'cancelled') {
-      const existing = await Order.findOne({ orderId });
-      if (existing && existing.status !== 'cancelled') {
-        const wasWallet = existing.paymentMethod && existing.paymentMethod.toLowerCase().includes('wallet');
-        if (wasWallet && existing.paymentStatus === 'paid') {
-          const refundAmt = Number(existing.grandTotal) || 0;
-          if (refundAmt > 0) {
-            const refundedUser = await User.findOneAndUpdate(
-              { $or: [{ userId: existing.userId }, { phone: existing.userId }] },
-              { $inc: { walletBalance: refundAmt } },
-              { new: true, upsert: true }
+    const existing = await Order.findOne({ orderId });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const now = new Date();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const dateStr = `${months[now.getMonth()]} ${now.getDate()} · ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+    // If order is cancelled and was paid via wallet, automatically refund to citizen wallet + restore stock
+    if (status === 'cancelled' && existing.status !== 'cancelled') {
+      // 1. Restore product inventory stock
+      for (const item of (existing.items || [])) {
+        const pId = item.productId || item.id;
+        const qty = Number(item.quantity || item.qty || 1);
+        if (pId && qty > 0) {
+          await Product.updateOne(
+            { productId: pId },
+            { $inc: { stock: qty } }
+          ).catch((e) => console.warn(`⚠️ [Inventory] Could not restore stock for ${pId}:`, e.message));
+        }
+      }
+
+      // 2. Refund citizen wallet if paid via wallet
+      const wasWallet = existing.paymentMethod && existing.paymentMethod.toLowerCase().includes('wallet');
+      if (wasWallet && existing.paymentStatus === 'paid') {
+        const refundAmt = Number(existing.grandTotal) || 0;
+        if (refundAmt > 0) {
+          const refundedUser = await User.findOneAndUpdate(
+            { $or: [{ userId: existing.userId }, { phone: existing.userId }] },
+            { $inc: { walletBalance: refundAmt } },
+            { new: true, upsert: true }
+          );
+
+          const refundTx = new WalletTransaction({
+            transactionId: 'REF_' + Date.now().toString().slice(-6) + Math.floor(100 + Math.random() * 900),
+            userId: refundedUser.userId,
+            amount: refundAmt,
+            type: 'credit',
+            category: 'order_refund',
+            paymentMethod: 'Wallet Refund',
+            orderId: existing.orderId,
+            title: 'Order Refund',
+            subtitle: `Refund for cancelled order #${existing.orderId} · ${dateStr}`,
+            balanceAfter: refundedUser.walletBalance,
+            status: 'success',
+          });
+          await refundTx.save();
+          updateFields.paymentStatus = 'refunded';
+          console.log(`💳 [Auto Refund] Refunded ₹${refundAmt} to user ${refundedUser.userId} for cancelled order ${existing.orderId}`);
+        }
+      }
+    }
+
+    // If order is delivered, credit Rider Payout and Store Owner Settlement
+    if (status === 'delivered' && existing.status !== 'delivered') {
+      // 1. Rider Payout (+₹45 delivery fee)
+      const riderId = existing.deliveryAgent?.riderId;
+      if (riderId) {
+        const riderFee = 45;
+        const updatedRider = await User.findOneAndUpdate(
+          { $or: [{ userId: riderId }, { phone: riderId }] },
+          { $inc: { walletBalance: riderFee } },
+          { new: true }
+        );
+        if (updatedRider) {
+          const riderTx = new WalletTransaction({
+            transactionId: 'RDR_' + Date.now().toString().slice(-6) + Math.floor(100 + Math.random() * 900),
+            userId: updatedRider.userId,
+            amount: riderFee,
+            type: 'credit',
+            category: 'rider_payout',
+            paymentMethod: 'Rider Payout',
+            orderId: existing.orderId,
+            title: 'Delivery Task Earnings',
+            subtitle: `Earned ₹${riderFee} for delivering order #${existing.orderId} · ${dateStr}`,
+            balanceAfter: updatedRider.walletBalance,
+            status: 'success',
+          });
+          await riderTx.save();
+          console.log(`🚴 [Rider Payout] Credited ₹${riderFee} to rider ${updatedRider.userId} for order ${existing.orderId}`);
+        }
+      }
+
+      // 2. Store Owner Settlement (+grandTotal minus deliveryCharge)
+      if (existing.storeId) {
+        const storeDoc = await Store.findOne({ storeId: existing.storeId });
+        const grandTotal = Number(existing.grandTotal) || 0;
+        const deliveryCharge = Number(existing.deliveryCharge) || 0;
+        const storeAmount = Math.max(0, grandTotal - deliveryCharge);
+
+        if (storeDoc && storeAmount > 0) {
+          const ownerIdentifier = storeDoc.ownerId || storeDoc.phone;
+          if (ownerIdentifier) {
+            const updatedMerchant = await User.findOneAndUpdate(
+              { $or: [{ userId: ownerIdentifier }, { phone: ownerIdentifier }] },
+              { $inc: { walletBalance: storeAmount } },
+              { new: true }
             );
-
-            const now = new Date();
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const dateStr = `${months[now.getMonth()]} ${now.getDate()} · ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-
-            const refundTx = new WalletTransaction({
-              transactionId: 'REF_' + Date.now().toString().slice(-6) + Math.floor(100 + Math.random() * 900),
-              userId: refundedUser.userId,
-              amount: refundAmt,
-              type: 'credit',
-              category: 'order_refund',
-              paymentMethod: 'Wallet Refund',
-              orderId: existing.orderId,
-              title: 'Order Refund',
-              subtitle: `Refund for cancelled order #${existing.orderId} · ${dateStr}`,
-              balanceAfter: refundedUser.walletBalance,
-              status: 'success',
-            });
-            await refundTx.save();
-            updateFields.paymentStatus = 'refunded';
-            console.log(`💳 [Auto Refund] Refunded ₹${refundAmt} to user ${refundedUser.userId} for cancelled order ${existing.orderId}`);
+            if (updatedMerchant) {
+              const storeTx = new WalletTransaction({
+                transactionId: 'SETTLE_' + Date.now().toString().slice(-6) + Math.floor(100 + Math.random() * 900),
+                userId: updatedMerchant.userId,
+                amount: storeAmount,
+                type: 'credit',
+                category: 'store_settlement',
+                paymentMethod: 'Store Settlement',
+                orderId: existing.orderId,
+                title: storeDoc.name || 'Store Settlement',
+                subtitle: `Settlement for order #${existing.orderId} · ${dateStr}`,
+                balanceAfter: updatedMerchant.walletBalance,
+                status: 'success',
+              });
+              await storeTx.save();
+              console.log(`🏪 [Store Settlement] Credited ₹${storeAmount} to merchant ${updatedMerchant.userId} for order ${existing.orderId}`);
+            }
           }
         }
       }

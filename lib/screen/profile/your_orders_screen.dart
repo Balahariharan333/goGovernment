@@ -386,7 +386,7 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
           .map((it) {
             if (it is Map) {
               final title = it['title']?.toString() ?? 'Item';
-              final qty = it['qty'] ?? 1;
+              final qty = it['quantity'] ?? it['qty'] ?? 1;
               return '$title (x$qty)';
             }
             return it.toString();
@@ -401,21 +401,39 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
       itemsText = order['subtitle']?.toString() ?? 'Store items';
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(Responsive.w(20)),
-        border: Border.all(color: AppColors.outliner, width: Responsive.w(1.2)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      padding: EdgeInsets.all(Responsive.w(16)),
-      child: Column(
+    return GestureDetector(
+      onTap: () {
+        if (isActive) {
+          Navigator.of(context).pushNamed(
+            RouteConstants.orderStatus,
+            arguments: {
+              'storeType': 'medical',
+              'orderId': id,
+              'transaction': order,
+            },
+          );
+        } else {
+          Navigator.of(context).pushNamed(
+            RouteConstants.transactionDetails,
+            arguments: {'title': storeName, 'transaction': order},
+          );
+        }
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(Responsive.w(20)),
+          border: Border.all(color: AppColors.outliner, width: Responsive.w(1.2)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        padding: EdgeInsets.all(Responsive.w(16)),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Store Header & Status Chip
@@ -679,8 +697,9 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   void _reorderOrderAndGoToCart(BuildContext context, Map<String, dynamic> order) {
     final List items = (order['items'] as List?) ?? [];

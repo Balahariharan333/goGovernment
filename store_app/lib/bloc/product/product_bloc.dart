@@ -50,5 +50,36 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
         emit(ProductLoaded(List.from(_currentProducts)));
       }
     });
+
+    on<UpdateProductEvent>((event, emit) async {
+      emit(ProductSubmitting());
+      final res = await ProductApiService.updateProduct(event.product);
+      if (res != null && res['success'] == true && res['product'] != null) {
+        final updated = ProductModel.fromJson(res['product'] as Map<String, dynamic>);
+        final idx = _currentProducts.indexWhere((p) => p.productId == updated.productId);
+        if (idx != -1) {
+          _currentProducts[idx] = updated;
+        }
+        emit(ProductSubmitSuccess(updated, message: res['message'] ?? 'Product updated successfully!'));
+        emit(ProductLoaded(List.from(_currentProducts)));
+      } else {
+        emit(ProductError(res?['error'] ?? 'Failed to update product'));
+        emit(ProductLoaded(List.from(_currentProducts)));
+      }
+    });
+
+    on<AdjustProductStockEvent>((event, emit) async {
+      final idx = _currentProducts.indexWhere((p) => p.productId == event.productId);
+      if (idx != -1) {
+        final currentStock = _currentProducts[idx].stock;
+        final newStock = (currentStock + event.delta).clamp(0, 99999);
+        _currentProducts[idx] = _currentProducts[idx].copyWith(
+          stock: newStock,
+          isAvailable: newStock > 0,
+        );
+        emit(ProductLoaded(List.from(_currentProducts)));
+        await ProductApiService.updateProductStock(event.productId, newStock);
+      }
+    });
   }
 }

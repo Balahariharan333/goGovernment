@@ -97,4 +97,25 @@ class ProductApiService {
       return false;
     }
   }
+
+  static Future<bool> updateProductStock(String productId, int newStock) async {
+    final url = '${ApiClient.baseUrl}/products/$productId';
+    final body = jsonEncode({
+      'stock': newStock,
+      'isAvailable': newStock > 0,
+    });
+
+    try {
+      ApiClient.logRequest('PATCH', url, body: body);
+      final response = await http
+          .patch(Uri.parse(url), headers: ApiClient.defaultHeaders, body: body)
+          .timeout(const Duration(seconds: 10));
+
+      ApiClient.logResponse('PATCH', url, response.statusCode, response.body);
+      return response.statusCode == 200;
+    } catch (e) {
+      ApiClient.logError('PATCH', url, e);
+      return false;
+    }
+  }
 }

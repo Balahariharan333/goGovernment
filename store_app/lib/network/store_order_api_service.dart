@@ -36,7 +36,7 @@ class StoreOrderApiService {
     final url = '${ApiClient.baseUrl}/orders/$orderId/status';
     final body = {
       'status': status,
-      if (note != null) 'note': note,
+      'note': ?note,
     };
     ApiClient.logRequest('PATCH', url, body: body);
 
@@ -54,6 +54,28 @@ class StoreOrderApiService {
     } catch (e) {
       ApiClient.logError('PATCH', url, e);
       return false;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> fetchStoreFinancialMetrics(String storeId) async {
+    if (storeId.isEmpty) return null;
+    final url = '${ApiClient.baseUrl}/orders/store/$storeId';
+    ApiClient.logRequest('GET', url);
+
+    try {
+      final response = await http
+          .get(Uri.parse(url), headers: ApiClient.defaultHeaders)
+          .timeout(const Duration(seconds: 10));
+
+      ApiClient.logResponse('GET', url, response.statusCode, response.body);
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        return decoded['summary'] as Map<String, dynamic>?;
+      }
+      return null;
+    } catch (e) {
+      ApiClient.logError('GET', url, e);
+      return null;
     }
   }
 }

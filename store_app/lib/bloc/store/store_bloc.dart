@@ -63,5 +63,14 @@ class StoreBloc extends Bloc<StoreEvent, StoreState> {
         emit(StoreLoaded(store));
       }
     });
+
+    on<UpdateStoreProfileEvent>((event, emit) async {
+      final res = await StoreApiService.updateStoreProfile(event.storeId, event.updates);
+      if (res != null && res['success'] == true && res['store'] != null) {
+        final store = StoreModel.fromJson(res['store'] as Map<String, dynamic>);
+        await HiveService.setCachedStoreData(res['store'] as Map<String, dynamic>);
+        emit(StoreLoaded(store));
+      }
+    });
   }
 }

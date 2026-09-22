@@ -22,3 +22,15 @@ class DeleteProductEvent extends ProductEvent {
   final String productId;
   DeleteProductEvent(this.productId);
 }
+
+class UpdateProductEvent extends ProductEvent {
+  final ProductModel product;
+  UpdateProductEvent(this.product);
+}
+
+class AdjustProductStockEvent extends ProductEvent {
+  final String productId;
+  final int delta;
+  AdjustProductStockEvent({required this.productId, required this.delta});
+}
+

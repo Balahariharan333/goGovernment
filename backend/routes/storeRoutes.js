@@ -303,4 +303,55 @@ router.patch('/:storeId/status', async (req, res) => {
   }
 });
 
+// 6. UPDATE STORE PROFILE (Owner details, name, phone, address, timings)
+router.patch('/:storeId/profile', async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const allowedUpdates = [
+      'name',
+      'ownerName',
+      'phone',
+      'email',
+      'address',
+      'pincode',
+      'category',
+      'storeImage',
+      'timings',
+    ];
+
+    const updates = {};
+    for (const key of allowedUpdates) {
+      if (req.body[key] !== undefined) {
+        updates[key] = req.body[key];
+      }
+    }
+
+    if (req.body.lat !== undefined && req.body.lng !== undefined) {
+      updates.location = { lat: Number(req.body.lat), lng: Number(req.body.lng) };
+    }
+
+    const updatedStore = await Store.findOneAndUpdate(
+      { storeId },
+      { $set: updates },
+      { new: true }
+    );
+
+    if (!updatedStore) {
+      return res.status(404).json({ success: false, error: 'Store not found' });
+    }
+
+    console.log(`🏪 [Store Profile Updated] ${updatedStore.name} (${storeId}) updated successfully`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Store profile updated successfully! 🎉',
+      store: updatedStore,
+    });
+  } catch (error) {
+    console.error('Error updating store profile:', error);
+    res.status(500).json({ success: false, error: 'Failed to update store profile', details: error.message });
+  }
+});
+
 module.exports = router;
+

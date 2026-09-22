@@ -28,7 +28,7 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
     _fetchOrders();
 
     // Subscribe to real-time Socket.io events for this store
@@ -122,7 +122,9 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
     final preparingOrders = _orders.where((o) => o['status'] == 'preparing').toList();
     final readyOrders = _orders.where((o) => o['status'] == 'ready_for_pickup').toList();
     final acceptedOrders = _orders.where((o) => o['status'] == 'accepted').toList();
+    final dispatchedOrders = _orders.where((o) => o['status'] == 'out_for_delivery').toList();
     final completedOrders = _orders.where((o) => o['status'] == 'delivered').toList();
+    final cancelledOrders = _orders.where((o) => o['status'] == 'cancelled').toList();
 
     return Scaffold(
       backgroundColor: AppColors.screenColor,
@@ -152,7 +154,9 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
             Tab(text: 'Packing (${preparingOrders.length})'),
             Tab(text: 'Ready (${readyOrders.length})'),
             Tab(text: 'Rider Coming (${acceptedOrders.length})'),
+            Tab(text: 'Dispatched (${dispatchedOrders.length})'),
             Tab(text: 'Delivered (${completedOrders.length})'),
+            Tab(text: 'Cancelled (${cancelledOrders.length})'),
           ],
         ),
       ),
@@ -168,7 +172,9 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
                     _buildOrdersList(preparingOrders),
                     _buildOrdersList(readyOrders),
                     _buildOrdersList(acceptedOrders),
+                    _buildOrdersList(dispatchedOrders),
                     _buildOrdersList(completedOrders),
+                    _buildOrdersList(cancelledOrders),
                   ],
                 ),
         ),
@@ -414,6 +420,36 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
     );
   }
 
+  void _showDeclineOrderDialog(String orderId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Decline Order?'),
+        content: const Text(
+          'Are you sure you want to decline this order? The items will be returned to inventory and the citizen will be refunded automatically.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Keep Order'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _updateStatus(orderId, 'cancelled', 'Order declined. Customer refunded.');
+            },
+            child: const Text('Decline & Refund', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStoreActions(
     String orderId,
     String status, {
@@ -421,20 +457,42 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
     Map agent = const {},
   }) {
     if (status == 'placed') {
-      return SizedBox(
-        width: double.infinity,
-        height: Responsive.h(44),
-        child: ElevatedButton.icon(
-          onPressed: () {
-            _updateStatus(orderId, 'preparing', 'Order accepted! Now packing items.');
-          },
-          icon: const Icon(Icons.inventory_2_outlined, size: 18, color: Colors.white),
-          label: const Text('Accept & Start Packing', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      return Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: SizedBox(
+              height: Responsive.h(44),
+              child: OutlinedButton.icon(
+                onPressed: () => _showDeclineOrderDialog(orderId),
+                icon: const Icon(Icons.close_rounded, size: 16, color: AppColors.error),
+                label: const Text('Decline', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.error)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.error, width: 1.2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
           ),
-        ),
+          SizedBox(width: Responsive.w(10)),
+          Expanded(
+            flex: 3,
+            child: SizedBox(
+              height: Responsive.h(44),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  _updateStatus(orderId, 'preparing', 'Order accepted! Now packing items.');
+                },
+                icon: const Icon(Icons.inventory_2_outlined, size: 18, color: Colors.white),
+                label: const Text('Accept & Pack', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ),
+        ],
       );
     } else if (status == 'preparing') {
       return SizedBox(
@@ -511,6 +569,19 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
           ],
         ),
       );
+    } else if (status == 'cancelled') {
+      return Container(
+        padding: EdgeInsets.symmetric(vertical: Responsive.h(8)),
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.cancel_outlined, color: AppColors.error, size: 18),
+            SizedBox(width: Responsive.w(8)),
+            CustomText.caption('Order Cancelled / Declined', fontWeight: FontWeight.bold, color: AppColors.error),
+          ],
+        ),
+      );
     } else {
       return Container(
         padding: EdgeInsets.symmetric(vertical: Responsive.h(8)),
@@ -535,6 +606,7 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
       case 'accepted':         return AppColors.success;
       case 'out_for_delivery': return AppColors.info;
       case 'delivered':        return AppColors.success;
+      case 'cancelled':        return AppColors.error;
       default:                 return AppColors.grayFont;
     }
   }
@@ -547,6 +619,7 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
       case 'accepted':         return AppColors.success.withOpacity(0.6);
       case 'out_for_delivery': return AppColors.info.withOpacity(0.5);
       case 'delivered':        return AppColors.border;
+      case 'cancelled':        return AppColors.error.withOpacity(0.5);
       default:                 return AppColors.border;
     }
   }
@@ -559,6 +632,7 @@ class _StoreOrdersQueueScreenState extends State<StoreOrdersQueueScreen> with Si
       case 'accepted':         return 'RIDER COMING ✔';
       case 'out_for_delivery': return 'OUT FOR DELIVERY';
       case 'delivered':        return 'DELIVERED';
+      case 'cancelled':        return 'CANCELLED';
       default:                 return status.toUpperCase();
     }
   }

@@ -26,11 +26,24 @@ class ManageProductsScreen extends StatefulWidget {
 
 class _ManageProductsScreenState extends State<ManageProductsScreen> {
   String _searchQuery = '';
+  String _selectedFilter = 'All';
 
   @override
   void initState() {
     super.initState();
     context.read<ProductBloc>().add(LoadStoreProductsEvent(widget.store.storeId));
+  }
+
+  void _editProduct(ProductModel product) {
+    Navigator.pushNamed(
+      context,
+      RouteConstants.addProduct,
+      arguments: {
+        'storeId': widget.store.storeId,
+        'storeCategory': widget.store.category,
+        'initialProduct': product,
+      },
+    );
   }
 
   void _deleteProduct(ProductModel product) {
@@ -53,6 +66,33 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
             child: const Text('Remove'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label) {
+    final isSelected = _selectedFilter == label;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedFilter = label),
+      child: Container(
+        margin: EdgeInsets.only(right: Responsive.w(8)),
+        padding: EdgeInsets.symmetric(horizontal: Responsive.w(14), vertical: Responsive.h(6)),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(Responsive.w(20)),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.outliner,
+            width: 1.2,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? Colors.white : AppColors.grayFont,
+          ),
+        ),
       ),
     );
   }
@@ -146,6 +186,22 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                 ),
               ),
 
+              // Filter Chips
+              Container(
+                height: Responsive.h(34),
+                margin: EdgeInsets.only(bottom: Responsive.h(10)),
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.symmetric(horizontal: Responsive.w(20)),
+                  children: [
+                    _buildFilterChip('All'),
+                    _buildFilterChip('Low Stock (< 5)'),
+                    _buildFilterChip('Subsidized'),
+                    _buildFilterChip('Out of Stock'),
+                  ],
+                ),
+              ),
+
               // Product List
               Expanded(
                 child: BlocBuilder<ProductBloc, ProductState>(
@@ -163,9 +219,19 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
 
                     final filtered = products.where((p) {
                       final q = _searchQuery.toLowerCase();
-                      return p.title.toLowerCase().contains(q) ||
+                      final matchesSearch = p.title.toLowerCase().contains(q) ||
                           p.category.toLowerCase().contains(q) ||
                           p.brand.toLowerCase().contains(q);
+                      if (!matchesSearch) return false;
+
+                      if (_selectedFilter == 'Low Stock (< 5)') {
+                        return p.stock > 0 && p.stock < 5;
+                      } else if (_selectedFilter == 'Subsidized') {
+                        return p.isSubsidized;
+                      } else if (_selectedFilter == 'Out of Stock') {
+                        return p.stock <= 0 || !p.isAvailable;
+                      }
+                      return true;
                     }).toList();
 
                     if (filtered.isEmpty) {
@@ -299,18 +365,52 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: CustomText.title(
-                        item.title,
-                        fontSize: 13,
-                        color: AppColors.black,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: CustomText.title(
+                              item.title,
+                              fontSize: 13,
+                              color: AppColors.black,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (item.isSubsidized) ...[
+                            SizedBox(width: Responsive.w(4)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.blue.shade200),
+                              ),
+                              child: Text(
+                                'Govt Subsidized',
+                                style: TextStyle(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Edit Product',
+                      onPressed: () => _editProduct(item),
+                    ),
+                    SizedBox(width: Responsive.w(8)),
                     IconButton(
                       icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
+                      tooltip: 'Delete Product',
                       onPressed: () => _deleteProduct(item),
                     ),
                   ],
@@ -361,40 +461,101 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                 ),
                 SizedBox(height: Responsive.h(8)),
 
-                // Stock & Availability row
+                // Stock & Quick +/- Adjuster & Availability row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: Responsive.w(8), vertical: Responsive.h(3)),
-                      decoration: BoxDecoration(
-                        color: isOutOfStock
-                            ? const Color(0xFFFFEBEE)
-                            : (item.stock <= 3 ? const Color(0xFFFFF3E0) : const Color(0xFFE8F5E9)),
-                        borderRadius: BorderRadius.circular(Responsive.w(6)),
-                      ),
-                      child: Text(
-                        isOutOfStock ? 'Out of Stock' : 'Stock: ${item.stock}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: isOutOfStock
-                              ? Colors.red.shade700
-                              : (item.stock <= 3 ? Colors.orange.shade800 : const Color(0xFF16A34A)),
+                    // Stock badge + 1-Tap Quick Adjuster
+                    Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: Responsive.w(7), vertical: Responsive.h(3)),
+                          decoration: BoxDecoration(
+                            color: isOutOfStock
+                                ? const Color(0xFFFFEBEE)
+                                : (item.stock <= 3 ? const Color(0xFFFFF3E0) : const Color(0xFFE8F5E9)),
+                            borderRadius: BorderRadius.circular(Responsive.w(6)),
+                          ),
+                          child: Text(
+                            isOutOfStock ? '0' : 'Stock: ${item.stock}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: isOutOfStock
+                                  ? Colors.red.shade700
+                                  : (item.stock <= 3 ? Colors.orange.shade800 : const Color(0xFF16A34A)),
+                            ),
+                          ),
                         ),
-                      ),
+                        SizedBox(width: Responsive.w(6)),
+                        // 1-Tap Stock Adjuster Buttons
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Row(
+                            children: [
+                              InkWell(
+                                onTap: item.stock > 0
+                                    ? () {
+                                        context.read<ProductBloc>().add(
+                                              AdjustProductStockEvent(
+                                                productId: item.productId,
+                                                delta: -1,
+                                              ),
+                                            );
+                                      }
+                                    : null,
+                                borderRadius: const BorderRadius.horizontal(left: Radius.circular(6)),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  child: Icon(
+                                    Icons.remove_rounded,
+                                    size: 14,
+                                    color: item.stock > 0 ? AppColors.black : Colors.grey.shade400,
+                                  ),
+                                ),
+                              ),
+                              Container(width: 1, height: 14, color: Colors.grey.shade300),
+                              InkWell(
+                                onTap: () {
+                                  context.read<ProductBloc>().add(
+                                        AdjustProductStockEvent(
+                                          productId: item.productId,
+                                          delta: 1,
+                                        ),
+                                      );
+                                },
+                                borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)),
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  child: Icon(
+                                    Icons.add_rounded,
+                                    size: 14,
+                                    color: AppColors.black,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
+
+                    // Availability Switch
                     Row(
                       children: [
                         Text(
-                          item.isAvailable ? 'In Stock' : 'Hidden',
+                          item.isAvailable ? 'Active' : 'Hidden',
                           style: TextStyle(
                             fontSize: 11,
                             color: item.isAvailable ? const Color(0xFF16A34A) : Colors.grey,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        SizedBox(width: Responsive.w(4)),
+                        SizedBox(width: Responsive.w(2)),
                         Switch(
                           value: item.isAvailable,
                           activeThumbColor: const Color(0xFF16A34A),

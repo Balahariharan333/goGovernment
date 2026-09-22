@@ -74,6 +74,8 @@ class _LiveMonitoringViewState extends State<LiveMonitoringView> {
     switch (status.toLowerCase()) {
       case 'placed':
         return Colors.orange;
+      case 'preparing':
+        return Colors.amber;
       case 'accepted':
         return Colors.blue;
       case 'ready_for_pickup':
@@ -301,8 +303,13 @@ class _LiveMonitoringViewState extends State<LiveMonitoringView> {
                   border: Border.all(color: Colors.grey.shade200),
                   boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
                 ),
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(Colors.grey.shade50),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 900),
+                    child: DataTable(
+                      columnSpacing: 24,
+                      headingRowColor: WidgetStateProperty.all(Colors.grey.shade50),
                   columns: const [
                     DataColumn(label: Text('Rider ID & Name', style: TextStyle(fontWeight: FontWeight.bold))),
                     DataColumn(label: Text('Vehicle & Contact', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -390,6 +397,8 @@ class _LiveMonitoringViewState extends State<LiveMonitoringView> {
                       ),
                     ]);
                   }).toList(),
+                    ),
+                  ),
                 ),
               ),
       ],
@@ -410,45 +419,64 @@ class _LiveMonitoringViewState extends State<LiveMonitoringView> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.grey.shade200),
           ),
-          child: Row(
+          child: Wrap(
+            spacing: 16,
+            runSpacing: 12,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              // Store Dropdown Filter
-              const Text('Store: ', style: TextStyle(fontWeight: FontWeight.bold)),
-              DropdownButton<String>(
-                value: _selectedStoreId,
-                underline: const SizedBox(),
-                items: _availableStoreNames.map((s) {
-                  return DropdownMenuItem(
-                    value: s,
-                    child: Text(s == 'all' ? '🏬 All Stores' : '🏪 $s', style: const TextStyle(fontSize: 13)),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  if (val != null) setState(() => _selectedStoreId = val);
-                },
-              ),
-              const SizedBox(width: 24),
+              Wrap(
+                spacing: 20,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  // Store Dropdown Filter
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Store: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                      DropdownButton<String>(
+                        value: _selectedStoreId,
+                        underline: const SizedBox(),
+                        items: _availableStoreNames.map((s) {
+                          return DropdownMenuItem(
+                            value: s,
+                            child: Text(s == 'all' ? '🏬 All Stores' : '🏪 $s', style: const TextStyle(fontSize: 13)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) setState(() => _selectedStoreId = val);
+                        },
+                      ),
+                    ],
+                  ),
 
-              // Status Dropdown Filter
-              const Text('Status: ', style: TextStyle(fontWeight: FontWeight.bold)),
-              DropdownButton<String>(
-                value: _selectedStatus,
-                underline: const SizedBox(),
-                items: const [
-                  DropdownMenuItem(value: 'all', child: Text('All Statuses')),
-                  DropdownMenuItem(value: 'placed', child: Text('Placed')),
-                  DropdownMenuItem(value: 'accepted', child: Text('Accepted')),
-                  DropdownMenuItem(value: 'ready_for_pickup', child: Text('Ready for Pickup')),
-                  DropdownMenuItem(value: 'out_for_delivery', child: Text('Out for Delivery')),
-                  DropdownMenuItem(value: 'delivered', child: Text('Delivered')),
-                  DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
+                  // Status Dropdown Filter
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Status: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                      DropdownButton<String>(
+                        value: _selectedStatus,
+                        underline: const SizedBox(),
+                        items: const [
+                          DropdownMenuItem(value: 'all', child: Text('All Statuses')),
+                          DropdownMenuItem(value: 'placed', child: Text('Placed')),
+                          DropdownMenuItem(value: 'preparing', child: Text('Preparing')),
+                          DropdownMenuItem(value: 'accepted', child: Text('Accepted')),
+                          DropdownMenuItem(value: 'ready_for_pickup', child: Text('Ready for Pickup')),
+                          DropdownMenuItem(value: 'out_for_delivery', child: Text('Out for Delivery')),
+                          DropdownMenuItem(value: 'delivered', child: Text('Delivered')),
+                          DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _selectedStatus = val);
+                        },
+                      ),
+                    ],
+                  ),
                 ],
-                onChanged: (val) {
-                  if (val != null) setState(() => _selectedStatus = val);
-                },
               ),
-
-              const Spacer(),
 
               // Search Bar
               SizedBox(
@@ -491,53 +519,69 @@ class _LiveMonitoringViewState extends State<LiveMonitoringView> {
                   border: Border.all(color: Colors.grey.shade200),
                   boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
                 ),
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(Colors.grey.shade50),
-                  columns: const [
-                    DataColumn(label: Text('Order ID', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Store Name', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Assigned Rider', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Payment', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Grand Total', style: TextStyle(fontWeight: FontWeight.bold))),
-                  ],
-                  rows: filtered.map((o) {
-                    final status = o['status']?.toString() ?? 'placed';
-                    final color = _getStatusColor(status);
-                    final agent = o['deliveryAgent'];
-                    final riderName = agent != null && agent['name'] != null ? agent['name'].toString() : 'Unassigned';
-                    final storeName = o['storeDetails']?['name']?.toString() ?? o['storeId']?.toString() ?? '-';
-                    final payMode = o['paymentMethod']?.toString() ?? 'COD';
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 850),
+                    child: DataTable(
+                      headingRowColor: WidgetStateProperty.all(Colors.grey.shade50),
+                      columnSpacing: 24,
+                      columns: const [
+                        DataColumn(label: Text('Order ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Store Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Assigned Rider', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Payment', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Grand Total', style: TextStyle(fontWeight: FontWeight.bold))),
+                      ],
+                      rows: filtered.map((o) {
+                        final status = o['status']?.toString() ?? 'placed';
+                        final color = _getStatusColor(status);
+                        final agent = o['deliveryAgent'];
+                        final riderName = agent != null && agent['name'] != null ? agent['name'].toString() : 'Unassigned';
+                        final storeName = o['storeDetails']?['name']?.toString() ?? o['storeId']?.toString() ?? '-';
+                        final payMode = o['paymentMethod']?.toString() ?? 'COD';
 
-                    return DataRow(cells: [
-                      DataCell(Text('#${o['orderId'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold))),
-                      DataCell(
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
+                        return DataRow(cells: [
+                          DataCell(Text('#${o['orderId'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold))),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                status.toUpperCase().replaceAll('_', ' '),
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
+                              ),
+                            ),
                           ),
-                          child: Text(
-                            status.toUpperCase().replaceAll('_', ' '),
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
+                          DataCell(Text(storeName, style: const TextStyle(fontWeight: FontWeight.w500))),
+                          DataCell(
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.two_wheeler_rounded, size: 16, color: agent != null ? Colors.blue : Colors.grey),
+                                const SizedBox(width: 6),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 140),
+                                  child: Text(
+                                    riderName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontWeight: agent != null ? FontWeight.bold : FontWeight.normal),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ),
-                      DataCell(Text(storeName, style: const TextStyle(fontWeight: FontWeight.w500))),
-                      DataCell(
-                        Row(
-                          children: [
-                            Icon(Icons.two_wheeler_rounded, size: 16, color: agent != null ? Colors.blue : Colors.grey),
-                            const SizedBox(width: 6),
-                            Text(riderName, style: TextStyle(fontWeight: agent != null ? FontWeight.bold : FontWeight.normal)),
-                          ],
-                        ),
-                      ),
-                      DataCell(Text(payMode, style: const TextStyle(fontSize: 12))),
-                      DataCell(Text('₹${o['grandTotal'] ?? 0}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green))),
-                    ]);
-                  }).toList(),
+                          DataCell(Text(payMode, style: const TextStyle(fontSize: 12))),
+                          DataCell(Text('₹${o['grandTotal'] ?? 0}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green))),
+                        ]);
+                      }).toList(),
+                    ),
+                  ),
                 ),
               ),
       ],
