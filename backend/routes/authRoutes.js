@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const Store = require('../models/Store');
 
 // 1. SEND OTP API
 router.post('/send-otp', async (req, res) => {
@@ -261,6 +262,68 @@ router.post('/verify-phone-update-otp', async (req, res) => {
   } catch (error) {
     console.error('Error verifying phone update OTP:', error);
     res.status(500).json({ error: 'Failed to update phone number', details: error.message });
+  }
+});
+
+// 6. UPDATE FCM DEVICE TOKEN
+router.post('/update-fcm-token', async (req, res) => {
+  try {
+    const { userId, phone, fcmToken, storeId, role } = req.body;
+
+    if (!fcmToken) {
+      return res.status(400).json({ error: 'fcmToken is required' });
+    }
+
+    if (!userId && !phone && !storeId) {
+      return res.status(400).json({ error: 'userId, phone, or storeId is required' });
+    }
+
+    let updatedUser = null;
+    let updatedStore = null;
+
+    // Update User
+    if (userId || phone) {
+      const userQuery = {};
+      if (userId && phone) {
+        userQuery.$or = [{ userId }, { phone }];
+      } else if (userId) {
+        userQuery.userId = userId;
+      } else {
+        userQuery.phone = phone;
+      }
+
+      updatedUser = await User.findOneAndUpdate(
+        userQuery,
+        { $set: { fcmToken: fcmToken.trim() } },
+        { new: true }
+      );
+    }
+
+    // Update Store if storeId is provided or user is store_owner
+    if (storeId) {
+      updatedStore = await Store.findOneAndUpdate(
+        { storeId },
+        { $set: { fcmToken: fcmToken.trim() } },
+        { new: true }
+      );
+    } else if (updatedUser && updatedUser.role === 'store_owner') {
+      updatedStore = await Store.findOneAndUpdate(
+        { $or: [{ ownerId: updatedUser.userId }, { phone: updatedUser.phone }] },
+        { $set: { fcmToken: fcmToken.trim() } },
+        { new: true }
+      );
+    }
+
+    console.log(`📱 [FCM] Token updated for ${userId || phone || storeId} (Role: ${role || 'unknown'})`);
+
+    res.status(200).json({
+      success: true,
+      message: 'FCM token registered successfully',
+      fcmToken,
+    });
+  } catch (error) {
+    console.error('Error updating FCM token:', error);
+    res.status(500).json({ error: 'Failed to update FCM token', details: error.message });
   }
 });
 

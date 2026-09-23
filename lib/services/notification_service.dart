@@ -97,4 +97,50 @@ class NotificationService {
       debugPrint('[NotificationService] Error showing OTP notification: $e');
     }
   }
+
+  /// Show order status notification
+  static Future<void> showOrderStatusNotification({
+    required String title,
+    required String body,
+    String? orderId,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        await initialize();
+      }
+
+      const AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
+        'citizen_order_updates',
+        'Order Status Updates',
+        channelDescription: 'Notifications for your delivery order updates',
+        importance: Importance.max,
+        priority: Priority.max,
+        showWhen: true,
+        enableVibration: true,
+        playSound: true,
+      );
+
+      const NotificationDetails notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      );
+
+      final int id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+
+      await _notificationsPlugin.show(
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: notificationDetails,
+        payload: orderId,
+      );
+    } catch (e) {
+      debugPrint('[NotificationService] Error showing order status: $e');
+    }
+  }
 }

@@ -12,6 +12,9 @@ import '../../bloc/store/store_state.dart';
 import '../../constants/route_constants.dart';
 import '../../model/store_model.dart';
 import '../../network/store_order_api_service.dart';
+import '../../network/auth_api_service.dart';
+import '../../services/notification_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../service/socket_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
@@ -41,6 +44,7 @@ class _StoreDashboardScreenState extends State<StoreDashboardScreen> {
     _store = widget.store;
     context.read<ProductBloc>().add(LoadStoreProductsEvent(_store.storeId));
     _fetchFinancialMetrics();
+    _initFCM();
 
     // Connect to WebSocket for real-time order alerts
     StoreSocketService().subscribeToStore(_store.storeId);
@@ -76,6 +80,64 @@ class _StoreDashboardScreenState extends State<StoreDashboardScreen> {
   void dispose() {
     _newOrderSub?.cancel();
     super.dispose();
+  }
+
+  Future<void> _initFCM() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      final settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      debugPrint('🔔 [FCM Store] Permission status: ${settings.authorizationStatus}');
+
+      final token = await messaging.getToken();
+      debugPrint('📱 [FCM Store] Device token: $token');
+      if (token != null && token.isNotEmpty) {
+        await AuthApiService.updateFcmToken(
+          phone: _store.phone,
+          storeId: _store.storeId,
+          fcmToken: token,
+        );
+      }
+
+      messaging.onTokenRefresh.listen((newToken) async {
+        debugPrint('🔄 [FCM Store] Token refreshed: $newToken');
+        await AuthApiService.updateFcmToken(
+          phone: _store.phone,
+          storeId: _store.storeId,
+          fcmToken: newToken,
+        );
+      });
+
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        debugPrint('📩 [FCM Foreground Store]: ${message.data}');
+        if (message.data['type'] == 'new_order' && mounted) {
+          _fetchFinancialMetrics();
+          final orderId = message.data['orderId']?.toString() ?? '';
+          NotificationService.showNewOrderNotification(
+            orderId: orderId,
+            title: message.notification?.title ?? '🔔 New Order Received!',
+            body: message.notification?.body ?? 'A customer order has arrived. Tap to fulfill.',
+          );
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('🔔 New order #$orderId received! Tap to fulfill.'),
+              backgroundColor: AppColors.primary,
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'Open',
+                textColor: Colors.white,
+                onPressed: _openOrderQueue,
+              ),
+            ),
+          );
+        }
+      });
+    } catch (e) {
+      debugPrint('❌ [FCM Store] Init error: $e');
+    }
   }
 
   void _toggleOnline(bool val) {

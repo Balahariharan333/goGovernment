@@ -22,6 +22,7 @@ const UserSchema = new mongoose.Schema(
     pendingPhone: { type: String, default: '' },
     pendingPhoneOtp: { type: String, default: '' },
     pendingPhoneOtpExpires: { type: Date },
+    fcmToken: { type: String, default: '' },
   },
   {
     timestamps: true,

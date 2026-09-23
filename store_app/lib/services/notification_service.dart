@@ -97,4 +97,50 @@ class NotificationService {
       debugPrint('[NotificationService] Error showing OTP notification: $e');
     }
   }
+
+  /// Show incoming new order notification with sound
+  static Future<void> showNewOrderNotification({
+    required String orderId,
+    String title = '🔔 New Order Received!',
+    String body = 'A new customer order has been placed. Tap to view orders.',
+  }) async {
+    try {
+      if (!_isInitialized) {
+        await initialize();
+      }
+
+      const AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
+        'store_order_alerts',
+        'Store Order Alerts',
+        channelDescription: 'High-priority notifications for new store orders',
+        importance: Importance.max,
+        priority: Priority.max,
+        showWhen: true,
+        enableVibration: true,
+        playSound: true,
+      );
+
+      const NotificationDetails notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      );
+
+      final int id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+
+      await _notificationsPlugin.show(
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: notificationDetails,
+        payload: orderId,
+      );
+    } catch (e) {
+      debugPrint('[NotificationService] Error showing order notification: $e');
+    }
+  }
 }

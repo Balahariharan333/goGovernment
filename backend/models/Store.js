@@ -44,6 +44,7 @@ const StoreSchema = new mongoose.Schema(
     rating: { type: Number, default: 4.5 },
     verifiedAt: { type: Date },
     verifiedBy: { type: String, default: '' },
+    fcmToken: { type: String, default: '' },
   },
   {
     timestamps: true,

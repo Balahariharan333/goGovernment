@@ -162,7 +162,15 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              CustomText.caption('TOTAL BALANCE PAYABLE', color: Colors.white70, fontWeight: FontWeight.bold),
+              Flexible(
+                child: CustomText.caption(
+                  'TOTAL BALANCE PAYABLE',
+                  color: Colors.white70,
+                  fontWeight: FontWeight.bold,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
               Container(
                 padding: EdgeInsets.symmetric(horizontal: Responsive.w(8), vertical: Responsive.h(3)),
                 decoration: BoxDecoration(
@@ -170,10 +178,11 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.shield_outlined, size: 14, color: Colors.white),
+                    Icon(Icons.shield_outlined, size: 13, color: Colors.white),
                     SizedBox(width: 4),
-                    Text('Direct Bank Transfer', style: TextStyle(color: Colors.white, fontSize: 11)),
+                    Text('Bank Transfer', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),

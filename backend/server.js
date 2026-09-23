@@ -26,6 +26,8 @@ const cartRoutes = require('./routes/cartRoutes');
 const wishlistRoutes = require('./routes/wishlistRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const walletRoutes = require('./routes/walletRoutes');
+const fcmService = require('./services/fcmService');
+const User = require('./models/User');
 
 const app = express();
 const server = http.createServer(app);
@@ -113,12 +115,26 @@ function dispatchOrder(io, orderPayload, storeLat, storeLng, round = 1, prevDisp
   if (round <= 2 && targets.length > 0) {
     // Targeted dispatch — only selected riders
     for (const target of targets) {
-      io.to(target.socketId).emit('order:dispatch', {
+      const targetPayload = {
         ...orderPayload,
         dispatchRound: round,
         dispatchDistKm: Math.round(target.dist * 10) / 10,
         countdownSecs: 30,
-      });
+      };
+      io.to(target.socketId).emit('order:dispatch', targetPayload);
+      if (target.riderId) {
+        io.to(`rider:${target.riderId}`).emit('order:dispatch', targetPayload);
+
+        // Send FCM Wake-up Push (wakes sleeping/closed Rider App)
+        User.findOne({ $or: [{ userId: target.riderId }, { phone: target.riderId }] })
+          .select('fcmToken')
+          .then((riderUser) => {
+            if (riderUser && riderUser.fcmToken) {
+              fcmService.sendToRiderOrderAlert(riderUser.fcmToken, targetPayload);
+            }
+          })
+          .catch((err) => console.error('Error fetching rider FCM token:', err.message));
+      }
     }
     console.log(
       `📡 [Dispatch R${round}] Order ${orderId} → ${targets.length} riders within ${round === 1 ? 2 : 6}km`
@@ -152,6 +168,19 @@ function dispatchOrder(io, orderPayload, storeLat, storeLng, round = 1, prevDisp
     io.emit('order:dispatch', payload);
     io.to('riders').emit('order:dispatch', payload);
     console.log(`📡 [Dispatch R3] Order ${orderId} → broadcast to all online riders`);
+
+    // Broadcast FCM alert to all registered riders
+    User.find({ role: 'rider', fcmToken: { $ne: '' } })
+      .select('fcmToken')
+      .then((riders) => {
+        for (const r of riders) {
+          if (r.fcmToken) {
+            fcmService.sendToRiderOrderAlert(r.fcmToken, payload);
+          }
+        }
+      })
+      .catch((err) => console.error('Error broadcasting rider FCM:', err.message));
+
     dispatchTimers.delete(orderId);
   }
 }
@@ -175,6 +204,7 @@ io.on('connection', (socket) => {
   // Rider joins general riders dispatch room + registers in GPS registry
   socket.on('join:rider', (riderId) => {
     socket.join('riders');
+    if (riderId) socket.join(`rider:${riderId}`);
     socket.data.riderId = riderId;
     // Register rider in GPS registry (online, position unknown until first ping)
     if (riderId && !riderRegistry.has(riderId)) {
@@ -183,6 +213,10 @@ io.on('connection', (socket) => {
       });
     } else if (riderId) {
       const info = riderRegistry.get(riderId);
+      if (info.disconnectTimer) {
+        clearTimeout(info.disconnectTimer);
+        info.disconnectTimer = null;
+      }
       info.socketId = socket.id;
       info.isOnline = true;
       info.lastSeen = Date.now();
@@ -191,20 +225,25 @@ io.on('connection', (socket) => {
     console.log(`🚴 [Socket.io] Socket ${socket.id} joined riders room (Rider: ${riderId})`);
   });
 
-  // Rider GPS ping — updates in-memory registry (every 30s while online)
+  // Rider GPS ping — updates in-memory registry (every 20-30s while online)
   socket.on('rider:location_ping', async (data) => {
     const { riderId, lat, lng, isOnline, bgPing } = data || {};
     if (!riderId) return;
     const existing = riderRegistry.get(riderId) || {};
 
-    // Background keepalive pings (bgPing=true) send lat=0,lng=0 to save battery.
-    // Do NOT overwrite real GPS coordinates with zeros — only update online status.
-    const isBackgroundPing = bgPing === true && lat === 0 && lng === 0;
+    if (existing.disconnectTimer) {
+      clearTimeout(existing.disconnectTimer);
+      existing.disconnectTimer = null;
+    }
+
+    // Never overwrite valid existing coordinates with (0, 0)
+    const hasZeroCoords = (lat === 0 || lat === null || lat === undefined) &&
+                          (lng === 0 || lng === null || lng === undefined);
 
     riderRegistry.set(riderId, {
       ...existing,
-      lat: isBackgroundPing ? (existing.lat ?? 0) : (lat ?? existing.lat ?? 0),
-      lng: isBackgroundPing ? (existing.lng ?? 0) : (lng ?? existing.lng ?? 0),
+      lat: (hasZeroCoords && existing.lat) ? existing.lat : (lat ?? existing.lat ?? 0),
+      lng: (hasZeroCoords && existing.lng) ? existing.lng : (lng ?? existing.lng ?? 0),
       socketId: socket.id,
       isOnline: isOnline !== false,
       lastSeen: Date.now(),
@@ -237,14 +276,20 @@ io.on('connection', (socket) => {
     const riderId = socket.data.riderId;
     if (riderId && riderRegistry.has(riderId)) {
       const info = riderRegistry.get(riderId);
-      // CRITICAL: Only mark OFFLINE if THIS socket is still the active socket.
-      // The background foreground-service socket may have already taken over
-      // with a newer socketId — we must NOT override its isOnline=true state.
+      // Give a 60-second grace period:
+      // When rider minimizes the app or uses another app (Google Maps/WhatsApp),
+      // the UI socket might disconnect before the background socket reconnects or pings.
       if (info.socketId === socket.id) {
-        info.isOnline = false;
-        console.log(`🔴 [Socket.io] Rider ${riderId} marked OFFLINE (socket ${socket.id} disconnected)`);
+        if (info.disconnectTimer) clearTimeout(info.disconnectTimer);
+        info.disconnectTimer = setTimeout(() => {
+          if (info.socketId === socket.id) {
+            info.isOnline = false;
+            console.log(`🔴 [Socket.io] Rider ${riderId} marked OFFLINE after 60s disconnect grace period`);
+          }
+        }, 60000);
+        console.log(`⏳ [Socket.io] Socket ${socket.id} disconnected for rider ${riderId} — starting 60s grace period (keeping ONLINE)`);
       } else {
-        console.log(`⚡ [Socket.io] Stale socket ${socket.id} disconnected for rider ${riderId} — background socket still active, keeping ONLINE`);
+        console.log(`⚡ [Socket.io] Stale socket ${socket.id} disconnected for rider ${riderId} — active socket still connected, keeping ONLINE`);
       }
     }
     console.log(`⚡ [Socket.io] Client disconnected: ${socket.id}`);
@@ -268,6 +313,28 @@ app.get('/api/health', (req, res) => {
     status: 'online',
     message: 'GoGovernment Node.js Backend is running smoothly 🚀',
     timestamp: new Date().toISOString(),
+  });
+});
+
+// Debug Endpoint for Rider Registry & Dispatches
+app.get('/api/debug/riders', (req, res) => {
+  const riders = [];
+  for (const [id, info] of riderRegistry.entries()) {
+    riders.push({
+      riderId: id,
+      socketId: info.socketId,
+      lat: info.lat,
+      lng: info.lng,
+      isOnline: info.isOnline,
+      isBusy: info.isBusy,
+      lastSeenSecondsAgo: Math.round((Date.now() - (info.lastSeen || 0)) / 1000),
+      hasDisconnectTimer: !!info.disconnectTimer,
+    });
+  }
+  res.json({
+    totalRiders: riders.length,
+    riders,
+    activeDispatches: Array.from(dispatchTimers.keys()),
   });
 });
 

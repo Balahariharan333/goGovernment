@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'firebase_options.dart';
 import 'bloc/auth/auth_bloc.dart';
 import 'bloc/product/product_bloc.dart';
 import 'bloc/store/store_bloc.dart';
@@ -10,13 +13,40 @@ import 'routes/app_router.dart';
 import 'services/notification_service.dart';
 import 'utils/app_theme.dart';
 
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (_) {}
+
+  debugPrint('📩 [FCM Background Store] Message: ${message.messageId} | data: ${message.data}');
+
+  if (message.data['type'] == 'new_order') {
+    final orderId = message.data['orderId']?.toString() ?? '';
+    await NotificationService.showNewOrderNotification(
+      orderId: orderId,
+      title: '🔔 New Order Received!',
+      body: 'Order #$orderId has been placed. Tap to prepare items.',
+    );
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Initialize Local Storage (Hive)
+  // 1. Initialize Firebase
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    debugPrint('🔥 [Store App] Firebase initialized successfully');
+  } catch (e) {
+    debugPrint('❌ [Store App] Firebase init error: $e');
+  }
+
+  // 2. Initialize Local Storage (Hive)
   await HiveService.init();
 
-  // 2. Initialize Push Notifications for SMS OTPs
+  // 3. Initialize Push Notifications for SMS OTPs & Order alerts
   await NotificationService.initialize();
 
   // 3. System UI Overlay & Orientations

@@ -55,25 +55,22 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
         if (state is DeliveryLoaded) {
           // If order is completed, safely pop back to dashboard with celebration
           final found = state.activeOrders.where((o) => o.orderId == _order.orderId).toList();
-          if (found.isEmpty) {
-            final completed = state.completedOrders.where((o) => o.orderId == _order.orderId).toList();
-            if (completed.isNotEmpty && !_isPopping) {
-              _isPopping = true;
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                if (Navigator.canPop(context)) {
-                  Navigator.pop(context);
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('🎉 Order #${_order.orderId} Delivered Successfully! +₹45 Payout added.'),
-                    backgroundColor: AppColors.success,
-                    duration: const Duration(seconds: 4),
-                  ),
-                );
-              });
-            }
-          } else {
+          if (found.isEmpty && !_isPopping) {
+            _isPopping = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+              }
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('🎉 Order #${_order.orderId} Delivered Successfully! +₹45 Payout added.'),
+                  backgroundColor: AppColors.success,
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            });
+          } else if (found.isNotEmpty) {
             setState(() {
               _order = found.first;
             });

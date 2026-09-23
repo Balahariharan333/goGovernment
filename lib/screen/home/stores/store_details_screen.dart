@@ -607,6 +607,9 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
   }
 
   Widget _buildProductCard(Map<String, dynamic> product) {
+    product['storeId'] = widget.storeId;
+    product['storeName'] = widget.storeName;
+
     final String id = product['id'];
     final int qty = CartManager.instance.getQuantity(id);
     final int stock = CartManager.instance.getStock(product);

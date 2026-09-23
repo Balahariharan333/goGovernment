@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_government/bloc/coupon/coupon_bloc.dart';
 import 'package:go_government/bloc/direction/direction_bloc.dart';
@@ -28,15 +28,36 @@ import 'hive/hive_service.dart';
 import 'constants/route_constants.dart';
 import 'routes/app_router.dart';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'service/firebase_service.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {}
+
+  debugPrint('📩 [FCM Background Citizen] Message: ${message.messageId} | data: ${message.data}');
+  final title = message.notification?.title ?? '📦 Order Update';
+  final body = message.notification?.body ?? 'Your order status has been updated.';
+  await NotificationService.showOrderStatusNotification(
+    title: title,
+    body: body,
+    orderId: message.data['orderId']?.toString(),
+  );
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Initialize local notifications (for OTP test alerts without Firebase)
+  // Initialize local notifications
   await NotificationService.initialize();
 
-  // Initialize Firebase
+  // Initialize Firebase & FCM
   try {
     await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    FirebaseService.initFCM();
     debugPrint('[Main] Firebase initialized successfully');
   } catch (e) {
     debugPrint('[Main] Firebase initialization error: $e');

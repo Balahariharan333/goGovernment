@@ -60,7 +60,7 @@ class HiveService {
   // Duty & Work Metrics
   // ----------------------------------------------------
   static bool get isOnline =>
-      _dutyBox.get(HiveKeys.isOnline, defaultValue: true) as bool;
+      _dutyBox.get(HiveKeys.isOnline, defaultValue: false) as bool;
 
   static Future<void> setIsOnline(bool online) async {
     await _dutyBox.put(HiveKeys.isOnline, online);

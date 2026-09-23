@@ -166,11 +166,18 @@ class _CartScreenState extends State<CartScreen> {
     }
 
     String resolvedStoreId = 'STORE_479113';
+    String dynamicStoreName = CartManager.instance.currentStoreName ?? '';
     final backendItems = <Map<String, dynamic>>[];
     final orderItems = cartItemsMap.entries.map((e) {
       final prod = CartManager.instance.productDetails[e.key] ?? {};
       if (prod['storeId'] != null && prod['storeId'].toString().isNotEmpty) {
         resolvedStoreId = prod['storeId'].toString();
+      }
+      if (dynamicStoreName.isEmpty) {
+        final sName = prod['storeName']?.toString() ?? prod['storeTitle']?.toString();
+        if (sName != null && sName.trim().isNotEmpty) {
+          dynamicStoreName = sName.trim();
+        }
       }
       final p = parsePrice(prod['price'], 83);
       final orig = parsePrice(prod['originalPrice'], 106);
@@ -193,7 +200,9 @@ class _CartScreenState extends State<CartScreen> {
     }).toList();
 
     String orderId = 'ORD_${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
-    final String storeTitle = widget.storeType == 'medical' ? 'Apothecary Pharmacy' : 'Bangalore Horticulture';
+    String storeTitle = dynamicStoreName.trim().isNotEmpty
+        ? dynamicStoreName.trim()
+        : (widget.storeType == 'medical' ? 'Medical Store' : 'Vegetable Store');
     final now = DateTime.now();
     final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     final String dateFormatted =
@@ -226,8 +235,14 @@ class _CartScreenState extends State<CartScreen> {
       storeDetails: {'storeId': resolvedStoreId, 'name': storeTitle},
     );
 
-    if (serverOrder != null && serverOrder['orderId'] != null) {
-      orderId = serverOrder['orderId'].toString();
+    if (serverOrder != null) {
+      if (serverOrder['orderId'] != null) {
+        orderId = serverOrder['orderId'].toString();
+      }
+      final backendStoreName = serverOrder['storeDetails']?['name']?.toString().trim();
+      if (backendStoreName != null && backendStoreName.isNotEmpty) {
+        storeTitle = backendStoreName;
+      }
     }
 
     final newTx = {

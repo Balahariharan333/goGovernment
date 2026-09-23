@@ -94,4 +94,56 @@ class NotificationService {
       debugPrint('[NotificationService] Error showing OTP notification: $e');
     }
   }
+
+  /// Show high-priority Order Alert notification with sound and heads-up display
+  static Future<void> showOrderAlert({
+    required String orderId,
+    required String storeName,
+    required String dropAddress,
+    required String fee,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        await initialize();
+      }
+
+      const AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
+        'rider_order_alerts_v2',
+        'Order Alerts',
+        channelDescription: 'Heads-up alerts for incoming delivery orders',
+        importance: Importance.max,
+        priority: Priority.max,
+        fullScreenIntent: true,
+        category: AndroidNotificationCategory.call,
+        audioAttributesUsage: AudioAttributesUsage.notification,
+        sound: RawResourceAndroidNotificationSound('alert'),
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+      );
+
+      const NotificationDetails notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+          sound: 'alert.wav',
+        ),
+      );
+
+      final int id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+
+      await _notificationsPlugin.show(
+        id: id,
+        title: '🚨 New Delivery Order Available (₹$fee)',
+        body: 'Pick up from $storeName → Deliver to $dropAddress',
+        notificationDetails: notificationDetails,
+        payload: orderId,
+      );
+    } catch (e) {
+      debugPrint('[NotificationService] Error showing order alert: $e');
+    }
+  }
 }

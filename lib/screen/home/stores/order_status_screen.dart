@@ -901,9 +901,12 @@ class _OrderStatusScreenState extends State<OrderStatusScreen>
   Widget _buildStoreDetailCard() {
     final storeDetails = _serverOrderData?['storeDetails'] as Map<String, dynamic>? ??
         widget.transaction?['storeDetails'] as Map<String, dynamic>?;
-    final storeName = (storeDetails != null && storeDetails['name'] != null && storeDetails['name'].toString().trim().isNotEmpty)
-        ? storeDetails['name'].toString()
-        : (widget.transaction?['title']?.toString() ?? 'Government Store');
+    final rawName = (storeDetails != null && storeDetails['name'] != null && storeDetails['name'].toString().trim().isNotEmpty)
+        ? storeDetails['name'].toString().trim()
+        : (widget.transaction?['title']?.toString().trim() ?? '');
+    final storeName = (rawName.isNotEmpty && rawName != 'Bangalore Horticulture' && rawName != 'Apothecary Pharmacy')
+        ? rawName
+        : (widget.storeType == 'medical' ? 'Medical Store' : 'Vegetable Store');
     final storePhone = storeDetails?['phone']?.toString() ??
         widget.transaction?['storePhone']?.toString() ?? '';
     final storeAddress = storeDetails?['address']?.toString() ??
@@ -1321,10 +1324,13 @@ class _OrderStatusScreenState extends State<OrderStatusScreen>
     if (_serverOrderData != null) {
       final items = _serverOrderData!['items'] as List? ?? [];
       final grandTotal = _serverOrderData!['grandTotal']?.toString() ?? '0';
-      final storeName = _serverOrderData!['storeDetails']?['name']?.toString() ??
-          (widget.storeType == 'food'
-              ? 'Burger King & Cafe'
-              : (widget.storeType == 'grocery' ? 'Fresh Mart Grocery' : 'Apollo Pharmacy'));
+      final rawServerName = _serverOrderData!['storeDetails']?['name']?.toString().trim();
+      final rawTxTitle = widget.transaction?['title']?.toString().trim();
+      final storeName = (rawServerName != null && rawServerName.isNotEmpty && rawServerName != 'Bangalore Horticulture' && rawServerName != 'Apothecary Pharmacy')
+          ? rawServerName
+          : ((rawTxTitle != null && rawTxTitle.isNotEmpty && rawTxTitle != 'Bangalore Horticulture' && rawTxTitle != 'Apothecary Pharmacy')
+              ? rawTxTitle
+              : (widget.storeType == 'medical' ? 'Medical Store' : 'Vegetable Store'));
       return {
         'id': _orderId,
         'title': storeName,

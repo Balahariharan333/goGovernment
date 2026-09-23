@@ -321,4 +321,39 @@ class RiderApiService {
       return null;
     }
   }
+
+  // --------------------------------------------------------------------------
+  // 11. Update Rider FCM Device Token
+  // --------------------------------------------------------------------------
+  static Future<bool> updateFcmToken({
+    required String userId,
+    required String phone,
+    required String fcmToken,
+  }) async {
+    if (fcmToken.isEmpty) return false;
+    final url = '${ApiClient.baseUrl}/auth/update-fcm-token';
+    final body = {
+      'userId': userId,
+      'phone': phone,
+      'fcmToken': fcmToken,
+      'role': 'rider',
+    };
+    ApiClient.logRequest('POST', url, body: body);
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse(url),
+            headers: ApiClient.defaultHeaders,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      ApiClient.logResponse('POST', url, response.statusCode, response.body);
+      return response.statusCode == 200;
+    } catch (e) {
+      ApiClient.logError('POST', url, e);
+      return false;
+    }
+  }
 }

@@ -2,8 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import '../hive/hive_service.dart';
+import '../services/notification_service.dart';
 
 class FirebaseService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -129,6 +132,66 @@ class FirebaseService {
       });
     } catch (e) {
       debugPrint('[FirebaseService] Error adding comment: $e');
+    }
+  }
+
+  // 5. Initialize FCM and update device push token
+  static Future<void> initFCM() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      final settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      debugPrint('🔔 [FCM Citizen] Permission status: ${settings.authorizationStatus}');
+
+      final token = await messaging.getToken();
+      debugPrint('📱 [FCM Citizen] Device token: $token');
+      if (token != null && token.isNotEmpty) {
+        await _updateTokenOnBackend(token);
+      }
+
+      messaging.onTokenRefresh.listen((newToken) async {
+        debugPrint('🔄 [FCM Citizen] Token refreshed: $newToken');
+        await _updateTokenOnBackend(newToken);
+      });
+
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        debugPrint('📩 [FCM Foreground Citizen]: ${message.data}');
+        final title = message.notification?.title ?? '📦 Order Update';
+        final body = message.notification?.body ?? 'Your order status has been updated.';
+        NotificationService.showOrderStatusNotification(
+          title: title,
+          body: body,
+          orderId: message.data['orderId']?.toString(),
+        );
+      });
+    } catch (e) {
+      debugPrint('❌ [FCM Citizen] Init error: $e');
+    }
+  }
+
+  static Future<void> _updateTokenOnBackend(String fcmToken) async {
+    try {
+      final userId = HiveService.citizenId;
+      final phone = HiveService.userPhone;
+      if (userId.isEmpty && phone.isEmpty) return;
+
+      final url = Uri.parse('http://192.168.1.11:5000/api/auth/update-fcm-token');
+      await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'userId': userId,
+          'phone': phone,
+          'fcmToken': fcmToken,
+          'role': 'citizen',
+        }),
+      ).timeout(const Duration(seconds: 5));
+      debugPrint('✅ [FCM Citizen] Token successfully synced to backend');
+    } catch (e) {
+      debugPrint('⚠️ [FCM Citizen] Failed to sync token to backend: $e');
     }
   }
 }

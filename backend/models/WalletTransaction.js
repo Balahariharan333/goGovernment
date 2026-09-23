@@ -8,7 +8,7 @@ const WalletTransactionSchema = new mongoose.Schema(
     type: { type: String, enum: ['credit', 'debit'], required: true },
     category: {
       type: String,
-      enum: ['topup', 'order_payment', 'order_refund', 'reward_redemption', 'cashback'],
+      enum: ['topup', 'order_payment', 'order_refund', 'reward_redemption', 'cashback', 'rider_payout', 'store_settlement', 'withdrawal'],
       required: true,
     },
     paymentMethod: { type: String, default: 'Wallet' },

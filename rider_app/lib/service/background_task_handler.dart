@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     hide NotificationVisibility; // avoid clash with flutter_foreground_task
@@ -17,10 +18,13 @@ void startCallback() {
 class RiderBackgroundTaskHandler extends TaskHandler {
   io.Socket? _socket;
   String _riderId = 'rider_bg';
+  String _serverUrl = 'http://192.168.1.11:5000';
+  double _lastLat = 0;
+  double _lastLng = 0;
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  static const String _channelId = 'rider_order_alerts';
+  static const String _channelId = 'rider_order_alerts_v2';
   static const String _channelName = 'Order Alerts';
   static int _notificationId = 1000;
 
@@ -28,28 +32,52 @@ class RiderBackgroundTaskHandler extends TaskHandler {
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
-    // Read the real rider ID saved by the main isolate before starting service
+    // Read dynamic rider ID and server URL saved by main isolate
     final savedId = await FlutterForegroundTask.getData<String>(key: 'riderId');
     if (savedId != null && savedId.isNotEmpty) {
       _riderId = savedId;
     }
+    final savedUrl = await FlutterForegroundTask.getData<String>(key: 'serverUrl');
+    if (savedUrl != null && savedUrl.isNotEmpty) {
+      _serverUrl = savedUrl;
+    }
+    final savedLat = await FlutterForegroundTask.getData<double>(key: 'lastLat');
+    if (savedLat != null && savedLat != 0) _lastLat = savedLat;
+    final savedLng = await FlutterForegroundTask.getData<double>(key: 'lastLng');
+    if (savedLng != null && savedLng != 0) _lastLng = savedLng;
 
     await _initNotifications();
     _connectBackgroundSocket();
   }
 
   /// Called every 15 seconds by the Foreground Service.
-  /// Keeps rider marked ONLINE on server while app is in background.
+  /// Keeps rider marked ONLINE on server with last-known coordinates while app is in background.
   @override
   void onRepeatEvent(DateTime timestamp) {
+    FlutterForegroundTask.getData<double>(key: 'lastLat').then((lat) {
+      if (lat != null && lat != 0) _lastLat = lat;
+    });
+    FlutterForegroundTask.getData<double>(key: 'lastLng').then((lng) {
+      if (lng != null && lng != 0) _lastLng = lng;
+    });
+    FlutterForegroundTask.getData<String>(key: 'riderId').then((id) {
+      if (id != null && id.isNotEmpty && id != _riderId) {
+        _riderId = id;
+        _socket?.emit('join:rider', _riderId);
+      }
+    });
+    FlutterForegroundTask.getData<String>(key: 'serverUrl').then((url) {
+      if (url != null && url.isNotEmpty) _serverUrl = url;
+    });
+
     if (_socket != null && _socket!.connected) {
-      // Send keepalive ping with isOnline=true so server never marks rider offline
+      // Send keepalive ping with real/last coordinates so nearest-rider calculations succeed
       _socket?.emit('rider:location_ping', {
         'riderId': _riderId,
-        'lat': 0,       // no GPS in background to save battery
-        'lng': 0,
+        'lat': _lastLat,
+        'lng': _lastLng,
         'isOnline': true,
-        'bgPing': true, // flag for debugging
+        'bgPing': true,
       });
     } else {
       // Socket dropped — reconnect
@@ -90,6 +118,7 @@ class RiderBackgroundTaskHandler extends TaskHandler {
       playSound: true,
       enableVibration: true,
       enableLights: true,
+      audioAttributesUsage: AudioAttributesUsage.notification,
     );
     await _notificationsPlugin
         .resolvePlatformSpecificImplementation<
@@ -101,10 +130,8 @@ class RiderBackgroundTaskHandler extends TaskHandler {
 
   void _connectBackgroundSocket() {
     try {
-      const serverUrl = 'http://192.168.1.11:5000';
-
       _socket = io.io(
-        serverUrl,
+        _serverUrl,
         io.OptionBuilder()
             .setTransports(['websocket', 'polling'])
             .enableAutoConnect()
@@ -115,15 +142,14 @@ class RiderBackgroundTaskHandler extends TaskHandler {
       );
 
       _socket?.onConnect((_) {
-        // Join riders room with the REAL rider ID (not a placeholder)
-        // This ensures the server's riderRegistry keeps isOnline=true
+        // Join riders room with the REAL rider ID
         _socket?.emit('join:rider', _riderId);
 
         // Immediately send an online ping on reconnect
         _socket?.emit('rider:location_ping', {
           'riderId': _riderId,
-          'lat': 0,
-          'lng': 0,
+          'lat': _lastLat,
+          'lng': _lastLng,
           'isOnline': true,
           'bgPing': true,
         });
@@ -149,9 +175,24 @@ class RiderBackgroundTaskHandler extends TaskHandler {
     }
   }
 
-  // ─── Show Heads-Up Notification ───────────────────────────────────────────
+  // ─── Show Heads-Up Notification & Auto-Launch App ─────────────────────────
 
   Future<void> _showOrderNotification(Map<String, dynamic> data) async {
+    // 1. Programmatically wake screen and bring the Rider App to foreground
+    try {
+      FlutterForegroundTask.wakeUpScreen();
+      Future.delayed(const Duration(seconds: 3), () {
+        FlutterForegroundTask.launchApp();
+      });
+    }  catch (e) {
+        debugPrint("Failed to open app: $e");
+      }
+    // 2. Also forward payload to main isolate in case app UI is active
+    try {
+      FlutterForegroundTask.sendDataToMain(data);
+    } catch (_) {}
+
+    // 3. Show high-priority heads-up notification with sound and full screen intent
     final storeName = data['storeName']?.toString() ?? 'Store';
     final dropAddress = data['dropAddress']?.toString() ?? 'Customer Location';
     final deliveryFee = data['deliveryFee']?.toString() ?? '';
@@ -162,7 +203,9 @@ class RiderBackgroundTaskHandler extends TaskHandler {
       _channelName,
       channelDescription: 'Alerts for new delivery order assignments',
       importance: Importance.max,
-      priority: Priority.high,
+      priority: Priority.max,
+      category: AndroidNotificationCategory.call,
+      audioAttributesUsage: AudioAttributesUsage.notification,
       sound: const RawResourceAndroidNotificationSound('alert'),
       playSound: true,
       enableVibration: true,

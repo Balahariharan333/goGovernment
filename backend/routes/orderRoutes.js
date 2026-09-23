@@ -5,6 +5,7 @@ const Store = require('../models/Store');
 const User = require('../models/User');
 const Product = require('../models/Product');
 const WalletTransaction = require('../models/WalletTransaction');
+const fcmService = require('../services/fcmService');
 
 // 1. CREATE NEW ORDER (Placed by Citizen)
 router.post('/', async (req, res) => {
@@ -46,11 +47,15 @@ router.post('/', async (req, res) => {
 
       resolvedStoreDetails = {
         storeId: storeDoc.storeId,
-        name: resolvedStoreDetails.name || storeDoc.name,
-        address: resolvedStoreDetails.address || storeDoc.address,
+        name: (storeDoc.name && storeDoc.name.trim().length > 0)
+          ? storeDoc.name.trim()
+          : (resolvedStoreDetails.name && !['Bangalore Horticulture', 'Apothecary Pharmacy'].includes(resolvedStoreDetails.name)
+              ? resolvedStoreDetails.name
+              : 'Store Order'),
+        address: (storeDoc.address && storeDoc.address.trim().length > 0) ? storeDoc.address : (resolvedStoreDetails.address || ''),
         latitude: realLat,
         longitude: realLng,
-        phone: resolvedStoreDetails.phone || storeDoc.phone || '',
+        phone: storeDoc.phone || resolvedStoreDetails.phone || '',
       };
     } else {
       resolvedStoreDetails.latitude = resolvedStoreDetails.latitude || 12.9716;
@@ -169,6 +174,16 @@ router.post('/', async (req, res) => {
       io.to(`store:${storeId}`).emit('order:new', orderPayload);
       console.log(`📡 [Socket.io] Emitted order:new & store:${storeId}:new_order for order ${orderId}`);
     }
+
+    // Send FCM Push notification to Store Owner
+    Store.findOne({ storeId })
+      .select('fcmToken')
+      .then((storeDoc) => {
+        if (storeDoc && storeDoc.fcmToken) {
+          fcmService.sendToStoreNewOrder(storeDoc.fcmToken, newOrder);
+        }
+      })
+      .catch((err) => console.error('Error sending store FCM:', err.message));
 
     return res.status(201).json({
       success: true,
@@ -413,9 +428,30 @@ router.get('/:orderId', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+    const orderObj = order.toObject ? order.toObject() : JSON.parse(JSON.stringify(order));
+    if (orderObj.storeId) {
+      const storeDoc = await Store.findOne({ storeId: orderObj.storeId });
+      if (storeDoc && storeDoc.name) {
+        if (!orderObj.storeDetails) orderObj.storeDetails = {};
+        if (
+          !orderObj.storeDetails.name ||
+          orderObj.storeDetails.name === 'Bangalore Horticulture' ||
+          orderObj.storeDetails.name === 'Apothecary Pharmacy'
+        ) {
+          orderObj.storeDetails.name = storeDoc.name;
+        }
+        if (!orderObj.storeDetails.address && storeDoc.address) {
+          orderObj.storeDetails.address = storeDoc.address;
+        }
+        if (!orderObj.storeDetails.phone && storeDoc.phone) {
+          orderObj.storeDetails.phone = storeDoc.phone;
+        }
+      }
+    }
+
     return res.status(200).json({
       success: true,
-      data: order,
+      data: orderObj,
     });
   } catch (error) {
     console.error('Error fetching order details:', error);
@@ -517,6 +553,21 @@ router.post('/:orderId/accept-rider', async (req, res) => {
       io.to('riders').emit('order:assigned', orderPayload);
       console.log(`📡 [Socket.io] Emitted order:assigned & order:status_update for order ${orderId}`);
     }
+
+    // Send FCM notification to Citizen
+    User.findOne({ $or: [{ userId: order.userId }, { phone: order.userId }] })
+      .select('fcmToken')
+      .then((citizen) => {
+        if (citizen && citizen.fcmToken) {
+          fcmService.sendToCitizenOrderStatus(
+            citizen.fcmToken,
+            '🛵 Delivery Partner Assigned!',
+            `${name} has accepted your order #${orderId} and is heading to the store.`,
+            orderId
+          );
+        }
+      })
+      .catch((err) => console.error('Error sending citizen FCM:', err.message));
 
     return res.status(200).json({
       success: true,
@@ -690,16 +741,21 @@ router.patch('/:orderId/status', async (req, res) => {
       io.emit(`store:${order.storeId}:order_update`, orderPayload);
       io.to(`store:${order.storeId}`).emit('order:status_update', orderPayload);
       if (status === 'ready_for_pickup') {
-        // Proximity-based dispatch instead of broadcast
+        // Broadcast order:available immediately to all riders
+        io.emit('order:available', orderPayload);
+        io.to('riders').emit('order:available', orderPayload);
+
+        // Proximity-based dispatch with escalation
         const dispatchOrder = req.app.get('dispatchOrder');
         const storeLat = order.storeDetails?.latitude || 0;
         const storeLng = order.storeDetails?.longitude || 0;
         if (dispatchOrder && (storeLat !== 0 || storeLng !== 0)) {
           dispatchOrder(io, orderPayload, storeLat, storeLng, 1, []);
         } else {
-          // Fallback: broadcast if no store coords
+          // Fallback: broadcast dispatch to all riders
+          io.emit('order:dispatch', { ...orderPayload, dispatchRound: 3, countdownSecs: 30 });
           io.to('riders').emit('order:dispatch', { ...orderPayload, dispatchRound: 3, countdownSecs: 30 });
-          console.log(`📡 [Dispatch fallback] No store coords — broadcast for order ${orderId}`);
+          console.log(`📡 [Dispatch fallback] Broadcast order:dispatch for order ${orderId}`);
         }
       }
       // When rider accepted — cancel dispatch timer, remove from all riders' alert
@@ -729,6 +785,39 @@ router.patch('/:orderId/status', async (req, res) => {
       }
     }
 
+    // Send FCM notification to Citizen on status updates
+    if (['out_for_delivery', 'delivered', 'cancelled'].includes(status)) {
+      User.findOne({ $or: [{ userId: order.userId }, { phone: order.userId }] })
+        .select('fcmToken')
+        .then((citizen) => {
+          if (citizen && citizen.fcmToken) {
+            if (status === 'out_for_delivery') {
+              fcmService.sendToCitizenOrderStatus(
+                citizen.fcmToken,
+                '🚚 Out for Delivery!',
+                `Your order #${orderId} is on the way to your delivery address.`,
+                orderId
+              );
+            } else if (status === 'delivered') {
+              fcmService.sendToCitizenOrderStatus(
+                citizen.fcmToken,
+                '🎉 Order Delivered!',
+                `Your order #${orderId} has been successfully delivered. Thank you!`,
+                orderId
+              );
+            } else if (status === 'cancelled') {
+              fcmService.sendToCitizenOrderStatus(
+                citizen.fcmToken,
+                '❌ Order Cancelled',
+                `Your order #${orderId} has been cancelled.`,
+                orderId
+              );
+            }
+          }
+        })
+        .catch((err) => console.error('Error sending citizen FCM status:', err.message));
+    }
+
     return res.status(200).json({
       success: true,
       message: `Order status updated to ${status}`,
@@ -737,6 +826,53 @@ router.patch('/:orderId/status', async (req, res) => {
   } catch (error) {
     console.error('Error updating order status:', error);
     return res.status(500).json({ success: false, message: 'Failed to update order status', error: error.message });
+  }
+});
+
+// 9. DELETE ORDER
+router.delete('/:orderId', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const deleted = await Order.findOneAndDelete({ orderId });
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    // Free rider if assigned
+    const riderId = deleted.deliveryAgent?.riderId;
+    if (riderId) {
+      const riderRegistry = req.app.get('riderRegistry');
+      if (riderRegistry && riderRegistry.has(riderId)) {
+        riderRegistry.get(riderId).isBusy = false;
+        console.log(`🔓 [Rider] ${riderId} marked FREE after order ${orderId} deletion`);
+      }
+    }
+
+    // Clear dispatch timer if any
+    const dispatchTimers = req.app.get('dispatchTimers');
+    if (dispatchTimers && dispatchTimers.has(orderId)) {
+      clearTimeout(dispatchTimers.get(orderId).timer);
+      dispatchTimers.delete(orderId);
+    }
+
+    // Notify clients via socket
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('order:deleted', { orderId });
+      io.emit(`order:${orderId}:deleted`, { orderId });
+      io.to(`store:${deleted.storeId}`).emit('order:deleted', { orderId });
+      io.to('riders').emit('order:dispatch_cancelled', { orderId });
+    }
+
+    console.log(`🗑️ [Order Deleted] Order #${orderId} deleted successfully`);
+    return res.status(200).json({
+      success: true,
+      message: `Order #${orderId} deleted successfully`,
+      data: deleted,
+    });
+  } catch (error) {
+    console.error('Error deleting order:', error);
+    return res.status(500).json({ success: false, message: 'Failed to delete order', error: error.message });
   }
 });
 

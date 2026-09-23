@@ -1,4 +1,4 @@
-package com.gogovernment.rider.rider_app
+package com.hikizo.goGovernment_storeapp
 
 import io.flutter.embedding.android.FlutterActivity
 
