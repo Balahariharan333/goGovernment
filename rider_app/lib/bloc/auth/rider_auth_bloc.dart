@@ -1,6 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import '../../bloc/delivery/delivery_bloc.dart';
+import '../../bloc/delivery/delivery_event.dart';
 import '../../hive/hive_service.dart';
 import '../../network/rider_api_service.dart';
+import '../../service/socket_service.dart';
 import '../../services/notification_service.dart';
 import 'rider_auth_event.dart';
 import 'rider_auth_state.dart';
@@ -12,7 +18,7 @@ class RiderAuthBloc extends Bloc<RiderAuthEvent, RiderAuthState> {
 
   RiderAuthBloc._internal()
       : super(
-          HiveService.isLoggedIn
+          (HiveService.isLoggedIn && HiveService.isProfileCompleted)
               ? RiderAuthSuccessState(
                   userId: HiveService.userId,
                   name: HiveService.userName,
@@ -23,7 +29,7 @@ class RiderAuthBloc extends Bloc<RiderAuthEvent, RiderAuthState> {
               : RiderAuthInitial(),
         ) {
     on<CheckRiderAuthSessionEvent>((event, emit) {
-      if (HiveService.isLoggedIn) {
+      if (HiveService.isLoggedIn && HiveService.isProfileCompleted) {
         emit(RiderAuthSuccessState(
           userId: HiveService.userId,
           name: HiveService.userName,
@@ -62,32 +68,46 @@ class RiderAuthBloc extends Bloc<RiderAuthEvent, RiderAuthState> {
         final userId = res['userId']?.toString() ?? res['user']?['userId']?.toString() ?? '';
         final isNewUser = res['isNewUser'] == true;
 
-        await HiveService.setLoggedIn(true);
         await HiveService.setUserPhone(event.phone);
         await HiveService.setUserId(userId);
 
         final userObj = res['user'];
-        if (userObj != null && userObj['userName'] != null && userObj['userName'].toString().trim().isNotEmpty) {
-          final name = userObj['userName'].toString();
+        final name = (userObj != null && userObj['userName'] != null)
+            ? userObj['userName'].toString().trim()
+            : '';
+        final vType = (userObj != null && userObj['vehicleType'] != null && userObj['vehicleType'].toString().trim().isNotEmpty)
+            ? userObj['vehicleType'].toString().trim()
+            : 'Motorcycle';
+        final vNum = (userObj != null && userObj['vehicleNumber'] != null)
+            ? userObj['vehicleNumber'].toString().trim().toUpperCase()
+            : '';
+
+        // Only consider the profile complete if BOTH name AND vehicleNumber exist
+        final hasCompleteProfile = !isNewUser && name.isNotEmpty && vNum.isNotEmpty;
+
+        if (hasCompleteProfile) {
           await HiveService.setUserName(name);
+          await HiveService.setVehicleType(vType);
+          await HiveService.setVehicleNumber(vNum);
+          await HiveService.setLoggedIn(true);
+
+          DeliveryBloc.instance.add(LoadDeliveriesEvent());
 
           emit(RiderAuthSuccessState(
             userId: userId,
             name: name,
             phone: event.phone,
-            vehicleType: HiveService.vehicleType,
-            vehicleNumber: HiveService.vehicleNumber,
+            vehicleType: vType,
+            vehicleNumber: vNum,
           ));
-        } else if (isNewUser || HiveService.userName.isEmpty) {
-          emit(RiderProfilePendingState(userId: userId, phone: event.phone));
         } else {
-          emit(RiderAuthSuccessState(
-            userId: userId,
-            name: HiveService.userName,
-            phone: event.phone,
-            vehicleType: HiveService.vehicleType,
-            vehicleNumber: HiveService.vehicleNumber,
-          ));
+          // Setup is pending: save known fields but do NOT mark logged in yet
+          if (name.isNotEmpty) await HiveService.setUserName(name);
+          if (vType.isNotEmpty) await HiveService.setVehicleType(vType);
+          if (vNum.isNotEmpty) await HiveService.setVehicleNumber(vNum);
+          await HiveService.setLoggedIn(false);
+
+          emit(RiderProfilePendingState(userId: userId, phone: event.phone));
         }
       } else {
         emit(RiderAuthFailureState(res['error'] ?? 'Invalid verification code'));
@@ -98,14 +118,22 @@ class RiderAuthBloc extends Bloc<RiderAuthEvent, RiderAuthState> {
       emit(RiderAuthLoading());
 
       final userId = HiveService.userId;
-      await HiveService.setUserName(event.name);
-      await HiveService.setVehicleType(event.vehicleType);
-      await HiveService.setVehicleNumber(event.vehicleNumber);
 
+      // 1. Update backend with Name, Vehicle Type, and Vehicle Number
       await RiderApiService.updateProfile(
         userId: userId,
         userName: event.name,
+        vehicleType: event.vehicleType,
+        vehicleNumber: event.vehicleNumber,
       );
+
+      // 2. Save locally and mark logged in only after profile is completed
+      await HiveService.setUserName(event.name);
+      await HiveService.setVehicleType(event.vehicleType);
+      await HiveService.setVehicleNumber(event.vehicleNumber);
+      await HiveService.setLoggedIn(true);
+
+      DeliveryBloc.instance.add(LoadDeliveriesEvent());
 
       emit(RiderAuthSuccessState(
         userId: userId,
@@ -117,7 +145,57 @@ class RiderAuthBloc extends Bloc<RiderAuthEvent, RiderAuthState> {
     });
 
     on<RiderLogoutEvent>((event, emit) async {
+      final currentUserId = HiveService.userId;
+      final currentPhone = HiveService.userPhone;
+
+      // 1. Tell backend socket immediately that rider is OFFLINE before wiping credentials
+      try {
+        RiderSocketService().sendGpsPing(0, 0, false);
+        RiderSocketService().dispose();
+      } catch (e) {
+        debugPrint('⚠️ [RiderAuthBloc] Error disconnecting rider socket on logout: $e');
+      }
+
+      // 2. Stop and clear foreground background service
+      try {
+        if (await FlutterForegroundTask.isRunningService) {
+          await FlutterForegroundTask.stopService();
+        }
+        await FlutterForegroundTask.saveData(key: 'riderId', value: '');
+        await FlutterForegroundTask.saveData(key: 'lastLat', value: 0.0);
+        await FlutterForegroundTask.saveData(key: 'lastLng', value: 0.0);
+      } catch (e) {
+        debugPrint('⚠️ [RiderAuthBloc] Error stopping foreground task on logout: $e');
+      }
+
+      // 3. Inform backend API to clear FCM token and remove from riderRegistry
+      try {
+        if (currentUserId.isNotEmpty || currentPhone.isNotEmpty) {
+          await RiderApiService.logout(
+            userId: currentUserId,
+            phone: currentPhone,
+          );
+        }
+      } catch (e) {
+        debugPrint('⚠️ [RiderAuthBloc] Error calling backend logout: $e');
+      }
+
+      // 4. Delete FCM token locally on device so old token is invalidated
+      try {
+        await FirebaseMessaging.instance.deleteToken();
+      } catch (e) {
+        debugPrint('⚠️ [RiderAuthBloc] Error deleting FCM token on logout: $e');
+      }
+
+      // 5. Clear duty status and local auth
+      await HiveService.setIsOnline(false);
       await HiveService.clearAuth();
+
+      // 6. Reset delivery bloc duty toggle to offline
+      try {
+        DeliveryBloc.instance.add(const ToggleDutyEvent(false));
+      } catch (_) {}
+
       emit(RiderAuthInitial());
     });
   }

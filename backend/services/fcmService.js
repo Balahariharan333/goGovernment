@@ -88,9 +88,24 @@ async function sendToToken(fcmToken, { title, body, data = {}, sound = 'default'
  * Send high-priority alert to a Rider for an incoming delivery dispatch.
  */
 async function sendToRiderOrderAlert(fcmToken, orderPayload) {
-  const storeName = orderPayload.storeName || 'Store';
-  const dropAddress = orderPayload.dropAddress || 'Customer Location';
-  const fee = orderPayload.deliveryFee || orderPayload.deliveryCharge || 0;
+  const storeName =
+    orderPayload.storeName ||
+    (orderPayload.storeDetails && orderPayload.storeDetails.name) ||
+    'Store';
+
+  const dropAddress =
+    orderPayload.dropAddress ||
+    (orderPayload.deliveryAddress && orderPayload.deliveryAddress.address) ||
+    'Customer Location';
+
+  const customerFee = Number(
+    orderPayload.deliveryFee !== undefined && orderPayload.deliveryFee !== null
+      ? orderPayload.deliveryFee
+      : orderPayload.deliveryCharge !== undefined && orderPayload.deliveryCharge !== null
+      ? orderPayload.deliveryCharge
+      : orderPayload.estimatedPayout || 0
+  );
+  const fee = Math.max(40, customerFee);
 
   return sendToToken(fcmToken, {
     title: '🚨 New Delivery Order Available!',

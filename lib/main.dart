@@ -38,13 +38,18 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   } catch (_) {}
 
   debugPrint('📩 [FCM Background Citizen] Message: ${message.messageId} | data: ${message.data}');
-  final title = message.notification?.title ?? '📦 Order Update';
-  final body = message.notification?.body ?? 'Your order status has been updated.';
-  await NotificationService.showOrderStatusNotification(
-    title: title,
-    body: body,
-    orderId: message.data['orderId']?.toString(),
-  );
+  
+  // If the message contains a notification payload, Android OS already displays it automatically.
+  // We only trigger local notification if it's a data-only push to avoid duplicate notifications.
+  if (message.notification == null && message.data.isNotEmpty) {
+    final title = message.data['title']?.toString() ?? '📦 Order Update';
+    final body = message.data['body']?.toString() ?? 'Your order status has been updated.';
+    await NotificationService.showOrderStatusNotification(
+      title: title,
+      body: body,
+      orderId: message.data['orderId']?.toString(),
+    );
+  }
 }
 
 void main() async {
@@ -53,18 +58,19 @@ void main() async {
   // Initialize local notifications
   await NotificationService.initialize();
 
+  // Initialize Hive local cache first so user session / IDs are immediately available
+  await HiveService.init();
+  TranslationService.init();
+
   // Initialize Firebase & FCM
   try {
     await Firebase.initializeApp();
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-    FirebaseService.initFCM();
+    await FirebaseService.initFCM();
     debugPrint('[Main] Firebase initialized successfully');
   } catch (e) {
     debugPrint('[Main] Firebase initialization error: $e');
   }
-
-  await HiveService.init();
-  TranslationService.init();
 
   // Initialize real-time WebSocket connection to backend
   SocketService().init();

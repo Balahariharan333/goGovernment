@@ -6,6 +6,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import '../hive/hive_service.dart';
+import '../network/api_client.dart';
 import '../services/notification_service.dart';
 
 class FirebaseService {
@@ -135,6 +136,11 @@ class FirebaseService {
     }
   }
 
+  static String? _cachedFcmToken;
+
+  /// Returns the current cached or retrieved FCM token
+  static String? get cachedFcmToken => _cachedFcmToken;
+
   // 5. Initialize FCM and update device push token
   static Future<void> initFCM() async {
     try {
@@ -149,12 +155,14 @@ class FirebaseService {
       final token = await messaging.getToken();
       debugPrint('📱 [FCM Citizen] Device token: $token');
       if (token != null && token.isNotEmpty) {
-        await _updateTokenOnBackend(token);
+        _cachedFcmToken = token;
+        await syncFcmToken(token);
       }
 
       messaging.onTokenRefresh.listen((newToken) async {
         debugPrint('🔄 [FCM Citizen] Token refreshed: $newToken');
-        await _updateTokenOnBackend(newToken);
+        _cachedFcmToken = newToken;
+        await syncFcmToken(newToken);
       });
 
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
@@ -172,24 +180,39 @@ class FirebaseService {
     }
   }
 
-  static Future<void> _updateTokenOnBackend(String fcmToken) async {
+  /// Syncs FCM token to backend for the current logged-in citizen
+  static Future<void> syncFcmToken([String? fcmToken]) async {
     try {
+      final tokenToSync = fcmToken ?? _cachedFcmToken;
+      if (tokenToSync == null || tokenToSync.isEmpty) {
+        // Attempt to fetch from instance if not cached yet
+        final fetchedToken = await FirebaseMessaging.instance.getToken();
+        if (fetchedToken == null || fetchedToken.isEmpty) return;
+        _cachedFcmToken = fetchedToken;
+      }
+
+      final activeToken = fcmToken ?? _cachedFcmToken!;
       final userId = HiveService.citizenId;
       final phone = HiveService.userPhone;
       if (userId.isEmpty && phone.isEmpty) return;
 
-      final url = Uri.parse('http://192.168.1.11:5000/api/auth/update-fcm-token');
-      await http.post(
+      final url = Uri.parse('${ApiClient.baseUrl}/auth/update-fcm-token');
+      final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'userId': userId,
           'phone': phone,
-          'fcmToken': fcmToken,
+          'fcmToken': activeToken,
           'role': 'citizen',
         }),
       ).timeout(const Duration(seconds: 5));
-      debugPrint('✅ [FCM Citizen] Token successfully synced to backend');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        debugPrint('✅ [FCM Citizen] Token successfully synced to backend ($url)');
+      } else {
+        debugPrint('⚠️ [FCM Citizen] Backend returned ${response.statusCode}: ${response.body}');
+      }
     } catch (e) {
       debugPrint('⚠️ [FCM Citizen] Failed to sync token to backend: $e');
     }

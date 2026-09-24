@@ -11,6 +11,7 @@ import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
+import '../../widget/rider_bottom_nav_bar.dart';
 
 class RiderProfileViewScreen extends StatelessWidget {
   const RiderProfileViewScreen({super.key});
@@ -19,20 +20,33 @@ class RiderProfileViewScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     Responsive.init(context);
 
-    return BlocListener<RiderAuthBloc, RiderAuthState>(
-      listener: (context, state) {
-        if (state is RiderAuthInitial) {
-          Navigator.pushNamedAndRemoveUntil(context, RouteConstants.login, (route) => false);
+    return PopScope(
+      canPop: Navigator.canPop(context),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          Navigator.pushNamedAndRemoveUntil(context, RouteConstants.dashboard, (route) => false);
         }
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: CustomText.title('Rider Profile', fontWeight: FontWeight.bold),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.black),
-            onPressed: () => Navigator.pop(context),
+      child: BlocListener<RiderAuthBloc, RiderAuthState>(
+        listener: (context, state) {
+          if (state is RiderAuthInitial) {
+            Navigator.pushNamedAndRemoveUntil(context, RouteConstants.login, (route) => false);
+          }
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            title: CustomText.title('Rider Profile', fontWeight: FontWeight.bold),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.black),
+              onPressed: () {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  Navigator.pushNamedAndRemoveUntil(context, RouteConstants.dashboard, (route) => false);
+                }
+              },
+            ),
           ),
-        ),
         body: CommonBackground(
           child: SafeArea(
             child: SingleChildScrollView(
@@ -45,7 +59,7 @@ class RiderProfileViewScreen extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           radius: Responsive.w(36),
-                          backgroundColor: AppColors.primary.withOpacity(0.15),
+                          backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                           child: const Icon(Icons.two_wheeler_rounded, size: 40, color: AppColors.primary),
                         ),
                         SizedBox(height: Responsive.h(12)),
@@ -58,7 +72,7 @@ class RiderProfileViewScreen extends StatelessWidget {
                         Container(
                           padding: EdgeInsets.symmetric(horizontal: Responsive.w(10), vertical: Responsive.h(3)),
                           decoration: BoxDecoration(
-                            color: AppColors.success.withOpacity(0.12),
+                            color: AppColors.success.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(Responsive.w(10)),
                           ),
                           child: const Text(
@@ -151,8 +165,10 @@ class RiderProfileViewScreen extends StatelessWidget {
             ),
           ),
         ),
+        bottomNavigationBar: const RiderBottomNavBar(currentIndex: 2),
       ),
-    );
+    ),
+  );
   }
 
   Widget _sectionTitle(String title) {

@@ -23,8 +23,6 @@ class DeliveryBloc extends Bloc<DeliveryEvent, DeliveryState> {
     Emitter<DeliveryState> emit,
   ) async {
     final currentOnline = HiveService.isOnline;
-    final totalEarnings = HiveService.totalEarnings;
-    final completedCount = HiveService.completedCount;
     final riderId = HiveService.userId;
 
     // Fetch available orders from backend ONLY if rider is online
@@ -36,19 +34,44 @@ class DeliveryBloc extends Bloc<DeliveryEvent, DeliveryState> {
       availableOrders = [];
     }
 
-    // Fetch rider assigned orders
+    // Fetch rider assigned orders from backend
     final riderOrders = await RiderApiService.fetchRiderOrders(riderId);
 
-    final active = riderOrders.where((o) => o.status != 'delivered' && o.status != 'cancelled').toList();
-    final completed = riderOrders.where((o) => o.status == 'delivered').toList();
+    final active = riderOrders.where((o) {
+      final s = o.status.toLowerCase().trim();
+      return s != 'delivered' && s != 'cancelled' && s != 'completed';
+    }).toList();
+    final completed = riderOrders.where((o) {
+      final s = o.status.toLowerCase().trim();
+      return s == 'delivered' || s == 'completed';
+    }).toList();
+
+    // Fetch live wallet balance from backend
+    double liveEarnings = 0.0;
+    if (riderId.isNotEmpty) {
+      final wallet = await RiderApiService.fetchRiderWallet(riderId);
+      if (wallet != null && wallet['walletBalance'] != null) {
+        liveEarnings = (wallet['walletBalance'] as num).toDouble();
+      } else {
+        liveEarnings = completed.fold<double>(
+          0.0,
+          (sum, o) => sum + (o.estimatedPayout > 0 ? o.estimatedPayout : 45.0),
+        );
+      }
+    }
+    final liveCompletedCount = completed.length;
+
+    // Keep Hive synced with real backend data
+    await HiveService.setTotalEarnings(liveEarnings);
+    await HiveService.setCompletedCount(liveCompletedCount);
 
     emit(DeliveryLoaded(
       isOnline: currentOnline,
       availableOrders: availableOrders,
       activeOrders: active,
       completedOrders: completed,
-      totalEarnings: totalEarnings,
-      completedCount: completedCount,
+      totalEarnings: liveEarnings,
+      completedCount: liveCompletedCount,
     ));
   }
 

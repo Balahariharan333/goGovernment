@@ -16,9 +16,9 @@ class AppRoutes {
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
       case RouteConstants.splash:
-        final bool loggedIn = HiveService.isLoggedIn;
+        final bool isReady = HiveService.isLoggedIn && HiveService.isProfileCompleted;
         return MaterialPageRoute(
-          builder: (_) => loggedIn ? const RiderDashboardScreen() : const RiderLoginScreen(),
+          builder: (_) => isReady ? const RiderDashboardScreen() : const RiderLoginScreen(),
         );
 
       case RouteConstants.login:

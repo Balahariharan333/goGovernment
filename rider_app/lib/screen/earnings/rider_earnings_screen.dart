@@ -6,10 +6,12 @@ import '../../bloc/delivery/delivery_state.dart';
 import '../../hive/hive_service.dart';
 import '../../model/delivery_order_model.dart';
 import '../../network/rider_api_service.dart';
+import '../../constants/route_constants.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
+import '../../widget/rider_bottom_nav_bar.dart';
 
 class RiderEarningsScreen extends StatefulWidget {
   const RiderEarningsScreen({super.key});
@@ -48,13 +50,26 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
   Widget build(BuildContext context) {
     Responsive.init(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: CustomText.title('Earnings & Payouts', fontWeight: FontWeight.bold),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
+    return PopScope(
+      canPop: Navigator.canPop(context),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          Navigator.pushNamedAndRemoveUntil(context, RouteConstants.dashboard, (route) => false);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: CustomText.title('Earnings & Payouts', fontWeight: FontWeight.bold),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.black),
+            onPressed: () {
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+              } else {
+                Navigator.pushNamedAndRemoveUntil(context, RouteConstants.dashboard, (route) => false);
+              }
+            },
+          ),
         actions: [
           IconButton(
             icon: _isLoadingWallet
@@ -80,9 +95,11 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
               final transactions = rawTxList.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
 
               final completedOrders = state is DeliveryLoaded ? state.completedOrders : <DeliveryOrder>[];
-              final completedCount = transactions.isNotEmpty
-                  ? transactions.length
-                  : (state is DeliveryLoaded ? state.completedCount : HiveService.completedCount);
+              final completedCount = completedOrders.isNotEmpty
+                  ? completedOrders.length
+                  : (transactions.isNotEmpty ? transactions.length : (state is DeliveryLoaded ? state.completedCount : HiveService.completedCount));
+
+              final displayRecordsCount = completedOrders.isNotEmpty ? completedOrders.length : transactions.length;
 
               return RefreshIndicator(
                 onRefresh: _fetchLiveWallet,
@@ -106,22 +123,22 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           CustomText.title(
-                            transactions.isNotEmpty ? 'Payout History' : 'Completed Deliveries',
+                            'Completed Deliveries History',
                             fontSize: Responsive.sp(16),
                             fontWeight: FontWeight.bold,
                           ),
                           CustomText.caption(
-                            '${transactions.isNotEmpty ? transactions.length : completedOrders.length} records',
+                            '$displayRecordsCount records',
                             color: AppColors.grayFont,
                           ),
                         ],
                       ),
                       SizedBox(height: Responsive.h(12)),
 
-                      if (transactions.isNotEmpty)
-                        ...transactions.map((tx) => _buildTransactionItem(tx))
-                      else if (completedOrders.isNotEmpty)
+                      if (completedOrders.isNotEmpty)
                         ...completedOrders.map((order) => _buildOrderHistoryItem(order))
+                      else if (transactions.isNotEmpty)
+                        ...transactions.map((tx) => _buildTransactionItem(tx))
                       else
                         _buildEmptyHistory(),
 
@@ -134,8 +151,10 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
           ),
         ),
       ),
-    );
-  }
+      bottomNavigationBar: const RiderBottomNavBar(currentIndex: 1),
+    ),
+  );
+}
 
   Widget _buildEarningsCard(double total, int trips) {
     return Container(
@@ -204,8 +223,8 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _statMini('Delivered Orders', '$trips trips'),
-              _statMini('Avg / Trip', '₹45'),
-              _statMini('Incentive', '₹50 Bonus'),
+              _statMini('Avg / Trip', trips > 0 ? '₹${(total / trips).toStringAsFixed(0)}' : '₹0'),
+              _statMini('Incentive', trips >= 10 ? '₹100 Bonus' : (trips >= 5 ? '₹50 Bonus' : '₹0 Bonus')),
             ],
           ),
         ],
@@ -225,6 +244,7 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
   }
 
   Widget _buildPayoutScheduleCard(BuildContext context) {
+    final phone = HiveService.userPhone;
     return Container(
       padding: EdgeInsets.all(Responsive.w(16)),
       decoration: BoxDecoration(
@@ -242,8 +262,11 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CustomText.title('Bank Account Linked', fontSize: Responsive.sp(14)),
-                    CustomText.caption('SBI A/C ······4589 · IFSC: SBIN0001234', color: AppColors.grayFont),
+                    CustomText.title('Payout Account Linked', fontSize: Responsive.sp(14)),
+                    CustomText.caption(
+                      phone.isNotEmpty ? 'Direct Deposit / UPI · $phone' : 'Direct Bank Settlement (Auto-processed)',
+                      color: AppColors.grayFont,
+                    ),
                   ],
                 ),
               ),

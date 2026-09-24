@@ -17,6 +17,9 @@ class HiveService {
   static bool get isLoggedIn =>
       _authBox.get(HiveKeys.isLoggedIn, defaultValue: false) as bool;
 
+  static bool get isProfileCompleted =>
+      userName.trim().isNotEmpty && vehicleNumber.trim().isNotEmpty;
+
   static Future<void> setLoggedIn(bool value) async {
     await _authBox.put(HiveKeys.isLoggedIn, value);
   }
@@ -67,19 +70,37 @@ class HiveService {
   }
 
   static double get totalEarnings =>
-      (_dutyBox.get(HiveKeys.totalEarnings, defaultValue: 450.0) as num).toDouble();
+      (_dutyBox.get(HiveKeys.totalEarnings, defaultValue: 0.0) as num).toDouble();
 
   static Future<void> addEarnings(double amount) async {
     final current = totalEarnings;
     await _dutyBox.put(HiveKeys.totalEarnings, current + amount);
   }
 
+  static Future<void> setTotalEarnings(double amount) async {
+    await _dutyBox.put(HiveKeys.totalEarnings, amount);
+  }
+
   static int get completedCount =>
-      _dutyBox.get(HiveKeys.completedCount, defaultValue: 6) as int;
+      _dutyBox.get(HiveKeys.completedCount, defaultValue: 0) as int;
 
   static Future<void> incrementCompletedCount() async {
     final current = completedCount;
     await _dutyBox.put(HiveKeys.completedCount, current + 1);
+  }
+
+  static Future<void> setCompletedCount(int count) async {
+    await _dutyBox.put(HiveKeys.completedCount, count);
+  }
+
+  // ----------------------------------------------------
+  // Battery Optimization Prompt Flag
+  // ----------------------------------------------------
+  static bool get hasRequestedBatteryOptimization =>
+      _authBox.get('hasRequestedBatteryOptimization', defaultValue: false) as bool;
+
+  static Future<void> setRequestedBatteryOptimization(bool val) async {
+    await _authBox.put('hasRequestedBatteryOptimization', val);
   }
 
   // ----------------------------------------------------

@@ -44,6 +44,7 @@ app.set('io', io);
 // ─── Rider GPS Registry (in-memory, no DB overhead) ──────────────────────────
 // { riderId: { lat, lng, socketId, isOnline, lastSeen } }
 const riderRegistry = new Map();
+app.set('riderRegistry', riderRegistry);
 
 // Haversine distance formula (returns km)
 function haversineKm(lat1, lng1, lat2, lng2) {
@@ -236,6 +237,20 @@ io.on('connection', (socket) => {
       existing.disconnectTimer = null;
     }
 
+    // Explicit offline ping
+    if (isOnline === false) {
+      riderRegistry.set(riderId, {
+        ...existing,
+        lat: 0,
+        lng: 0,
+        socketId: socket.id,
+        isOnline: false,
+        lastSeen: Date.now(),
+      });
+      console.log(`🛑 [Socket.io] Rider ${riderId} pinged OFFLINE (cleared GPS)`);
+      return;
+    }
+
     // Never overwrite valid existing coordinates with (0, 0)
     const hasZeroCoords = (lat === 0 || lat === null || lat === undefined) &&
                           (lng === 0 || lng === null || lng === undefined);
@@ -245,7 +260,7 @@ io.on('connection', (socket) => {
       lat: (hasZeroCoords && existing.lat) ? existing.lat : (lat ?? existing.lat ?? 0),
       lng: (hasZeroCoords && existing.lng) ? existing.lng : (lng ?? existing.lng ?? 0),
       socketId: socket.id,
-      isOnline: isOnline !== false,
+      isOnline: true,
       lastSeen: Date.now(),
     });
     // Ensure rider role is updated in DB
@@ -255,6 +270,23 @@ io.on('connection', (socket) => {
         { $set: { role: 'rider' } }
       );
     } catch (_) {}
+  });
+
+  // Rider explicit logout event
+  socket.on('rider:logout', (data) => {
+    const { riderId } = data || {};
+    if (riderId && riderRegistry.has(riderId)) {
+      const existing = riderRegistry.get(riderId);
+      if (existing.disconnectTimer) clearTimeout(existing.disconnectTimer);
+      riderRegistry.set(riderId, {
+        ...existing,
+        lat: 0,
+        lng: 0,
+        isOnline: false,
+        lastSeen: Date.now(),
+      });
+      console.log(`🚪 [Socket.io] Rider ${riderId} logged out & marked OFFLINE in registry`);
+    }
   });
 
   // Relay chat messages between citizen and rider

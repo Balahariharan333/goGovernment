@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../bloc/auth/auth_bloc.dart';
 import '../../bloc/auth/auth_event.dart';
+import '../../bloc/auth/auth_state.dart';
 import '../../bloc/product/product_bloc.dart';
 import '../../bloc/product/product_event.dart';
 import '../../bloc/product/product_state.dart';
@@ -37,6 +38,8 @@ class _StoreDashboardScreenState extends State<StoreDashboardScreen> {
   late StoreModel _store;
   StreamSubscription? _newOrderSub;
   Map<String, dynamic>? _subsidyMetrics;
+  String? _lastNotifiedOrderId;
+  int _lastNotifiedTime = 0;
 
   @override
   void initState() {
@@ -50,21 +53,53 @@ class _StoreDashboardScreenState extends State<StoreDashboardScreen> {
     StoreSocketService().subscribeToStore(_store.storeId);
     _newOrderSub = StoreSocketService().onNewOrder.listen((newOrder) {
       if (!mounted) return;
-      _fetchFinancialMetrics();
-      final orderId = newOrder['orderId']?.toString();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('🔔 New order #$orderId received! Tap to fulfill.'),
-          backgroundColor: AppColors.primary,
-          duration: const Duration(seconds: 4),
-          action: SnackBarAction(
-            label: 'Open',
-            textColor: Colors.white,
-            onPressed: _openOrderQueue,
-          ),
-        ),
+      final orderId = newOrder['orderId']?.toString() ?? '';
+      _handleIncomingNewOrder(
+        orderId,
+        title: '🔔 New Order Received!',
+        body: 'Order #$orderId received. Tap to fulfill items.',
       );
     });
+  }
+
+  @override
+  void dispose() {
+    _newOrderSub?.cancel();
+    super.dispose();
+  }
+
+  void _handleIncomingNewOrder(String orderId, {String? title, String? body}) {
+    if (orderId.isEmpty || !mounted) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    // Deduplication check: ignore if already handled within 15 seconds
+    if (_lastNotifiedOrderId == orderId && (now - _lastNotifiedTime < 15000)) {
+      return;
+    }
+    _lastNotifiedOrderId = orderId;
+    _lastNotifiedTime = now;
+
+    _fetchFinancialMetrics();
+
+    // 1. Trigger local notification with sound & heads-up banner
+    NotificationService.showNewOrderNotification(
+      orderId: orderId,
+      title: title ?? '🔔 New Order Received!',
+      body: body ?? 'A customer order has arrived. Tap to fulfill.',
+    );
+
+    // 2. Show in-app action snackbar
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('🔔 New order #$orderId received! Tap to fulfill.'),
+        backgroundColor: AppColors.primary,
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Open Queue',
+          textColor: Colors.white,
+          onPressed: _openOrderQueue,
+        ),
+      ),
+    );
   }
 
   Future<void> _fetchFinancialMetrics() async {
@@ -74,12 +109,6 @@ class _StoreDashboardScreenState extends State<StoreDashboardScreen> {
         _subsidyMetrics = metrics;
       });
     }
-  }
-
-  @override
-  void dispose() {
-    _newOrderSub?.cancel();
-    super.dispose();
   }
 
   Future<void> _initFCM() async {
@@ -114,24 +143,11 @@ class _StoreDashboardScreenState extends State<StoreDashboardScreen> {
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint('📩 [FCM Foreground Store]: ${message.data}');
         if (message.data['type'] == 'new_order' && mounted) {
-          _fetchFinancialMetrics();
           final orderId = message.data['orderId']?.toString() ?? '';
-          NotificationService.showNewOrderNotification(
-            orderId: orderId,
+          _handleIncomingNewOrder(
+            orderId,
             title: message.notification?.title ?? '🔔 New Order Received!',
             body: message.notification?.body ?? 'A customer order has arrived. Tap to fulfill.',
-          );
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('🔔 New order #$orderId received! Tap to fulfill.'),
-              backgroundColor: AppColors.primary,
-              duration: const Duration(seconds: 4),
-              action: SnackBarAction(
-                label: 'Open',
-                textColor: Colors.white,
-                onPressed: _openOrderQueue,
-              ),
-            ),
           );
         }
       });
@@ -393,7 +409,6 @@ class _StoreDashboardScreenState extends State<StoreDashboardScreen> {
             onPressed: () {
               Navigator.of(ctx).pop();
               context.read<AuthBloc>().add(LogoutEvent());
-              Navigator.of(context).pushNamedAndRemoveUntil(RouteConstants.login, (r) => false);
             },
             child: const Text('Logout'),
           ),
@@ -406,18 +421,30 @@ class _StoreDashboardScreenState extends State<StoreDashboardScreen> {
   Widget build(BuildContext context) {
     Responsive.init(context);
 
-    return BlocConsumer<StoreBloc, StoreState>(
-      listener: (context, state) {
-        if (state is StoreLoaded) {
-          setState(() => _store = state.store);
-        }
-      },
-      builder: (context, state) {
-        if (state is StoreLoaded) {
-          _store = state.store;
-        }
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<AuthBloc, AuthState>(
+          listener: (context, state) {
+            if (state is AuthInitial) {
+              Navigator.of(context).pushNamedAndRemoveUntil(RouteConstants.login, (r) => false);
+            }
+          },
+        ),
+        BlocListener<StoreBloc, StoreState>(
+          listener: (context, state) {
+            if (state is StoreLoaded) {
+              setState(() => _store = state.store);
+            }
+          },
+        ),
+      ],
+      child: BlocBuilder<StoreBloc, StoreState>(
+        builder: (context, state) {
+          if (state is StoreLoaded) {
+            _store = state.store;
+          }
 
-        return Scaffold(
+          return Scaffold(
           backgroundColor: AppColors.screenColor,
           appBar: AppBar(
             backgroundColor: Colors.white,
@@ -907,8 +934,9 @@ class _StoreDashboardScreenState extends State<StoreDashboardScreen> {
           ),
         );
       },
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildOperationCard({
     required String title,

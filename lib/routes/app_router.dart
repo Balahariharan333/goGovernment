@@ -164,11 +164,16 @@ class AppRouter {
 
         if (settings.arguments is String) {
           storeType = settings.arguments as String;
-        } else if (settings.arguments is Map<String, dynamic>) {
-          final args = settings.arguments as Map<String, dynamic>;
-          storeType = args['storeType'] as String? ?? 'medical';
-          transaction = args['transaction'] as Map<String, dynamic>?;
-          orderId = args['orderId'] as String?;
+        } else if (settings.arguments is Map) {
+          final rawArgs = settings.arguments as Map;
+          final args = Map<String, dynamic>.from(rawArgs);
+          storeType = args['storeType']?.toString() ?? 'medical';
+          transaction = args['transaction'] is Map
+              ? Map<String, dynamic>.from(args['transaction'] as Map)
+              : null;
+          orderId = args['orderId']?.toString() ??
+              transaction?['orderId']?.toString() ??
+              transaction?['id']?.toString();
         }
 
         return _buildSmoothRoute(

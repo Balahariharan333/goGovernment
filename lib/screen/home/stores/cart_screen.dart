@@ -235,14 +235,25 @@ class _CartScreenState extends State<CartScreen> {
       storeDetails: {'storeId': resolvedStoreId, 'name': storeTitle},
     );
 
-    if (serverOrder != null) {
-      if (serverOrder['orderId'] != null) {
-        orderId = serverOrder['orderId'].toString();
+    if (serverOrder == null || serverOrder['orderId'] == null) {
+      if (mounted) {
+        setState(() {
+          _isCheckingOut = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to place order. Please try again.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
-      final backendStoreName = serverOrder['storeDetails']?['name']?.toString().trim();
-      if (backendStoreName != null && backendStoreName.isNotEmpty) {
-        storeTitle = backendStoreName;
-      }
+      return;
+    }
+
+    orderId = serverOrder['orderId'].toString();
+    final backendStoreName = serverOrder['storeDetails']?['name']?.toString().trim();
+    if (backendStoreName != null && backendStoreName.isNotEmpty) {
+      storeTitle = backendStoreName;
     }
 
     final newTx = {
@@ -295,10 +306,13 @@ class _CartScreenState extends State<CartScreen> {
         'dateString': dateFormatted,
         'buttonText': 'Track Order',
         'nextRoute': RouteConstants.orderStatus,
-        'nextRouteArgs': {
+        'nextRouteArgs': <String, dynamic>{
           'storeType': widget.storeType,
           'orderId': orderId,
-          'transaction': newTx,
+          'transaction': <String, dynamic>{
+            ...newTx,
+            'orderId': orderId,
+          },
         },
       },
     );

@@ -146,6 +146,9 @@ router.post('/', async (req, res) => {
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const dateStr = `${months[now.getMonth()]} ${now.getDate()} · ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
+      const userDoc = await User.findOne({ userId }).select('walletBalance');
+      const curWalletBal = userDoc?.walletBalance || 0;
+
       const walletTx = new WalletTransaction({
         transactionId: 'PAY_' + Date.now().toString().slice(-6) + Math.floor(100 + Math.random() * 900),
         userId,
@@ -156,8 +159,8 @@ router.post('/', async (req, res) => {
         orderId,
         title: resolvedStoreDetails.name || 'Store Order',
         subtitle: `Paid for order #${orderId} · ${dateStr}`,
-        balanceAfter: null,
-        status: 'success',
+        balanceAfter: curWalletBal,
+        status: paymentMethod.toLowerCase().includes('cash') ? 'pending' : 'success',
       });
       await walletTx.save();
     }
@@ -177,10 +180,21 @@ router.post('/', async (req, res) => {
 
     // Send FCM Push notification to Store Owner
     Store.findOne({ storeId })
-      .select('fcmToken')
-      .then((storeDoc) => {
-        if (storeDoc && storeDoc.fcmToken) {
-          fcmService.sendToStoreNewOrder(storeDoc.fcmToken, newOrder);
+      .select('fcmToken ownerId phone')
+      .then(async (storeDoc) => {
+        let token = storeDoc?.fcmToken;
+        if (!token && storeDoc?.ownerId) {
+          const owner = await User.findOne({ userId: storeDoc.ownerId }).select('fcmToken');
+          token = owner?.fcmToken;
+        }
+        if (!token && storeDoc?.phone) {
+          const owner = await User.findOne({ phone: storeDoc.phone }).select('fcmToken');
+          token = owner?.fcmToken;
+        }
+        if (token) {
+          fcmService.sendToStoreNewOrder(token, newOrder);
+        } else {
+          console.warn(`⚠️ [FCM] No valid FCM token found for store ${storeId}`);
         }
       })
       .catch((err) => console.error('Error sending store FCM:', err.message));
@@ -656,10 +670,11 @@ router.patch('/:orderId/status', async (req, res) => {
 
     // If order is delivered, credit Rider Payout and Store Owner Settlement
     if (status === 'delivered' && existing.status !== 'delivered') {
-      // 1. Rider Payout (+₹45 delivery fee)
+      // 1. Rider Payout (Hybrid Model: Guaranteed ₹40 base or customer deliveryCharge if higher)
       const riderId = existing.deliveryAgent?.riderId;
       if (riderId) {
-        const riderFee = 45;
+        const customerCharge = Number(existing.deliveryCharge) || 0;
+        const riderFee = Math.max(40, customerCharge);
         const updatedRider = await User.findOneAndUpdate(
           { $or: [{ userId: riderId }, { phone: riderId }] },
           { $inc: { walletBalance: riderFee } },

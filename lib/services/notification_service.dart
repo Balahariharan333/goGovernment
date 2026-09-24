@@ -130,7 +130,10 @@ class NotificationService {
         ),
       );
 
-      final int id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+      // Use stable ID based on orderId so status updates update the existing notification cleanly
+      final int id = (orderId != null && orderId.isNotEmpty)
+          ? orderId.hashCode.abs() % 100000
+          : DateTime.now().millisecondsSinceEpoch.remainder(100000);
 
       await _notificationsPlugin.show(
         id: id,

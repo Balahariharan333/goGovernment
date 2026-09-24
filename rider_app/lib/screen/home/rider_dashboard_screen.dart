@@ -23,6 +23,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../widget/available_order_card.dart';
 import '../../widget/common_background.dart';
 import '../../widget/custom_text.dart';
+import '../../widget/rider_bottom_nav_bar.dart';
 
 class RiderDashboardScreen extends StatefulWidget {
   const RiderDashboardScreen({super.key});
@@ -48,6 +49,8 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen>
   String? _activeDispatchModalOrderId;
   double _cachedLat = 0;
   double _cachedLng = 0;
+  String? _lastNotifiedOrderId;
+  int _lastNotifiedTime = 0;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -459,11 +462,13 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen>
   Future<void> _startForegroundService({double? lat, double? lng}) async {
     await FlutterForegroundTask.requestNotificationPermission();
 
-    // 1. Request Ignore Battery Optimization so Android never puts socket to sleep
+    // 1. Request Ignore Battery Optimization so Android never puts socket to sleep (prompt once)
     try {
       final isIgnoring = await FlutterForegroundTask.isIgnoringBatteryOptimizations;
-      if (!isIgnoring) {
+      final alreadyRequested = HiveService.hasRequestedBatteryOptimization;
+      if (!isIgnoring && !alreadyRequested) {
         await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+        await HiveService.setRequestedBatteryOptimization(true);
       }
     } catch (_) {}
 
@@ -756,26 +761,38 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen>
     if (data is Map) {
       final map = Map<String, dynamic>.from(data);
       if (mounted) {
+        if (!HiveService.isLoggedIn || !HiveService.isOnline) return;
         context.read<DeliveryBloc>().add(LoadDeliveriesEvent());
+        // If it's only a feed refresh notification, don't trigger modal or extra sound
+        if (map['type'] == 'available_feed_refresh') {
+          return;
+        }
         _handleIncomingDispatchOrder(map);
       }
     }
   }
 
   void _handleIncomingDispatchOrder(Map<String, dynamic> data) {
-    if (!HiveService.isOnline) return;
+    if (!HiveService.isLoggedIn || !HiveService.isOnline) return;
     try {
       final order = DeliveryOrder.fromJson(data);
       if (order.orderId.isEmpty) return;
 
+      // Ignore orders that are already completed, delivered, or cancelled
+      final status = order.status.toLowerCase();
+      if (status == 'delivered' || status == 'cancelled' || status == 'completed') {
+        if (_activeDispatchModalOrderId == order.orderId) {
+          _dismissDispatchModal();
+        }
+        return;
+      }
+
       if (_activeDispatchModalOrderId == order.orderId) return; // already displayed
 
-      // 1. Wake up the device screen and launch app via Foreground Task
+      // 1. Wake up the device screen and launch app via Foreground Task immediately
       try {
         FlutterForegroundTask.wakeUpScreen();
-        Future.delayed(const Duration(seconds: 3), () {
-          FlutterForegroundTask.launchApp();
-        });
+        FlutterForegroundTask.launchApp();
       } catch (e) {
         debugPrint("Failed to open app: $e");
       }
@@ -812,6 +829,15 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen>
 
   Future<void> _showIncomingOrderNotification(DeliveryOrder order, Map<String, dynamic> data) async {
     try {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (order.orderId.isNotEmpty &&
+          _lastNotifiedOrderId == order.orderId &&
+          (now - _lastNotifiedTime < 25000)) {
+        return; // Prevent duplicate notifications within 25 seconds
+      }
+      _lastNotifiedOrderId = order.orderId;
+      _lastNotifiedTime = now;
+
       final storeName = order.storeName.isNotEmpty ? order.storeName : (data['storeName']?.toString() ?? 'Store');
       final dropAddress = order.dropAddress.isNotEmpty ? order.dropAddress : (data['dropAddress']?.toString() ?? 'Customer Location');
       final charge = order.deliveryCharge > 0
@@ -980,7 +1006,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen>
                           children: [
                             CustomText.caption('EARNINGS', fontSize: Responsive.sp(10), color: AppColors.success, fontWeight: FontWeight.bold),
                             CustomText.title(
-                              '₹${order.deliveryCharge > 0 ? order.deliveryCharge.toInt() : 40}',
+                              '₹${order.estimatedPayout.toInt()}',
                               fontSize: Responsive.sp(16),
                               color: AppColors.success,
                             ),
@@ -1135,7 +1161,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen>
               final available = state is DeliveryLoaded ? state.availableOrders : <DeliveryOrder>[];
               final active = state is DeliveryLoaded ? state.activeOrders : <DeliveryOrder>[];
               final earnings = state is DeliveryLoaded ? state.totalEarnings : HiveService.totalEarnings;
-              final completed = state is DeliveryLoaded ? state.completedCount : HiveService.completedCount;
+              final completed = state is DeliveryLoaded ? state.completedOrders.length : HiveService.completedCount;
 
               if (active.isEmpty && available.isNotEmpty && isOnline) {
                 _playAlertSound();
@@ -1244,7 +1270,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen>
           ),
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(context),
+      bottomNavigationBar: const RiderBottomNavBar(currentIndex: 0),
     );
   }
 
@@ -1546,49 +1572,4 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen>
     );
   }
 
-  // ----------------------------------------------------
-  // Bottom Navigation Bar
-  // ----------------------------------------------------
-  Widget _buildBottomNav(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.white,
-        border: Border(top: BorderSide(color: AppColors.border)),
-      ),
-      padding: EdgeInsets.symmetric(vertical: Responsive.h(8)),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _navItem(Icons.dashboard_rounded, 'Deliveries', true, () {}),
-          _navItem(Icons.account_balance_wallet_outlined, 'Earnings', false, () {
-            Navigator.pushNamed(context, RouteConstants.earnings);
-          }),
-          _navItem(Icons.person_outline_rounded, 'Profile', false, () {
-            Navigator.pushNamed(context, RouteConstants.profile);
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _navItem(IconData icon, String label, bool active, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: active ? AppColors.primary : AppColors.grayFont, size: 24),
-          SizedBox(height: Responsive.h(2)),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: Responsive.sp(11),
-              fontWeight: active ? FontWeight.bold : FontWeight.normal,
-              color: active ? AppColors.primary : AppColors.grayFont,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

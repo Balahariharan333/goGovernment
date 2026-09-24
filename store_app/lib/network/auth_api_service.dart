@@ -74,4 +74,28 @@ class AuthApiService {
       return false;
     }
   }
+
+  static Future<bool> logout({
+    required String userId,
+    required String phone,
+  }) async {
+    final url = '${ApiClient.baseUrl}/auth/logout';
+    final body = jsonEncode({
+      'userId': userId,
+      'phone': phone,
+    });
+
+    try {
+      ApiClient.logRequest('POST', url, body: body);
+      final response = await http
+          .post(Uri.parse(url), headers: ApiClient.defaultHeaders, body: body)
+          .timeout(const Duration(seconds: 8));
+
+      ApiClient.logResponse('POST', url, response.statusCode, response.body);
+      return response.statusCode == 200;
+    } catch (e) {
+      ApiClient.logError('POST', url, e);
+      return false;
+    }
+  }
 }

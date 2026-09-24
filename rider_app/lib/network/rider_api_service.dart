@@ -83,12 +83,16 @@ class RiderApiService {
     required String userId,
     required String userName,
     String? email,
+    String? vehicleType,
+    String? vehicleNumber,
   }) async {
     final url = '${ApiClient.baseUrl}/auth/profile';
     final body = {
       'userId': userId,
       'userName': userName,
       if (email != null) 'email': email,
+      if (vehicleType != null) 'vehicleType': vehicleType,
+      if (vehicleNumber != null) 'vehicleNumber': vehicleNumber,
     };
     ApiClient.logRequest('POST', url, body: body);
 
@@ -348,6 +352,37 @@ class RiderApiService {
             body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 10));
+
+      ApiClient.logResponse('POST', url, response.statusCode, response.body);
+      return response.statusCode == 200;
+    } catch (e) {
+      ApiClient.logError('POST', url, e);
+      return false;
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // 12. Rider Logout (Clears FCM Token & Registry on Server)
+  // --------------------------------------------------------------------------
+  static Future<bool> logout({
+    required String userId,
+    required String phone,
+  }) async {
+    final url = '${ApiClient.baseUrl}/auth/logout';
+    final body = {
+      'userId': userId,
+      'phone': phone,
+    };
+    ApiClient.logRequest('POST', url, body: body);
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse(url),
+            headers: ApiClient.defaultHeaders,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 8));
 
       ApiClient.logResponse('POST', url, response.statusCode, response.body);
       return response.statusCode == 200;

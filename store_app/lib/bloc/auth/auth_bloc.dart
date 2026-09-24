@@ -1,6 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import '../../bloc/store/store_bloc.dart';
+import '../../bloc/store/store_event.dart';
 import '../../hive/hive_service.dart';
 import '../../network/auth_api_service.dart';
+import '../../service/socket_service.dart';
 import '../../services/notification_service.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
@@ -74,7 +79,41 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     on<LogoutEvent>((event, emit) async {
       emit(AuthLoading());
+
+      final currentUserId = HiveService.userId;
+      final currentPhone = HiveService.userPhone;
+
+      // 1. Disconnect and dispose store socket
+      try {
+        StoreSocketService().dispose();
+      } catch (e) {
+        debugPrint('⚠️ [StoreAuthBloc] Socket dispose error: $e');
+      }
+
+      // 2. Call backend /api/auth/logout to wipe FCM token & registry
+      try {
+        if (currentUserId.isNotEmpty || currentPhone.isNotEmpty) {
+          await AuthApiService.logout(userId: currentUserId, phone: currentPhone);
+        }
+      } catch (e) {
+        debugPrint('⚠️ [StoreAuthBloc] Backend logout error: $e');
+      }
+
+      // 3. Delete local FCM token
+      try {
+        await FirebaseMessaging.instance.deleteToken();
+      } catch (e) {
+        debugPrint('⚠️ [StoreAuthBloc] FCM delete token error: $e');
+      }
+
+      // 4. Reset StoreBloc state
+      try {
+        StoreBloc.instance.add(const ResetStoreEvent());
+      } catch (_) {}
+
+      // 5. Await clearing Hive auth & store boxes completely
       await HiveService.clearAuth();
+
       emit(AuthInitial());
     });
   }

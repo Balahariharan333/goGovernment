@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../services/notification_service.dart';
+import '../../service/firebase_service.dart';
 import '../../hive/hive_service.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
@@ -63,6 +64,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         if (!isNewUser) {
           // Returning user: already completed registration, can mark logged in immediately
           await HiveService.setLoggedIn(true);
+          FirebaseService.syncFcmToken();
           ProfileBloc.instance.add(ReloadProfileEvent());
           TransactionBloc.instance.add(LoadTransactionsEvent());
           CartBloc.instance.add(FetchCartAndWishlistEvent());

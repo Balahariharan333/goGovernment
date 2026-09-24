@@ -15,7 +15,7 @@ const WalletTransactionSchema = new mongoose.Schema(
     orderId: { type: String, default: '' },
     title: { type: String, required: true },
     subtitle: { type: String, default: '' },
-    balanceAfter: { type: Number, required: true },
+    balanceAfter: { type: Number, default: 0 },
     status: { type: String, enum: ['success', 'failed', 'pending'], default: 'success' },
     metadata: { type: Object, default: {} },
   },

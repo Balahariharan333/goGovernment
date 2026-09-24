@@ -36,16 +36,41 @@ class NotificationService {
         },
       );
 
-      // Request notification permission for Android 13+ (API level 33+)
+      // Request notification permission and register high-priority channels for Android
       final androidPlugin = _notificationsPlugin
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
       if (androidPlugin != null) {
         await androidPlugin.requestNotificationsPermission();
+
+        // 1. High-priority store order alerts channel
+        const AndroidNotificationChannel storeOrderChannel =
+            AndroidNotificationChannel(
+          'store_order_alerts',
+          'Store Order Alerts',
+          description: 'High-priority notifications for new store orders',
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+          enableLights: true,
+        );
+        await androidPlugin.createNotificationChannel(storeOrderChannel);
+
+        // 2. OTP notifications channel
+        const AndroidNotificationChannel otpChannel =
+            AndroidNotificationChannel(
+          'otp_channel',
+          'OTP Notifications',
+          description: 'Notifications for receiving OTP verification codes',
+          importance: Importance.high,
+          playSound: true,
+          enableVibration: true,
+        );
+        await androidPlugin.createNotificationChannel(otpChannel);
       }
 
       _isInitialized = true;
-      debugPrint('[NotificationService] Initialized successfully');
+      debugPrint('[NotificationService] Initialized and channels registered successfully');
     } catch (e) {
       debugPrint('[NotificationService] Initialization error: $e');
     }

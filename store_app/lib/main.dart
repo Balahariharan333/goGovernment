@@ -21,7 +21,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
   debugPrint('📩 [FCM Background Store] Message: ${message.messageId} | data: ${message.data}');
 
-  if (message.data['type'] == 'new_order') {
+  // If message has notification payload, Android automatically displays it.
+  // Only trigger local notification for data-only push to prevent duplicates.
+  if (message.notification == null && message.data['type'] == 'new_order') {
     final orderId = message.data['orderId']?.toString() ?? '';
     await NotificationService.showNewOrderNotification(
       orderId: orderId,

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../bloc/delivery/delivery_bloc.dart';
 import '../../bloc/delivery/delivery_event.dart';
@@ -601,6 +602,20 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
                 riderId: _order.riderId,
               );
               context.read<DeliveryBloc>().add(ConfirmDeliveredEvent(_order.orderId));
+              try {
+                const MethodChannel('com.hikizo.goGovernment_riderapp/app_launcher')
+                    .invokeMethod('dismissOrderOverlay');
+              } catch (_) {}
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+              }
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('🎉 Order #${_order.orderId} delivered successfully!'),
+                  backgroundColor: AppColors.success,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
             child: const Text('Yes, Delivered', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),

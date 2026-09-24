@@ -3,9 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../bloc/auth/auth_bloc.dart';
 import '../../bloc/auth/auth_event.dart';
 import '../../bloc/auth/auth_state.dart';
-import '../../bloc/store/store_bloc.dart';
-import '../../bloc/store/store_event.dart';
-import '../../bloc/store/store_state.dart';
 import '../../constants/route_constants.dart';
 import '../../hive/hive_service.dart';
 import '../../utils/app_colors.dart';
@@ -37,9 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _checkSavedSession() {
-    if (HiveService.isLoggedIn && HiveService.userId.isNotEmpty) {
-      context.read<StoreBloc>().add(FetchMyStoreEvent(HiveService.userId));
-    } else if (HiveService.userPhone.isNotEmpty) {
+    if (HiveService.userPhone.isNotEmpty) {
       _phoneController.text = HiveService.userPhone;
     }
   }
@@ -54,52 +49,23 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     Responsive.init(context);
 
-    return MultiBlocListener(
-      listeners: [
-        BlocListener<AuthBloc, AuthState>(
-          listener: (context, state) {
-            if (state is OtpSentState) {
-              Navigator.of(context).pushNamed(
-                RouteConstants.otp,
-                arguments: {'phone': state.phone, 'testOtp': state.otp},
-              );
-            } else if (state is AuthFailureState) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(state.error),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            }
-          },
-        ),
-        BlocListener<StoreBloc, StoreState>(
-          listener: (context, state) {
-            if (state is StoreLoaded) {
-              if (state.store.status == 'approved') {
-                Navigator.of(context).pushReplacementNamed(
-                  RouteConstants.storeDashboard,
-                  arguments: {'store': state.store},
-                );
-              } else {
-                Navigator.of(context).pushReplacementNamed(
-                  RouteConstants.applicationStatus,
-                  arguments: {'store': state.store, 'justSubmitted': false},
-                );
-              }
-            } else if (state is StoreNotFound) {
-              Navigator.of(context).pushReplacementNamed(
-                RouteConstants.registerStore,
-                arguments: {
-                  'initialPhone': HiveService.userPhone,
-                  'ownerId': HiveService.userId,
-                },
-              );
-            }
-          },
-        ),
-      ],
+    return BlocListener<AuthBloc, AuthState>(
+      listener: (context, state) {
+        if (state is OtpSentState) {
+          Navigator.of(context).pushNamed(
+            RouteConstants.otp,
+            arguments: {'phone': state.phone, 'testOtp': state.otp},
+          );
+        } else if (state is AuthFailureState) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.error),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      },
       child: Scaffold(
         backgroundColor: AppColors.screenColor,
         body: CommonBackground(

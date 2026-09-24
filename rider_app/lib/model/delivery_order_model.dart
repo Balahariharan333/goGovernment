@@ -118,8 +118,8 @@ class DeliveryOrder {
     );
   }
 
-  // Estimated payout for this delivery (e.g. delivery fee or standard 40 INR)
-  double get estimatedPayout => deliveryCharge > 0 ? deliveryCharge : 40.0;
+  // Hybrid model: Guaranteed base ₹40 or customer deliveryCharge if higher
+  double get estimatedPayout => deliveryCharge > 40.0 ? deliveryCharge : 40.0;
 
   Map<String, dynamic> toJson() {
     return {

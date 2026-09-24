@@ -126,6 +126,9 @@ class RiderBackgroundTaskHandler extends TaskHandler {
         ?.createNotificationChannel(androidChannel);
   }
 
+  String? _lastNotifiedOrderId;
+  int _lastNotifiedTime = 0;
+
   // ─── Background Socket ────────────────────────────────────────────────────
 
   void _connectBackgroundSocket() {
@@ -155,17 +158,22 @@ class RiderBackgroundTaskHandler extends TaskHandler {
         });
       });
 
-      // Listen for targeted dispatch events
+      // Listen for targeted dispatch events (Alarm + Auto-launch)
       _socket?.on('order:dispatch', (data) {
         if (data is Map) {
           _showOrderNotification(Map<String, dynamic>.from(data));
         }
       });
 
-      // Listen for general available order events
+      // Listen for general available order events (Only refresh feed, NO duplicate alarm)
       _socket?.on('order:available', (data) {
         if (data is Map) {
-          _showOrderNotification(Map<String, dynamic>.from(data));
+          try {
+            FlutterForegroundTask.sendDataToMain({
+              'type': 'available_feed_refresh',
+              ...Map<String, dynamic>.from(data),
+            });
+          } catch (_) {}
         }
       });
 
@@ -178,15 +186,28 @@ class RiderBackgroundTaskHandler extends TaskHandler {
   // ─── Show Heads-Up Notification & Auto-Launch App ─────────────────────────
 
   Future<void> _showOrderNotification(Map<String, dynamic> data) async {
-    // 1. Programmatically wake screen and bring the Rider App to foreground
+    // Ignore completed, delivered, or cancelled orders
+    final status = (data['status'] ?? '').toString().toLowerCase();
+    if (status == 'delivered' || status == 'cancelled' || status == 'completed') {
+      return;
+    }
+
+    final orderId = data['orderId']?.toString() ?? '';
+    final now = DateTime.now().millisecondsSinceEpoch;
+    // Deduplication check: ignore if the exact same order was notified within the last 25 seconds
+    if (orderId.isNotEmpty && _lastNotifiedOrderId == orderId && (now - _lastNotifiedTime < 25000)) {
+      return;
+    }
+    _lastNotifiedOrderId = orderId;
+    _lastNotifiedTime = now;
+
+    // 1. Programmatically wake screen and bring the Rider App to foreground immediately
     try {
       FlutterForegroundTask.wakeUpScreen();
-      Future.delayed(const Duration(seconds: 3), () {
-        FlutterForegroundTask.launchApp();
-      });
-    }  catch (e) {
-        debugPrint("Failed to open app: $e");
-      }
+      FlutterForegroundTask.launchApp();
+    } catch (e) {
+      debugPrint("Failed to open app: $e");
+    }
     // 2. Also forward payload to main isolate in case app UI is active
     try {
       FlutterForegroundTask.sendDataToMain(data);

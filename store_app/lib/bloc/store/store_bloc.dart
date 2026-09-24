@@ -72,5 +72,9 @@ class StoreBloc extends Bloc<StoreEvent, StoreState> {
         emit(StoreLoaded(store));
       }
     });
+
+    on<ResetStoreEvent>((event, emit) {
+      emit(StoreInitial());
+    });
   }
 }

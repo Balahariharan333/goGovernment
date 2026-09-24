@@ -28,12 +28,23 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     final dropAddress = message.data['dropAddress']?.toString() ?? 'Customer Location';
     final fee = message.data['fee']?.toString() ?? '0';
 
-    await NotificationService.showOrderAlert(
-      orderId: orderId,
-      storeName: storeName,
-      dropAddress: dropAddress,
-      fee: fee,
-    );
+    // 1. Programmatically wake up the device screen and launch app immediately
+    try {
+      FlutterForegroundTask.wakeUpScreen();
+      FlutterForegroundTask.launchApp();
+    } catch (e) {
+      debugPrint("Failed to auto-launch app from FCM: $e");
+    }
+
+    // 2. Only trigger local notification for data-only push to prevent duplicate alerts
+    if (message.notification == null) {
+      await NotificationService.showOrderAlert(
+        orderId: orderId,
+        storeName: storeName,
+        dropAddress: dropAddress,
+        fee: fee,
+      );
+    }
   }
 }
 

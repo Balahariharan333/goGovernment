@@ -327,4 +327,62 @@ router.post('/update-fcm-token', async (req, res) => {
   }
 });
 
+// 7. USER / RIDER LOGOUT
+router.post('/logout', async (req, res) => {
+  try {
+    const { userId, phone } = req.body;
+    if (!userId && !phone) {
+      return res.status(400).json({ error: 'userId or phone is required' });
+    }
+
+    const query = {};
+    if (userId && phone) {
+      query.$or = [{ userId }, { phone }];
+    } else if (userId) {
+      query.userId = userId;
+    } else {
+      query.phone = phone;
+    }
+
+    // 1. Wipe FCM token in database so no more push notifications are sent to this device
+    await User.updateOne(query, { $set: { fcmToken: '' } });
+
+    // 2. Mark rider offline in server in-memory riderRegistry
+    const riderRegistry = req.app.get('riderRegistry');
+    const targetId = userId || phone;
+    if (riderRegistry) {
+      if (riderRegistry.has(targetId)) {
+        const info = riderRegistry.get(targetId);
+        if (info.disconnectTimer) clearTimeout(info.disconnectTimer);
+        info.isOnline = false;
+        info.lat = 0;
+        info.lng = 0;
+        riderRegistry.set(targetId, info);
+      }
+      if (userId && riderRegistry.has(userId)) {
+        const info = riderRegistry.get(userId);
+        if (info.disconnectTimer) clearTimeout(info.disconnectTimer);
+        info.isOnline = false;
+        info.lat = 0;
+        info.lng = 0;
+        riderRegistry.set(userId, info);
+      }
+      if (phone && riderRegistry.has(phone)) {
+        const info = riderRegistry.get(phone);
+        if (info.disconnectTimer) clearTimeout(info.disconnectTimer);
+        info.isOnline = false;
+        info.lat = 0;
+        info.lng = 0;
+        riderRegistry.set(phone, info);
+      }
+    }
+
+    console.log(`🚪 [Auth / Logout] User ${targetId} logged out & cleared from dispatch registry`);
+    res.status(200).json({ success: true, message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Error in /auth/logout:', error);
+    res.status(500).json({ error: 'Failed to logout', details: error.message });
+  }
+});
+
 module.exports = router;

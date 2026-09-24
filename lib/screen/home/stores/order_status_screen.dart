@@ -52,6 +52,7 @@ class _OrderStatusScreenState extends State<OrderStatusScreen>
   Map<String, dynamic>? _serverOrderData;
   StreamSubscription? _socketSub;
   StreamSubscription? _riderLocationSub;
+  Timer? _pollTimer;
   double? _riderLat;
   double? _riderLng;
 
@@ -64,7 +65,17 @@ class _OrderStatusScreenState extends State<OrderStatusScreen>
       vsync: this,
       duration: const Duration(milliseconds: 2500),
     )..repeat();
-    _orderId = widget.orderId ?? widget.transaction?['orderId']?.toString() ?? widget.transaction?['id']?.toString() ?? 'ORD-123456787654';
+
+    final rawTx = widget.transaction;
+    _orderId = (widget.orderId != null && widget.orderId!.isNotEmpty)
+        ? widget.orderId!
+        : (rawTx?['orderId']?.toString().isNotEmpty == true)
+            ? rawTx!['orderId'].toString()
+            : (rawTx?['id']?.toString().isNotEmpty == true)
+                ? rawTx!['id'].toString()
+                : '';
+
+    debugPrint('🔍 [OrderStatusScreen] Tracking Order ID: "$_orderId"');
 
     final profile = context.read<ProfileBloc>().state;
     if (profile.name.trim().isNotEmpty) {
@@ -90,12 +101,17 @@ class _OrderStatusScreenState extends State<OrderStatusScreen>
     // Fetch initial order details once
     _fetchInitialOrder();
 
-    // Subscribe to real-time Socket.io events for this order (zero polling, zero battery drain)
-    SocketService().subscribeToOrder(_orderId);
+    // Ensure WebSocket is connected and subscribed to this order
+    SocketService().init();
+    if (_orderId.isNotEmpty) {
+      SocketService().subscribeToOrder(_orderId);
+    }
+
     _socketSub = SocketService().onOrderStatusUpdate.listen((orderData) {
       if (!mounted) return;
       final incomingId = orderData['orderId']?.toString() ?? orderData['id']?.toString();
-      if (incomingId == _orderId) {
+      debugPrint('⚡ [OrderStatusScreen] onOrderStatusUpdate incomingId: $incomingId, trackedId: $_orderId');
+      if (incomingId == _orderId || _orderId.isEmpty) {
         _applyOrderUpdate(orderData);
       }
     });
@@ -103,11 +119,20 @@ class _OrderStatusScreenState extends State<OrderStatusScreen>
     _riderLocationSub = SocketService().onRiderLocation.listen((locData) {
       if (!mounted) return;
       final incomingId = locData['orderId']?.toString();
-      if (incomingId == _orderId) {
+      if (incomingId == _orderId || _orderId.isEmpty) {
         setState(() {
           _riderLat = (locData['latitude'] as num?)?.toDouble();
           _riderLng = (locData['longitude'] as num?)?.toDouble();
         });
+      }
+    });
+
+    // 4-second lightweight polling fallback while order is active
+    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted) return;
+      final current = context.read<OrderTrackingBloc>().state.currentStep;
+      if (current < 4) {
+        _fetchInitialOrder();
       }
     });
   }
@@ -115,6 +140,7 @@ class _OrderStatusScreenState extends State<OrderStatusScreen>
   @override
   void dispose() {
     _routeAnimController.dispose();
+    _pollTimer?.cancel();
     _socketSub?.cancel();
     _riderLocationSub?.cancel();
     super.dispose();
@@ -131,24 +157,7 @@ class _OrderStatusScreenState extends State<OrderStatusScreen>
   }
 
   void _applyOrderUpdate(Map<String, dynamic> order) {
-    setState(() {
-      _serverOrderData = order;
-
-      final addr = order['deliveryAddress'];
-      if (addr is Map) {
-        if (addr['address'] != null && addr['address'].toString().isNotEmpty) {
-          _deliveryAddress = addr['address'].toString();
-        }
-        if (addr['receiverName'] != null && addr['receiverName'].toString().isNotEmpty) {
-          _receiverName = addr['receiverName'].toString();
-        }
-        if (addr['receiverPhone'] != null && addr['receiverPhone'].toString().isNotEmpty) {
-          _receiverPhone = addr['receiverPhone'].toString();
-        }
-      }
-    });
-
-    final status = order['status']?.toString();
+    final status = (order['status'] ?? '').toString().toLowerCase().trim();
     if (status == 'cancelled') {
       context.read<OrderTrackingBloc>().add(
         CancelActiveOrderEvent(orderId: _orderId, reason: 'Cancelled by store or user'),
@@ -156,6 +165,9 @@ class _OrderStatusScreenState extends State<OrderStatusScreen>
       context.read<TransactionBloc>().add(
         UpdateOrderStatusEvent(orderId: _orderId, status: 'Cancelled'),
       );
+      setState(() {
+        _serverOrderData = order;
+      });
       return;
     }
 
@@ -184,6 +196,23 @@ class _OrderStatusScreenState extends State<OrderStatusScreen>
         );
       }
     }
+
+    setState(() {
+      _serverOrderData = order;
+
+      final addr = order['deliveryAddress'];
+      if (addr is Map) {
+        if (addr['address'] != null && addr['address'].toString().isNotEmpty) {
+          _deliveryAddress = addr['address'].toString();
+        }
+        if (addr['receiverName'] != null && addr['receiverName'].toString().isNotEmpty) {
+          _receiverName = addr['receiverName'].toString();
+        }
+        if (addr['receiverPhone'] != null && addr['receiverPhone'].toString().isNotEmpty) {
+          _receiverPhone = addr['receiverPhone'].toString();
+        }
+      }
+    });
   }
 
   Future<void> _cancelOrderByCitizen() async {

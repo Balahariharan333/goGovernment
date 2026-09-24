@@ -50,3 +50,7 @@ class UpdateStoreProfileEvent extends StoreEvent {
   List<Object?> get props => [storeId, updates];
 }
 
+class ResetStoreEvent extends StoreEvent {
+  const ResetStoreEvent();
+}
+
