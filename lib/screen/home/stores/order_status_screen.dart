@@ -258,10 +258,19 @@ class _OrderStatusScreenState extends State<OrderStatusScreen>
             _serverOrderData!['status'] = 'cancelled';
           }
         });
+        final payMethod = (_serverOrderData?['paymentMethod'] ?? widget.transaction?['paymentMethod'] ?? '').toString().toLowerCase();
+        final bool isWallet = payMethod.contains('wallet');
+        final grandTotal = _serverOrderData?['grandTotal'] ?? widget.transaction?['grandTotal'] ?? '';
+
+        // Reload wallet transactions so the refund and balance update immediately
+        context.read<TransactionBloc>().add(LoadTransactionsEvent());
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Order cancelled. Refund processed to your wallet.'),
-            backgroundColor: AppColors.error,
+          SnackBar(
+            content: Text(isWallet
+                ? 'Order cancelled. ₹$grandTotal refunded to your wallet.'
+                : 'Order cancelled successfully.'),
+            backgroundColor: isWallet ? const Color(0xFF2E7D32) : AppColors.grayFont,
           ),
         );
       }

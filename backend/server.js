@@ -397,6 +397,7 @@ mongoose
   .connect(MONGO_URI)
   .then(() => {
     console.log(' MongoDB Atlas Connected Successfully!');
+
     server.listen(PORT, '0.0.0.0', () => {
       console.log(` Server is running!`);
       console.log(` Laptop URL: http://localhost:${PORT}/api/health`);
@@ -411,6 +412,7 @@ mongoose
         }
       }
     });
+    
   })
   .catch((err) => {
     console.error('❌ MongoDB Connection Failed:', err.message);

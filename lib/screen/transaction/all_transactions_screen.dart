@@ -185,13 +185,13 @@ class AllTransactionsScreen extends StatelessWidget {
               width: Responsive.w(42),
               height: Responsive.w(42),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF2EC),
+                color: isPositive ? const Color(0xFFE8F5E9) : const Color(0xFFFFF2EC),
                 borderRadius: BorderRadius.circular(Responsive.w(12)),
               ),
               child: Center(
                 child: Icon(
                   isPositive ? Icons.arrow_downward : Icons.arrow_upward,
-                  color: AppColors.primary,
+                  color: isPositive ? const Color(0xFF4CAF50) : AppColors.primary,
                   size: Responsive.w(20),
                 ),
               ),

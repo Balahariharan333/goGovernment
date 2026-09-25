@@ -163,7 +163,10 @@ class WalletApiService {
 
         return orders.map<Map<String, dynamic>>((o) {
           final total = (o['grandTotal'] as num?)?.toInt() ?? 0;
-          final storeName = (o['storeDetails']?['name'] ?? 'Store Order').toString();
+          final storeDetails = (o['storeDetails'] as Map?) ?? {};
+          final storeId = (o['storeId'] ?? storeDetails['storeId'] ?? '').toString();
+          final storeName = (storeDetails['name'] ?? o['storeName'] ?? 'Store Order').toString();
+          final storePhone = (storeDetails['phone'] ?? '').toString();
           final orderId = o['orderId']?.toString() ?? '';
           final status = o['status']?.toString() ?? 'placed';
           final payMethod = o['paymentMethod']?.toString() ?? 'Cash on Delivery';
@@ -171,10 +174,13 @@ class WalletApiService {
           final itemTotal = (o['itemTotal'] as num?)?.toInt() ?? total;
           final rawItems = (o['items'] as List<dynamic>? ?? []).map<Map<String, dynamic>>((i) => {
             'id': i['productId']?.toString() ?? '',
+            'productId': i['productId']?.toString() ?? '',
             'title': i['title']?.toString() ?? 'Product',
             'price': '₹${(i['price'] as num?)?.toInt() ?? 0}',
             'qty': (i['quantity'] as num?)?.toInt() ?? 1,
             'image': i['image']?.toString() ?? 'assets/images/product1.png',
+            if (storeId.isNotEmpty) 'storeId': storeId,
+            if (storeName.isNotEmpty) 'storeName': storeName,
           }).toList();
 
           String dateFormatted = '';
@@ -206,6 +212,7 @@ class WalletApiService {
             'isPositive': false,
             'status': statusMap[status] ?? 'Processing',
             'date': dateFormatted,
+            'createdAt': o['createdAt'],
             'items': rawItems,
             'address': addr,
             'listingPrice': '₹$itemTotal',
@@ -213,6 +220,10 @@ class WalletApiService {
             'grandTotal': '₹$total',
             'paid': '₹$total',
             'paymentMethod': payMethod,
+            'storeId': storeId,
+            'storeName': storeName,
+            'storePhone': storePhone,
+            'storeDetails': storeDetails,
           };
         }).toList();
       }

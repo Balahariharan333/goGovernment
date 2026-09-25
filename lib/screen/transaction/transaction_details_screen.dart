@@ -11,6 +11,7 @@ import '../../service/cart_manager.dart';
 import '../../network/api_client.dart';
 import '../../constants/route_constants.dart';
 import '../../utils/call_launcher.dart';
+import '../../network/order_api_service.dart';
 
 class TransactionDetailsScreen extends StatefulWidget {
   final String title;
@@ -85,20 +86,23 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
         final String grandTotal = tx['grandTotal']?.toString() ?? '₹99.50';
         final String paid = tx['paid']?.toString() ?? '₹100.00';
 
-        final bool isStoreOrder = items.isNotEmpty || orderId.startsWith('ORD-');
-        final bool isCoinsReward = title.toLowerCase().contains('coin') ||
+        final bool isRefund = title.toLowerCase().contains('refund') || (tx['category']?.toString() == 'order_refund');
+        final bool isStoreOrder = (items.isNotEmpty || orderId.startsWith('ORD-')) && !isRefund;
+        final bool isCoinsReward = !isRefund && (title.toLowerCase().contains('coin') ||
             title.toLowerCase().contains('bonus') ||
             title.toLowerCase().contains('reward') ||
             title.toLowerCase().contains('complaint') ||
             title.toLowerCase().contains('survey') ||
-            !amount.contains('₹');
+            !amount.contains('₹'));
         final bool isWalletTx = title.toLowerCase().contains('wallet');
 
         String screenTitle = 'Order Details';
         if (showReorderScreen) {
           screenTitle = 'Reorder Items';
         } else if (!isStoreOrder) {
-          if (isCoinsReward) {
+          if (isRefund) {
+            screenTitle = 'Refund Details';
+          } else if (isCoinsReward) {
             screenTitle = 'Reward Details';
           } else if (isWalletTx) {
             screenTitle = 'Wallet Details';
@@ -385,19 +389,25 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
 
   Widget _buildRewardOrWalletDetailsView(BuildContext context, Map<String, dynamic> tx) {
     final String id = tx['id']?.toString() ?? 'TX-0000';
-    final String title = tx['title']?.toString() ?? 'Civic Reward';
+    final String title = tx['title']?.toString() ?? 'Transaction';
     final String subtitle = tx['subtitle']?.toString() ?? '';
     final String amount = tx['amount']?.toString() ?? '+100';
     final bool isPositive = tx['isPositive'] == true;
     final String status = tx['status']?.toString() ?? 'Credited';
     final String date = tx['date']?.toString() ?? 'Today';
+    final String? orderId = tx['orderId']?.toString();
+    final String category = tx['category']?.toString() ?? '';
+    final String payMethod = tx['paymentMethod']?.toString() ?? 'Wallet Account';
 
-    final bool isCoins = title.toLowerCase().contains('coin') ||
+    final bool isRefund = category == 'order_refund' || title.toLowerCase().contains('refund');
+    final bool isTopup = category == 'topup' || title.toLowerCase().contains('top-up') || title.toLowerCase().contains('topup');
+    final bool isCoins = !isRefund && !isTopup && (
+        title.toLowerCase().contains('coin') ||
         title.toLowerCase().contains('bonus') ||
         title.toLowerCase().contains('reward') ||
         title.toLowerCase().contains('complaint') ||
         title.toLowerCase().contains('survey') ||
-        !amount.contains('₹');
+        !amount.contains('₹'));
 
     String formattedAmount = amount;
     if (isCoins) {
@@ -451,7 +461,9 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    isCoins ? Icons.currency_rupee_rounded : Icons.account_balance_wallet_rounded,
+                    isRefund
+                        ? Icons.replay_rounded
+                        : (isCoins ? Icons.currency_rupee_rounded : Icons.account_balance_wallet_rounded),
                     color: isCoins ? const Color(0xFFFFB300) : const Color(0xFF43A047),
                     size: Responsive.w(36),
                   ),
@@ -531,21 +543,49 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
                   children: [
                     Icon(Icons.info_outline, color: AppColors.primary, size: Responsive.w(18)),
                     SizedBox(width: Responsive.w(8)),
-                    CustomText.title('Transaction Information', fontSize: 14, fontWeight: FontWeight.bold),
+                    CustomText.title(
+                      isRefund ? 'Refund Information' : 'Transaction Information',
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ],
                 ),
                 SizedBox(height: Responsive.h(14)),
                 _buildPriceRow('Transaction ID', id, isGray: true),
                 SizedBox(height: Responsive.h(10)),
-                _buildPriceRow('Activity Type', isCoins ? 'Civic Reward' : 'Wallet Credit', isGray: true),
+                _buildPriceRow(
+                  'Activity Type',
+                  isRefund
+                      ? 'Order Refund'
+                      : (isTopup ? 'Wallet Top-up' : (isCoins ? 'Civic Reward' : (isPositive ? 'Wallet Credit' : 'Wallet Debit'))),
+                  isGray: true,
+                ),
+                if (isRefund && orderId != null && orderId.isNotEmpty) ...[
+                  SizedBox(height: Responsive.h(10)),
+                  _buildPriceRow('Associated Order', '#$orderId', isGray: true),
+                ],
                 SizedBox(height: Responsive.h(10)),
                 _buildPriceRow('Date & Time', date, isGray: true),
                 SizedBox(height: Responsive.h(10)),
-                _buildPriceRow('Program', 'GoGovernment Civic Rewards', isGray: true),
+                if (isRefund) ...[
+                  _buildPriceRow('Reason', 'Order Cancellation', isGray: true),
+                  SizedBox(height: Responsive.h(10)),
+                  _buildPriceRow('Refund Mode', 'Original Payment (Wallet)', isGray: true),
+                ] else if (isTopup) ...[
+                  _buildPriceRow('Payment Mode', payMethod, isGray: true),
+                ] else if (isCoins) ...[
+                  _buildPriceRow('Program', 'GoGovernment Civic Rewards', isGray: true),
+                ] else ...[
+                  _buildPriceRow('Payment Mode', payMethod, isGray: true),
+                ],
                 SizedBox(height: Responsive.h(12)),
                 _buildDivider(),
                 SizedBox(height: Responsive.h(12)),
-                _buildPriceRow('Credited Account', isCoins ? 'Complaint Coins Balance' : 'GoGov Wallet Balance', isBold: true),
+                _buildPriceRow(
+                  isRefund ? 'Refunded To' : 'Credited Account',
+                  isCoins ? 'Complaint Coins Balance' : 'GoGov Wallet Balance',
+                  isBold: true,
+                ),
               ],
             ),
           ),
@@ -563,13 +603,19 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.lightbulb_outline, color: Color(0xFF2E7D32), size: 18),
+                Icon(
+                  isRefund ? Icons.verified_outlined : Icons.lightbulb_outline,
+                  color: const Color(0xFF2E7D32),
+                  size: 18,
+                ),
                 SizedBox(width: Responsive.w(10)),
                 Expanded(
                   child: CustomText.subtitle(
-                    isCoins
-                        ? 'Complaint Coins can be redeemed directly for real wallet cash anytime (100 Coins = ₹1, min 100 coins) or applied during store checkout for extra savings.'
-                        : 'Your GoGov Wallet balance can be used directly for seamless 1-click purchases in local stores.',
+                    isRefund
+                        ? 'The refunded amount of $formattedAmount has been credited directly to your GoGov Wallet and is ready for use on future orders.'
+                        : (isCoins
+                            ? 'Complaint Coins can be redeemed directly for real wallet cash anytime (100 Coins = ₹1, min 100 coins) or applied during store checkout for extra savings.'
+                            : 'Your GoGov Wallet balance can be used directly for seamless 1-click purchases in local stores.'),
                     fontSize: 11,
                     color: const Color(0xFF2E7D32),
                     height: 1.4,
@@ -685,8 +731,30 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
     );
   }
 
-  void _reorderAllAndGoToCart(BuildContext context) {
+  Future<void> _reorderAllAndGoToCart(BuildContext context) async {
     final List items = widget.transaction?['items'] as List? ?? [];
+    final storeDetails = (widget.transaction?['storeDetails'] as Map?) ?? {};
+    String storeId = (widget.transaction?['storeId'] ?? storeDetails['storeId'] ?? '').toString().trim();
+    String storeName = (widget.transaction?['storeName'] ?? storeDetails['name'] ?? widget.title).toString().trim();
+    final String orderId = (widget.transaction?['id'] ?? widget.transaction?['orderId'] ?? '').toString().trim();
+
+    // If storeId is missing, recover it directly from MongoDB
+    if (storeId.isEmpty && orderId.isNotEmpty) {
+      try {
+        final liveDetails = await OrderApiService.fetchOrderDetails(orderId);
+        if (liveDetails != null) {
+          final liveStoreDetails = (liveDetails['storeDetails'] as Map?) ?? {};
+          final sId = (liveDetails['storeId'] ?? liveStoreDetails['storeId'] ?? '').toString().trim();
+          final sName = (liveStoreDetails['name'] ?? liveDetails['storeName'] ?? '').toString().trim();
+          if (sId.isNotEmpty) storeId = sId;
+          if (sName.isNotEmpty) storeName = sName;
+        }
+      } catch (_) {}
+    }
+
+    // Clear previous cart to prevent cross-store item mixing
+    CartManager.instance.clear();
+
     if (items.isNotEmpty) {
       for (final raw in items) {
         if (raw is Map) {
@@ -698,6 +766,8 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
             ...item,
             'id': pId,
             'productId': pId,
+            if (storeId.isNotEmpty) 'storeId': storeId,
+            if (storeName.isNotEmpty) 'storeName': storeName,
             'title': item['title'] ?? item['name'] ?? 'Product',
             'price': item['price'] ?? 99,
             'originalPrice': item['originalPrice'] ?? item['price'] ?? 99,
@@ -711,6 +781,8 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
     } else {
       CartManager.instance.addToCart({
         'id': 'reorder_${DateTime.now().millisecondsSinceEpoch}',
+        if (storeId.isNotEmpty) 'storeId': storeId,
+        if (storeName.isNotEmpty) 'storeName': storeName,
         'title': widget.title,
         'price': 99,
         'originalPrice': 150,
@@ -719,22 +791,10 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
       }, qty: 1);
     }
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Items added to cart! Proceeding to cart...'),
-        backgroundColor: const Color(0xFF2E7D32),
-        duration: const Duration(seconds: 2),
-        action: SnackBarAction(
-          label: 'VIEW CART',
-          textColor: Colors.white,
-          onPressed: () => Navigator.pushNamed(context, RouteConstants.cart),
-        ),
-      ),
-    );
-
-    context.read<TransactionBloc>().add(ToggleReorderScreenEvent(false));
-    Navigator.of(context).pushNamed(RouteConstants.cart);
+    if (context.mounted) {
+      context.read<TransactionBloc>().add(ToggleReorderScreenEvent(false));
+      Navigator.of(context).pushNamed(RouteConstants.cart);
+    }
   }
 
   Widget _buildReorderCard(
@@ -801,6 +861,10 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
           GestureDetector(
             onTap: isAvailable
                 ? () {
+                    final storeDetails = (widget.transaction?['storeDetails'] as Map?) ?? {};
+                    final String storeId = (widget.transaction?['storeId'] ?? storeDetails['storeId'] ?? '').toString();
+                    final String storeName = (widget.transaction?['storeName'] ?? storeDetails['name'] ?? widget.title).toString();
+
                     final pId = item?['productId']?.toString() ??
                         item?['id']?.toString() ??
                         'reorder_${DateTime.now().millisecondsSinceEpoch}';
@@ -812,6 +876,8 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
                       ...?item,
                       'id': pId,
                       'productId': pId,
+                      if (storeId.isNotEmpty) 'storeId': storeId,
+                      if (storeName.isNotEmpty) 'storeName': storeName,
                       'title': pTitle,
                       'price': pPrice,
                       'originalPrice': item?['originalPrice'] ?? pPrice,
@@ -821,16 +887,10 @@ class _TransactionDetailsScreenState extends State<TransactionDetailsScreen> {
 
                     CartManager.instance.addToCart(prodData, qty: pQty);
 
-                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('$pTitle added to cart! Proceeding to cart...'),
-                        backgroundColor: const Color(0xFF2E7D32),
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                    context.read<TransactionBloc>().add(ToggleReorderScreenEvent(false));
-                    Navigator.of(context).pushNamed(RouteConstants.cart);
+                    if (context.mounted) {
+                      context.read<TransactionBloc>().add(ToggleReorderScreenEvent(false));
+                      Navigator.of(context).pushNamed(RouteConstants.cart);
+                    }
                   }
                 : null,
             child: Container(

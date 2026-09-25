@@ -165,13 +165,13 @@ class _CartScreenState extends State<CartScreen> {
       return fallback;
     }
 
-    String resolvedStoreId = 'STORE_479113';
+    String resolvedStoreId = CartManager.instance.currentStoreId ?? '';
     String dynamicStoreName = CartManager.instance.currentStoreName ?? '';
     final backendItems = <Map<String, dynamic>>[];
     final orderItems = cartItemsMap.entries.map((e) {
       final prod = CartManager.instance.productDetails[e.key] ?? {};
-      if (prod['storeId'] != null && prod['storeId'].toString().isNotEmpty) {
-        resolvedStoreId = prod['storeId'].toString();
+      if (prod['storeId'] != null && prod['storeId'].toString().trim().isNotEmpty) {
+        resolvedStoreId = prod['storeId'].toString().trim();
       }
       if (dynamicStoreName.isEmpty) {
         final sName = prod['storeName']?.toString() ?? prod['storeTitle']?.toString();
@@ -213,6 +213,21 @@ class _CartScreenState extends State<CartScreen> {
     final selectedAddr = context.read<AddressBloc>().state.selectedAddress;
     final String deliveryAddr =
         selectedAddr?.description ?? (_deliveryAddress.isNotEmpty ? _deliveryAddress : 'Location not specified');
+
+    if (resolvedStoreId.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isCheckingOut = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error: Store information missing. Please re-select items from the store.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+      return;
+    }
 
     // Create order in MongoDB backend
     final serverOrder = await OrderApiService.createOrder(

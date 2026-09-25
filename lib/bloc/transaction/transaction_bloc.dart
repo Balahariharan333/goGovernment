@@ -59,8 +59,9 @@ class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
             if (t is Map) {
               final cat = t['category']?.toString();
               final orderId = t['orderId']?.toString();
-              // Exclude order payment transactions from wallet ledger so they don't duplicate orderTxs
-              if (cat == 'order_payment' || (orderId != null && orderId.isNotEmpty)) {
+              // Exclude regular order payment transactions from wallet ledger so they don't duplicate orderTxs.
+              // But always include order refunds (category == 'order_refund') so the refund credit appears!
+              if (cat == 'order_payment' || (cat != 'order_refund' && orderId != null && orderId.isNotEmpty)) {
                 continue;
               }
 
@@ -68,12 +69,13 @@ class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
               final amt = (t['amount'] as num?)?.abs().toDouble() ?? 0.0;
               nonOrderWalletTxs.add({
                 'id': t['transactionId'] ?? t['_id'] ?? '',
-                'title': t['title'] ?? 'Transaction',
+                'title': t['title'] ?? (cat == 'order_refund' ? 'Order Refund' : 'Transaction'),
                 'subtitle': t['subtitle'] ?? '',
                 'amount': isCredit ? '+₹${amt.toInt()}' : '-₹${amt.toInt()}',
                 'isPositive': isCredit,
                 'status': t['status'] == 'success' ? 'Successful' : (t['status'] ?? 'Successful'),
                 'date': t['subtitle']?.toString().split('·').last.trim() ?? '',
+                'createdAt': t['createdAt'],
                 'items': [],
                 'address': t['paymentMethod'] ?? 'Wallet Account',
                 'listingPrice': '₹0.00',
@@ -81,6 +83,8 @@ class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
                 'grandTotal': '₹${amt.toInt()}',
                 'paid': '₹${amt.toInt()}',
                 'paymentMethod': t['paymentMethod'] ?? 'Wallet',
+                'category': cat,
+                'orderId': orderId,
               });
             }
           }
@@ -92,6 +96,13 @@ class TransactionBloc extends Bloc<TransactionEvent, TransactionState> {
             ...orderTxs,
             ...nonOrderWalletTxs,
           ];
+
+          // Sort descending by date so recent refunds & top-ups appear right at the top!
+          combined.sort((a, b) {
+            final aDate = DateTime.tryParse(a['createdAt']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final bDate = DateTime.tryParse(b['createdAt']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+            return bDate.compareTo(aDate);
+          });
 
           await HiveService.setWalletBalance(serverWallet);
           await HiveService.setCoinsBalance(serverCoins);

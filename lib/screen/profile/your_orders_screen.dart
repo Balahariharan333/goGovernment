@@ -75,7 +75,18 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
 
         final existingIdx = currentTxs.indexWhere((tx) => tx['id']?.toString() == orderId);
         if (existingIdx != -1) {
-          if (currentTxs[existingIdx]['status'] != displayStatus) {
+          final existingTx = currentTxs[existingIdx];
+          final storeDetails = order['storeDetails'] as Map? ?? {};
+          final sId = (order['storeId'] ?? storeDetails['storeId'] ?? '').toString();
+          final sName = (storeDetails['name'] ?? order['storeName'] ?? '').toString();
+
+          if (sId.isNotEmpty && (existingTx['storeId'] == null || existingTx['storeId'].toString().isEmpty)) {
+            existingTx['storeId'] = sId;
+            existingTx['storeName'] = sName.isNotEmpty ? sName : existingTx['title'];
+            existingTx['storeDetails'] = storeDetails;
+          }
+
+          if (existingTx['status'] != displayStatus) {
             context.read<TransactionBloc>().add(
               UpdateOrderStatusEvent(orderId: orderId, status: displayStatus),
             );
@@ -102,6 +113,8 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
             'paid': '₹$grandTotal',
             'storeDetails': storeDetails,
             'storePhone': (storeDetails['phone'] ?? '').toString(),
+            'storeId': order['storeId'] ?? storeDetails['storeId'] ?? '',
+            'storeName': storeName,
           };
           context.read<TransactionBloc>().add(AddTransactionEvent(tx));
         }
@@ -188,49 +201,53 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
                       horizontal: Responsive.w(20),
                       vertical: Responsive.h(8),
                     ),
-                    child: Row(
-                      children: ['All', 'Active', 'Completed'].map((filter) {
-                        final bool isSelected = _selectedFilter == filter;
-                        return Padding(
-                          padding: EdgeInsets.only(right: Responsive.w(8)),
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _selectedFilter = filter;
-                              });
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: EdgeInsets.symmetric(
-                                horizontal: Responsive.w(16),
-                                vertical: Responsive.h(6),
-                              ),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? AppColors.primary
-                                    : AppColors.white,
-                                borderRadius: BorderRadius.circular(
-                                  Responsive.w(20),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        children: ['All', 'Active', 'Completed'].map((filter) {
+                          final bool isSelected = _selectedFilter == filter;
+                          return Padding(
+                            padding: EdgeInsets.only(right: Responsive.w(8)),
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedFilter = filter;
+                                });
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: Responsive.w(16),
+                                  vertical: Responsive.h(6),
                                 ),
-                                border: Border.all(
+                                decoration: BoxDecoration(
                                   color: isSelected
                                       ? AppColors.primary
-                                      : AppColors.outliner,
-                                  width: 1.2,
+                                      : AppColors.white,
+                                  borderRadius: BorderRadius.circular(
+                                    Responsive.w(20),
+                                  ),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? AppColors.primary
+                                        : AppColors.outliner,
+                                    width: 1.2,
+                                  ),
+                                ),
+                                child: CustomText.title(
+                                  filter,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : AppColors.grayFont,
                                 ),
                               ),
-                              child: CustomText.title(
-                                filter,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: isSelected
-                                    ? Colors.white
-                                    : AppColors.grayFont,
-                              ),
                             ),
-                          ),
-                        );
-                      }).toList(),
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
 
@@ -537,161 +554,169 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
                   ),
                 ],
               ),
-              Row(
-                children: [
-                  // Track Order button (strictly for active orders)
-                  if (isActive) ...[
-
-                    // Track Order button (strictly for active orders)
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.of(context).pushNamed(
-                          RouteConstants.orderStatus,
-                          arguments: {
-                            'storeType': 'medical',
-                            'orderId': id,
-                            'transaction': order,
+              const SizedBox(width: 8),
+              Flexible(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Track Order button (for active orders)
+                      if (isActive) ...[
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).pushNamed(
+                              RouteConstants.orderStatus,
+                              arguments: {
+                                'storeType': 'medical',
+                                'orderId': id,
+                                'transaction': order,
+                              },
+                            );
                           },
-                        );
-                      },
-                      child: Container(
-                        margin: EdgeInsets.only(right: Responsive.w(8)),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: Responsive.w(12),
-                          vertical: Responsive.h(8),
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(Responsive.w(16)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.navigation_outlined,
-                              color: Colors.white,
-                              size: 13,
+                          child: Container(
+                            margin: EdgeInsets.only(right: Responsive.w(6)),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: Responsive.w(10),
+                              vertical: Responsive.h(6),
                             ),
-                            SizedBox(width: Responsive.w(4)),
-                            CustomText.title(
-                              'Track',
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(Responsive.w(16)),
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-
-                  // Call Store button (if store phone is available)
-                  if (storePhone.isNotEmpty) ...[
-                    GestureDetector(
-                      onTap: () => CallLauncher.launchCall(
-                        context,
-                        phone: storePhone,
-                        name: storeName,
-                      ),
-                      child: Container(
-                        margin: EdgeInsets.only(right: Responsive.w(8)),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: Responsive.w(10),
-                          vertical: Responsive.h(8),
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE8F5E9),
-                          borderRadius: BorderRadius.circular(Responsive.w(16)),
-                          border: Border.all(
-                            color: Colors.green.shade400,
-                            width: 1.2,
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.navigation_outlined,
+                                  color: Colors.white,
+                                  size: 13,
+                                ),
+                                SizedBox(width: Responsive.w(4)),
+                                CustomText.title(
+                                  'Track',
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.phone_outlined,
-                              color: Color(0xFF2E7D32),
-                              size: 13,
-                            ),
-                            SizedBox(width: Responsive.w(4)),
-                            CustomText.title(
-                              'Call',
-                              color: const Color(0xFF2E7D32),
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                      ],
 
-                  // Reorder button (instant 1-tap reorder directly to Cart)
-                  GestureDetector(
-                    onTap: () => _reorderOrderAndGoToCart(context, order),
-                    child: Container(
-                      margin: EdgeInsets.only(right: Responsive.w(8)),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: Responsive.w(12),
-                        vertical: Responsive.h(8),
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF2EC),
-                        borderRadius: BorderRadius.circular(Responsive.w(16)),
-                        border: Border.all(
-                          color: AppColors.primary,
-                          width: 1.2,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.replay,
-                            color: AppColors.primary,
-                            size: 13,
+                      // Call Store button (if store phone is available for active orders)
+                      if (storePhone.isNotEmpty && isActive) ...[
+                        GestureDetector(
+                          onTap: () => CallLauncher.launchCall(
+                            context,
+                            phone: storePhone,
+                            name: storeName,
                           ),
-                          SizedBox(width: Responsive.w(4)),
-                          CustomText.title(
-                            'Reorder',
-                            color: AppColors.primary,
+                          child: Container(
+                            margin: EdgeInsets.only(right: Responsive.w(6)),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: Responsive.w(8),
+                              vertical: Responsive.h(6),
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8F5E9),
+                              borderRadius: BorderRadius.circular(Responsive.w(16)),
+                              border: Border.all(
+                                color: Colors.green.shade400,
+                                width: 1.2,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.phone_outlined,
+                                  color: Color(0xFF2E7D32),
+                                  size: 13,
+                                ),
+                                SizedBox(width: Responsive.w(4)),
+                                CustomText.title(
+                                  'Call',
+                                  color: const Color(0xFF2E7D32),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      // Reorder button (shown on completed / non-active orders or when user wants to reorder)
+                      if (!isActive) ...[
+                        GestureDetector(
+                          onTap: () => _reorderOrderAndGoToCart(context, order),
+                          child: Container(
+                            margin: EdgeInsets.only(right: Responsive.w(6)),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: Responsive.w(10),
+                              vertical: Responsive.h(6),
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF2EC),
+                              borderRadius: BorderRadius.circular(Responsive.w(16)),
+                              border: Border.all(
+                                color: AppColors.primary,
+                                width: 1.2,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.replay,
+                                  color: AppColors.primary,
+                                  size: 13,
+                                ),
+                                SizedBox(width: Responsive.w(4)),
+                                CustomText.title(
+                                  'Reorder',
+                                  color: AppColors.primary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      // View Details button
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).pushNamed(
+                            RouteConstants.transactionDetails,
+                            arguments: {'title': storeName, 'transaction': order},
+                          );
+                        },
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: Responsive.w(10),
+                            vertical: Responsive.h(6),
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.white,
+                            borderRadius: BorderRadius.circular(Responsive.w(16)),
+                            border: Border.all(
+                              color: AppColors.outliner,
+                              width: 1.2,
+                            ),
+                          ),
+                          child: CustomText.title(
+                            'Details',
+                            color: AppColors.black,
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // View Details button
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).pushNamed(
-                        RouteConstants.transactionDetails,
-                        arguments: {'title': storeName, 'transaction': order},
-                      );
-                    },
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: Responsive.w(14),
-                        vertical: Responsive.h(8),
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.white,
-                        borderRadius: BorderRadius.circular(Responsive.w(16)),
-                        border: Border.all(
-                          color: AppColors.outliner,
-                          width: 1.2,
                         ),
                       ),
-                      child: CustomText.title(
-                        'Details',
-                        color: AppColors.black,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ],
           ),
@@ -701,8 +726,30 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
   );
 }
 
-  void _reorderOrderAndGoToCart(BuildContext context, Map<String, dynamic> order) {
+  Future<void> _reorderOrderAndGoToCart(BuildContext context, Map<String, dynamic> order) async {
     final List items = (order['items'] as List?) ?? [];
+    final storeDetails = (order['storeDetails'] as Map?) ?? {};
+    String storeId = (order['storeId'] ?? storeDetails['storeId'] ?? '').toString().trim();
+    String storeName = (order['storeName'] ?? storeDetails['name'] ?? order['title'] ?? 'Store').toString().trim();
+    final String orderId = (order['id'] ?? order['orderId'] ?? '').toString().trim();
+
+    // If storeId is missing from locally cached order, query MongoDB directly to recover storeId & storeName
+    if (storeId.isEmpty && orderId.isNotEmpty) {
+      try {
+        final liveDetails = await OrderApiService.fetchOrderDetails(orderId);
+        if (liveDetails != null) {
+          final liveStoreDetails = (liveDetails['storeDetails'] as Map?) ?? {};
+          final sId = (liveDetails['storeId'] ?? liveStoreDetails['storeId'] ?? '').toString().trim();
+          final sName = (liveStoreDetails['name'] ?? liveDetails['storeName'] ?? '').toString().trim();
+          if (sId.isNotEmpty) storeId = sId;
+          if (sName.isNotEmpty) storeName = sName;
+        }
+      } catch (_) {}
+    }
+
+    // Clear previous cart to prevent cross-store item mixing
+    CartManager.instance.clear();
+
     if (items.isNotEmpty) {
       for (final raw in items) {
         if (raw is Map) {
@@ -714,6 +761,8 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
             ...it,
             'id': pId,
             'productId': pId,
+            if (storeId.isNotEmpty) 'storeId': storeId,
+            if (storeName.isNotEmpty) 'storeName': storeName,
             'title': it['title'] ?? it['name'] ?? 'Product',
             'price': it['price'] ?? 99,
             'originalPrice': it['originalPrice'] ?? it['price'] ?? 99,
@@ -727,6 +776,8 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
     } else {
       CartManager.instance.addToCart({
         'id': 'reorder_${DateTime.now().millisecondsSinceEpoch}',
+        if (storeId.isNotEmpty) 'storeId': storeId,
+        if (storeName.isNotEmpty) 'storeName': storeName,
         'title': order['title'] ?? 'Store Item',
         'price': 99,
         'originalPrice': 150,
@@ -735,20 +786,8 @@ class _YourOrdersScreenState extends State<YourOrdersScreen> {
       }, qty: 1);
     }
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Reordered ${items.isNotEmpty ? items.length : 1} item(s)! Navigating to cart...'),
-        backgroundColor: const Color(0xFF2E7D32),
-        duration: const Duration(seconds: 2),
-        action: SnackBarAction(
-          label: 'VIEW CART',
-          textColor: Colors.white,
-          onPressed: () => Navigator.pushNamed(context, RouteConstants.cart),
-        ),
-      ),
-    );
-
-    Navigator.of(context).pushNamed(RouteConstants.cart);
+    if (context.mounted) {
+      Navigator.of(context).pushNamed(RouteConstants.cart);
+    }
   }
 }
